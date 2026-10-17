@@ -1,0 +1,203 @@
+{
+  "theme": "light",
+  "direction": "rtl",
+  "language": "ar",
+  "design_archetype": "ORGANIC_MODERN_ENTERPRISE",
+  "fonts": {
+    "heading_font": "Plus Jakarta Sans Variable",
+    "body_font": "Plus Jakarta Sans Variable",
+    "css_import": "@import \"@fontsource-variable/plus-jakarta-sans\";",
+    "font_family_rule": "font-family: 'Plus Jakarta Sans Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans Arabic', sans-serif;"
+  },
+  "typography": {
+    "scale_px": {
+      "display": 52,
+      "h1": 36,
+      "h2": 28,
+      "h3": 20,
+      "h4": 16,
+      "body": 15,
+      "caption": 13
+    },
+    "weights": {
+      "light": 300,
+      "normal": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700,
+      "black": 800
+    },
+    "rules": {
+      "headings": "font-bold tracking-tight text-slate-900 dark:text-slate-100",
+      "body": "leading-relaxed text-slate-600 dark:text-slate-300 text-sm md:text-base",
+      "labels": "text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400",
+      "numbers": "font-bold tracking-tight tabular-nums"
+    }
+  },
+  "colors": {
+    "accent": "#0D9488",
+    "on_accent": "#FFFFFF",
+    "accent_hover": "#0F766E",
+    "accent_light": "#CCFBF1",
+    "surfaces": [
+      {
+        "name": "page",
+        "kind": "solid",
+        "bg": "#F8FAFC",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#475569",
+        "roles": {
+          "border": "#E2E8F0",
+          "link": "#0D9488",
+          "error": "#DC2626",
+          "success": "#16A34A",
+          "warning": "#D97706"
+        }
+      },
+      {
+        "name": "panel",
+        "kind": "solid",
+        "bg": "#FFFFFF",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#64748B",
+        "roles": {
+          "border": "#E2E8F0",
+          "hover": "#F1F5F9",
+          "active": "#E2E8F0"
+        }
+      },
+      {
+        "name": "sidebar",
+        "kind": "solid",
+        "bg": "#0F172A",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "active_tab": "#0D9488",
+          "border": "#1E293B"
+        }
+      },
+      {
+        "name": "header_glass",
+        "kind": "glass",
+        "contrast_against": "#FFFFFF",
+        "guarantee": "backdrop-blur-md bg-white/85 border-b border-slate-200/80 shadow-xs",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#64748B",
+        "roles": {
+          "role_badge_manager": "#1E3A8A",
+          "role_badge_employee": "#065F46"
+        }
+      },
+      {
+        "name": "badge_present",
+        "kind": "solid",
+        "bg": "#DCFCE7",
+        "on_bg": "#15803D",
+        "on_bg_muted": "#166534"
+      },
+      {
+        "name": "badge_absent",
+        "kind": "solid",
+        "bg": "#FEE2E2",
+        "on_bg": "#B91C1C",
+        "on_bg_muted": "#991B1B"
+      },
+      {
+        "name": "badge_leave_pending",
+        "kind": "solid",
+        "bg": "#FEF3C7",
+        "on_bg": "#B45309",
+        "on_bg_muted": "#92400E"
+      },
+      {
+        "name": "badge_payroll_paid",
+        "kind": "solid",
+        "bg": "#E0E7FF",
+        "on_bg": "#3730A3",
+        "on_bg_muted": "#312E81"
+      }
+    ]
+  },
+  "entry_surfaces": {
+    "/": "RTL Command Center shell with role switcher in header: Manager view defaults to dense 4-stat KPI grid + Recharts attendance/leave charts + quick actions + active employee table; Employee view switches instantly to self-service check-in/out hero card + monthly attendance logs + leave request modal + payslip history"
+  },
+  "layout_architecture": {
+    "direction": "rtl",
+    "shell_structure": "Dual-mode responsive dashboard layout. Desktop: sticky top bar (with brand, mode-switcher, date, quick check-in) + clean navigation tabs; Main workspace: grid-based sections with ample spacing (gap-6 md:gap-8).",
+    "bento_grid": {
+      "manager_kpi_row": "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6",
+      "analytics_split": "grid grid-cols-1 lg:grid-cols-12 gap-6",
+      "charts_col": "lg:col-span-8 space-y-6",
+      "side_activity_col": "lg:col-span-4 space-y-6"
+    },
+    "employee_view_structure": {
+      "hero_card": "bg-gradient-to-l from-teal-900 to-slate-900 text-white rounded-2xl p-6 md:p-8 shadow-lg relative overflow-hidden",
+      "sub_grids": "grid grid-cols-1 lg:grid-cols-3 gap-6"
+    }
+  },
+  "motion": {
+    "tab_transitions": "AnimatePresence with motion.div opacity and y-axis subtle shift (y: 6 to y: 0, 180ms easeOut)",
+    "kpi_hover": "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md",
+    "button_press": "active:scale-[0.98] transition-transform",
+    "toast_motion": "Sonner bottom-right (RTL natural bottom-left / bottom-right)",
+    "modal_animation": "scale and fade entry with backdrop blur (blur-xs to blur-sm)"
+  },
+  "accessibility": {
+    "contrast_compliance": "WCAG AA (4.5:1 for normal text, 3:1 for large graphical elements)",
+    "rtl_considerations": [
+      "Use logical Tailwind spacing: ms-*, me-*, start-*, end-*, text-start, text-end",
+      "Ensure icons with directionality (arrows, chevrons) point in the correct RTL orientation",
+      "Ensure html element has dir=\"rtl\" and lang=\"ar\"",
+      "Calendar and DatePicker must render properly in RTL order"
+    ],
+    "test_attributes": "Every interactive button, tab, input, modal trigger, and status badge MUST include descriptive kebab-case data-testid (e.g., data-testid='role-switcher-employee', data-testid='checkin-btn', data-testid='add-employee-btn', data-testid='payroll-generate-btn')."
+  },
+  "component_hierarchy": [
+    {
+      "path": "frontend/src/components/layout/Navbar.tsx",
+      "description": "Header with app logo 'مواردي | Mawaridi HR', live Arabic Gregorian date/time, Role Switcher (مدير النظام / بوابة الموظف), Quick punch button, and theme toggle."
+    },
+    {
+      "path": "frontend/src/components/manager/ManagerDashboard.tsx",
+      "description": "Manager executive hub: 4 KPI metric cards (إجمالي الموظفين, الحضور اليوم, طلبات الإجازة المعلقة, إجمالي مسير الرواتب), Attendance Trend bar chart, Leave request review list, and quick employee roster."
+    },
+    {
+      "path": "frontend/src/components/manager/EmployeeManagement.tsx",
+      "description": "Complete Employee Directory: search/filter by job title or status, add employee modal with salary & allowance fields, edit profile, toggle active status, and detailed profile drawer."
+    },
+    {
+      "path": "frontend/src/components/manager/AttendanceManagement.tsx",
+      "description": "Daily & Historical Attendance Log: filter by date, punch status, manual check-in/out override, export summary, and attendance rate indicator."
+    },
+    {
+      "path": "frontend/src/components/manager/LeaveManagement.tsx",
+      "description": "Leave Requests Manager: pending / approved / rejected tabs, quick approval/rejection with manager notes, annual balance tracking."
+    },
+    {
+      "path": "frontend/src/components/manager/PayrollManagement.tsx",
+      "description": "Monthly Payroll Generator: one-click monthly payroll batch generation, itemized salary breakdown (Base + Housing + Transport + Bonus - Deductions = Net), mark as paid, and printable/downloadable Arabic Payslip (مسير رواتب)."
+    },
+    {
+      "path": "frontend/src/components/employee/EmployeeSelfService.tsx",
+      "description": "Employee Portal: Employee switcher dropdown ('أنت تتصفح كـ: أحمد المنصوري'), Clock-in / Clock-out card with live digital timer, monthly attendance summary, instant leave request submit form, and personal salary slip viewer."
+    }
+  ],
+  "sample_seed_data": {
+    "employees": [
+      {"id": "emp-1", "name": "أحمد المنصوري", "job_title": "مدير العمليات والتقنية", "department": "التقنية والعمليات", "email": "ahmed.m@mawaridi.sa", "phone": "0501234567", "base_salary": 18500, "allowances": 3500, "hire_date": "2022-01-15", "status": "active"},
+      {"id": "emp-2", "name": "سارة القحطاني", "job_title": "أخصائية موارد بشرية وتوظيف", "department": "الموارد البشرية", "email": "sara.q@mawaridi.sa", "phone": "0559876543", "base_salary": 12000, "allowances": 2000, "hire_date": "2023-03-01", "status": "active"},
+      {"id": "emp-3", "name": "فيصل العتيبي", "job_title": "مطور برمجيات أول", "department": "التقنية", "email": "faisal.o@mawaridi.sa", "phone": "0543219876", "base_salary": 16000, "allowances": 2500, "hire_date": "2022-06-10", "status": "active"},
+      {"id": "emp-4", "name": "نورة الشمري", "job_title": "محاسبة مالية ومسؤولة رواتب", "department": "المالية", "email": "noura.s@mawaridi.sa", "phone": "0567891234", "base_salary": 13500, "allowances": 2000, "hire_date": "2021-11-20", "status": "active"},
+      {"id": "emp-5", "name": "خالد الغامدي", "job_title": "مسؤول تسويق رقمي", "department": "التسويق", "email": "khaled.g@mawaridi.sa", "phone": "0534567890", "base_salary": 11000, "allowances": 1500, "hire_date": "2023-08-15", "status": "active"}
+    ]
+  },
+  "instructions_to_main_agent": [
+    "1. Setup RTL & Arabic Language: Ensure `document.documentElement.dir = 'rtl'` and `lang = 'ar'` in index.html / main.tsx so all layouts naturally flow right-to-left.",
+    "2. Styling & Theme: Apply Tailwind v4 with `@import '@fontsource-variable/plus-jakarta-sans';` in `frontend/src/index.css`. Use Slate-900 / Teal-600 color accents which provide a refined modern enterprise feel.",
+    "3. Role Switcher Contract: The user requested no mandatory auth login, but a clear distinction between MANAGER role (لوحة تحكم المدير) and EMPLOYEE role (بوابة الموظف الذاتية). Provide a toggle in the top bar to easily switch roles with zero reload friction.",
+    "4. Complete Functional Modules: Implement (1) Employees CRUD (إدارة الموظفين), (2) Attendance Check-in / Check-out with daily history (سجل الحضور والانصراف), (3) Leave Requests with approval/rejection (إدارة الإجازات), (4) Payroll calculation and disbursement marking (مسير الرواتب), and (5) Employee Self Service (بوابة الخدمة الذاتية).",
+    "5. Testing Readiness: Add `data-testid` to every interactive element (buttons, tabs, inputs, selects, filters) for end-to-end and integration test verification.",
+    "6. Toast Notifications: Use Sonner `toast.success` and `toast.error` in Arabic with rich icons and clear feedback for all user actions."
+  ]
+}
