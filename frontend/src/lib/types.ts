@@ -16,9 +16,35 @@ export interface Employee {
   hire_date: string;
   status: EmployeeStatus;
   location_id: string; // "" = no geofence restriction
+  monthly_leave_quota: number; // leaves allowed per hire-date cycle
   access_code: string; // login code issued by the manager
   can_login: boolean;
   created_at: string;
+}
+
+export interface LeaveBalance {
+  cycle_start: string;
+  cycle_end: string;
+  quota: number;
+  used: number;
+  remaining: number;
+}
+
+export interface MonthlyAttendanceReport {
+  month: string;
+  days_present: number;
+  days_complete: number;
+  total_minutes: number;
+  avg_check_in: string;
+  records: AttendanceRecord[];
+}
+
+export interface EmployeeReport {
+  employee: Employee;
+  location_name: string;
+  attendance: MonthlyAttendanceReport;
+  leaves: LeaveRequest[];
+  balance: LeaveBalance;
 }
 
 export interface SessionInfo {

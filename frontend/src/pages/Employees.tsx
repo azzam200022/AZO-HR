@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Copy, KeyRound, MapPin, Pencil, Plus, RefreshCw, Search, Trash2, UserRoundCheck, UserRoundX } from "lucide-react";
+import { Copy, FileText, KeyRound, MapPin, Pencil, Plus, RefreshCw, Search, Trash2, UserRoundCheck, UserRoundX } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
-import { errorText, fmtDate, formatSAR, todayStr } from "@/lib/format";
+import { currentMonthStr, errorText, fmtDate, formatSAR, todayStr } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { EMPLOYEE_STATUS_LABELS, type AccessCodeResult, type Employee, type EmployeeStatus, type WorkLocation } from "@/lib/types";
+import { EMPLOYEE_STATUS_LABELS, type AccessCodeResult, type Employee, type EmployeeReport, type EmployeeStatus, type WorkLocation } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -39,6 +39,7 @@ import {
   PageHeader,
   StatusBadge,
 } from "@/components/shared";
+import EmployeeReportPanel from "@/components/EmployeeReportPanel";
 
 interface EmployeeForm {
   name: string;
@@ -50,6 +51,7 @@ interface EmployeeForm {
   hire_date: string;
   status: EmployeeStatus;
   location_id: string;
+  monthly_leave_quota: string;
 }
 
 const EMPTY_FORM: EmployeeForm = {
@@ -62,6 +64,7 @@ const EMPTY_FORM: EmployeeForm = {
   hire_date: todayStr(),
   status: "active",
   location_id: "",
+  monthly_leave_quota: "2",
 };
 
 export default function Employees() {
@@ -82,6 +85,14 @@ export default function Employees() {
   const [editing, setEditing] = useState<Employee | null>(null);
   const [form, setForm] = useState<EmployeeForm>(EMPTY_FORM);
   const [deleting, setDeleting] = useState<Employee | null>(null);
+  const [reportFor, setReportFor] = useState<Employee | null>(null);
+  const [reportMonth, setReportMonth] = useState(currentMonthStr());
+
+  const reportQuery = useQuery({
+    queryKey: ["employee-report", reportFor?.id, reportMonth],
+    queryFn: () => apiGet<EmployeeReport>(`/employees/${reportFor!.id}/report?month=${reportMonth}`),
+    enabled: !!reportFor,
+  });
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["employees"] });
@@ -95,6 +106,7 @@ export default function Employees() {
         ...payload,
         base_salary: Number(payload.base_salary) || 0,
         allowances: Number(payload.allowances) || 0,
+        monthly_leave_quota: Number(payload.monthly_leave_quota) || 0,
       };
       return editing
         ? apiPut<Employee>(`/employees/${editing.id}`, body)
@@ -187,6 +199,7 @@ export default function Employees() {
       hire_date: emp.hire_date,
       status: emp.status,
       location_id: emp.location_id,
+      monthly_leave_quota: String(emp.monthly_leave_quota),
     });
     setDialogOpen(true);
   };
@@ -257,6 +270,7 @@ export default function Employees() {
                 <TableHead>المسمى الوظيفي</TableHead>
                 <TableHead>موقع العمل</TableHead>
                 <TableHead>رمز الدخول</TableHead>
+                <TableHead>إجازات/شهر</TableHead>
                 <TableHead>تاريخ التعيين</TableHead>
                 <TableHead>الراتب الأساسي</TableHead>
                 <TableHead>البدلات</TableHead>
@@ -330,6 +344,12 @@ export default function Employees() {
                       </Button>
                     </div>
                   </TableCell>
+                  <TableCell
+                    className="text-center text-sm font-semibold tabular-nums text-slate-700"
+                    data-testid={`employee-quota-${emp.id}`}
+                  >
+                    {emp.monthly_leave_quota}
+                  </TableCell>
                   <TableCell className="text-sm tabular-nums text-slate-600">
                     {fmtDate(emp.hire_date)}
                   </TableCell>
@@ -348,6 +368,18 @@ export default function Employees() {
                   </TableCell>
                   <TableCell className="text-end">
                     <div className="flex items-center justify-end gap-1.5">
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setReportMonth(currentMonthStr());
+                          setReportFor(emp);
+                        }}
+                        data-testid={`employee-report-btn-${emp.id}`}
+                        title="التقرير الشهري والملف الشخصي"
+                      >
+                        <FileText className="h-4 w-4" />
+                      </Button>
                       <Button
                         size="icon-sm"
                         variant="ghost"
@@ -492,6 +524,21 @@ export default function Employees() {
               </Select>
             </div>
             <div className="space-y-2">
+              <Label htmlFor="emp-quota">عدد الإجازات المسموح بها شهرياً *</Label>
+              <Input
+                id="emp-quota"
+                type="number"
+                min={0}
+                value={form.monthly_leave_quota}
+                onChange={(e) => setForm({ ...form, monthly_leave_quota: e.target.value })}
+                data-testid="employee-quota-input"
+              />
+              <p className="text-[11px] text-slate-500">
+                تُحتسب الدورة من تاريخ مباشرة الموظف (مثلاً مباشرة يوم 15 → دورة 15 إلى 14)، وعند
+                نفاد العدد لا يستطيع طلب إجازة أخرى حتى بداية الدورة التالية.
+              </p>
+            </div>
+            <div className="space-y-2">
               <Label>موقع العمل (تقييد الحضور)</Label>
               <Select
                 value={form.location_id || "none"}
@@ -523,6 +570,25 @@ export default function Employees() {
               {editing ? "حفظ التعديلات" : "إضافة الموظف"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={reportFor !== null} onOpenChange={(open) => !open && setReportFor(null)}>
+        <DialogContent className="max-h-[88vh] max-w-lg overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>الملف الشخصي والتقرير الشهري</DialogTitle>
+            <DialogDescription>
+              نفس التقرير الذي يراه الموظف في بوابته — الحضور الشهري وسجل الإجازات والرصيد.
+            </DialogDescription>
+          </DialogHeader>
+          <EmployeeReportPanel
+            report={reportQuery.data}
+            isLoading={reportQuery.isLoading}
+            month={reportMonth}
+            onMonthChange={setReportMonth}
+            showSalary
+            testidPrefix="manager-report"
+          />
         </DialogContent>
       </Dialog>
 

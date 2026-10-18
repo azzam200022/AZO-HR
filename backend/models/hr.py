@@ -34,6 +34,7 @@ class Employee(BaseModel):
     hire_date: str
     status: Literal["active", "inactive"] = "active"
     location_id: str = ""  # assigned work location; "" = no geofence
+    monthly_leave_quota: int = Field(default=2, ge=0)  # leaves allowed per hire-date cycle
     access_code: str = ""  # login code issued by the manager (e.g. MW-4821)
     can_login: bool = True
     created_at: datetime = Field(default_factory=utcnow)
@@ -49,6 +50,7 @@ class EmployeeCreate(BaseModel):
     hire_date: str
     status: Literal["active", "inactive"] = "active"
     location_id: str = ""
+    monthly_leave_quota: int = Field(default=2, ge=0)
 
     @field_validator("hire_date")
     @classmethod
@@ -68,6 +70,7 @@ class EmployeeUpdate(BaseModel):
     hire_date: str | None = None
     status: Literal["active", "inactive"] | None = None
     location_id: str | None = None
+    monthly_leave_quota: int | None = Field(default=None, ge=0)
     can_login: bool | None = None
 
 
@@ -211,6 +214,36 @@ class WorkLocationUpdate(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     radius_m: int | None = Field(default=None, ge=10)
+
+
+class LeaveBalance(BaseModel):
+    """Quota state for the hire-date-anchored cycle that contains today."""
+
+    cycle_start: str
+    cycle_end: str
+    quota: int
+    used: int
+    remaining: int
+
+
+class MonthlyAttendanceReport(BaseModel):
+    month: str  # YYYY-MM
+    days_present: int
+    days_complete: int  # both punches recorded
+    total_minutes: int
+    avg_check_in: str = ""
+    records: list["AttendanceRecord"] = []
+
+
+class EmployeeReport(BaseModel):
+    """Profile report — the same payload the employee sees about themself and the manager
+    sees about that employee."""
+
+    employee: "Employee"
+    location_name: str = ""
+    attendance: MonthlyAttendanceReport
+    leaves: list["LeaveRequest"] = []
+    balance: LeaveBalance
 
 
 class DeleteResult(BaseModel):

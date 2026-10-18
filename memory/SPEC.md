@@ -29,10 +29,10 @@
   · `GET /auth/me` (200 دائماً مع `authenticated`) · `POST /auth/logout`
 - `/me/*` (موظف فقط): `GET /me/profile` · `GET /me/location` · `GET /me/attendance`
   · `POST /me/check-in` · `POST /me/check-out` · `GET /me/leaves` · `POST /me/leaves`
-  · `GET /me/payroll?month=`
+  · `GET /me/payroll?month=` · `GET /me/leave-balance` · `GET /me/report?month=`
 - مدير فقط: `GET/POST /employees` · `GET/PUT/DELETE /employees/{id}` (الحذف يتسلسل للحضور
   والإجازات والرواتب والجلسات) · `POST /employees/{id}/regenerate-code` ·
-  `POST /employees/{id}/set-password`
+  `POST /employees/{id}/set-password` · `GET /employees/{id}/report?month=`
 - مدير فقط: `GET/POST /attendance` · `POST /attendance/check-in|check-out` · `PATCH/DELETE /attendance/{id}`
 - مدير فقط: `GET/POST /leaves` · `PATCH /leaves/{id}` (approved/rejected + manager_note) · `DELETE /leaves/{id}`
 - مدير فقط: `GET /payroll` · `POST /payroll/generate {month}` (idempotent) · `PATCH /payroll/{id}`
@@ -61,6 +61,27 @@
 - حساب المدير من `.env`، ورمز دخول لكل موظف ينقصه رمز (يُطبع في المخرجات)
 - 5 موظفين أساسيين + سجلات حضور وإجازات ومسير الشهر الحالي
 - موقعا عمل: «المقر الرئيسي» (24.7136, 46.6753، 250م) و«فرع العليا» (24.6941, 46.6834، 150م)
+
+## حصة الإجازات الشهرية (دورة مرتبطة بتاريخ المباشرة)
+- المدير يحدد `monthly_leave_quota` لكل موظف عند الإضافة أو التعديل (افتراضي 2)، ويظهر في
+  عمود «إجازات/شهر» بجدول الموظفين.
+- **الشهر يُحتسب من تاريخ المباشرة لا من التقويم** (`lib/leave_cycle.py`): مباشرة يوم 15 →
+  دورات 15→14، مع ضبط الأيام الطويلة على الأشهر القصيرة (31 يناير → 28/29 فبراير).
+- يُحتسب ضمن الحصة كل طلب حالته `pending` أو `approved` يبدأ داخل الدورة؛ المرفوض لا يُحتسب.
+- عند نفاد الرصيد: `POST /me/leaves` يرد **409** برسالة توضح الدورة، وزر «طلب إجازة» في البوابة
+  يصبح معطّلاً مع تنبيه. طلب بتاريخ خارج الدورة الحالية يرد **400**.
+- `GET /me/leave-balance` يعيد `{cycle_start, cycle_end, quota, used, remaining}`.
+
+## تخطيط بوابة الموظف (ثلاثة أعمدة RTL)
+- **اليمين**: الإجازات — الرصيد الحالي، زر الطلب، وآخر الطلبات بحالاتها.
+- **الوسط**: تسجيل الحضور — ساعة الخادم الحية، زر الحضور/الانصراف ومؤقّت المدة، ملخص بصمة
+  اليوم، ثم سجل حضور الشهر ومسير الراتب.
+- **اليسار**: الملف الشخصي — بيانات الموظف وموقعه، شريط رصيد الدورة، تقرير الحضور الشهري
+  (أيام الحضور، الأيام المكتملة، إجمالي الساعات، متوسط وقت الحضور، وقائمة السجلات)،
+  وتقرير الإجازات.
+- التقرير مكوّن واحد مشترك (`components/EmployeeReportPanel.tsx`): الموظف يراه عن نفسه عبر
+  `GET /me/report`، والمدير يراه عن أي موظف عبر `GET /employees/{id}/report` (زر التقرير في
+  جدول الموظفين) — مع إظهار الراتب للمدير فقط.
 
 ## ملاحظات تنفيذية
 - حارس `/me` خاص بالموظف: المدير الذي يفتح `/me` (أو يبقى العنوان من جلسة موظف سابقة على

@@ -70,6 +70,11 @@ async def main() -> None:
         await db.users.delete_many({"role": "manager", "email": {"$ne": email}})
         print(f"manager account ready: {email}")
 
+    # Backfill the leave quota for employees created before the field existed.
+    await db.employees.update_many(
+        {"monthly_leave_quota": {"$exists": False}}, {"$set": {"monthly_leave_quota": 2}}
+    )
+
     # Issue a login code to any employee missing one.
     for doc in await db.employees.find({"access_code": {"$in": ["", None]}}).to_list(1000):
         code = new_access_code()

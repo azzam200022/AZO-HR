@@ -1,0 +1,213 @@
+import {
+  CalendarCheck,
+  CalendarClock,
+  Clock3,
+  MapPin,
+  TrendingUp,
+  Wallet,
+} from "lucide-react";
+import { fmtDate, formatNumber, formatSAR, monthLabel } from "@/lib/format";
+import {
+  LEAVE_STATUS_LABELS,
+  LEAVE_TYPE_LABELS,
+  type EmployeeReport,
+  type LeaveStatus,
+} from "@/lib/types";
+import { EmptyState, LoadingBlock, StatusBadge } from "@/components/shared";
+import { Input } from "@/components/ui/input";
+
+const TONE: Record<LeaveStatus, "amber" | "green" | "red"> = {
+  pending: "amber",
+  approved: "green",
+  rejected: "red",
+};
+
+const hours = (minutes: number) => `${Math.floor(minutes / 60)}س ${minutes % 60}د`;
+
+function Stat({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3">
+      <p className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
+        {icon}
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-bold tabular-nums text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+/**
+ * The employee's profile report — identical content whether the employee opens it about
+ * themself (/me/report) or the manager opens it about that employee
+ * (/employees/{id}/report).
+ */
+export default function EmployeeReportPanel({
+  report,
+  isLoading,
+  month,
+  onMonthChange,
+  showSalary = false,
+  testidPrefix = "report",
+}: {
+  report: EmployeeReport | undefined;
+  isLoading: boolean;
+  month: string;
+  onMonthChange: (month: string) => void;
+  showSalary?: boolean;
+  testidPrefix?: string;
+}) {
+  if (isLoading) return <LoadingBlock className="h-72" />;
+  if (!report) return <EmptyState title="لا يوجد تقرير" />;
+
+  const { employee, attendance, leaves, balance, location_name } = report;
+  const takenLeaves = leaves.filter((l) => l.status !== "rejected");
+
+  return (
+    <div className="space-y-5" data-testid={`${testidPrefix}-panel`}>
+      {/* Identity */}
+      <div className="flex items-center gap-3">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500 to-teal-700 text-lg font-bold text-white">
+          {employee.name.slice(0, 1)}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-bold text-slate-900" data-testid={`${testidPrefix}-name`}>
+            {employee.name}
+          </p>
+          <p className="truncate text-xs text-slate-500">{employee.job_title}</p>
+          <p className="mt-0.5 text-[11px] tabular-nums text-slate-400">
+            مباشرة العمل: {fmtDate(employee.hire_date)}
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-1.5 rounded-xl bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
+        <p className="flex items-center gap-1.5">
+          <MapPin className="h-3.5 w-3.5 text-teal-600" />
+          {location_name || "بدون تقييد جغرافي"}
+        </p>
+        {showSalary && (
+          <p className="flex items-center gap-1.5">
+            <Wallet className="h-3.5 w-3.5 text-teal-600" />
+            الأساسي {formatSAR(employee.base_salary)} • البدلات {formatSAR(employee.allowances)}
+          </p>
+        )}
+      </div>
+
+      {/* Leave balance for the hire-date cycle */}
+      <div
+        className="rounded-xl border border-teal-100 bg-teal-50/70 p-3.5"
+        data-testid={`${testidPrefix}-balance`}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold text-teal-900">رصيد إجازات الدورة الحالية</p>
+          <span className="text-sm font-extrabold tabular-nums text-teal-800">
+            {formatNumber(balance.remaining)} / {formatNumber(balance.quota)}
+          </span>
+        </div>
+        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-teal-200/60">
+          <div
+            className="h-full rounded-full bg-teal-600 transition-all duration-300"
+            style={{
+              width: `${balance.quota > 0 ? Math.min(100, (balance.used / balance.quota) * 100) : 100}%`,
+            }}
+          />
+        </div>
+        <p className="mt-2 text-[11px] tabular-nums text-teal-800/80">
+          الدورة: {fmtDate(balance.cycle_start)} ← {fmtDate(balance.cycle_end)} • المستخدم{" "}
+          {formatNumber(balance.used)}
+        </p>
+      </div>
+
+      {/* Monthly attendance report */}
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-bold text-slate-800">تقرير حضور {monthLabel(month)}</p>
+          <Input
+            type="month"
+            value={month}
+            onChange={(e) => e.target.value && onMonthChange(e.target.value)}
+            className="h-8 w-36 text-xs"
+            data-testid={`${testidPrefix}-month-input`}
+          />
+        </div>
+        <div className="mt-2.5 grid grid-cols-2 gap-2">
+          <Stat
+            label="أيام الحضور"
+            value={formatNumber(attendance.days_present)}
+            icon={<CalendarCheck className="h-3 w-3" />}
+          />
+          <Stat
+            label="أيام مكتملة"
+            value={formatNumber(attendance.days_complete)}
+            icon={<TrendingUp className="h-3 w-3" />}
+          />
+          <Stat
+            label="إجمالي ساعات العمل"
+            value={hours(attendance.total_minutes)}
+            icon={<Clock3 className="h-3 w-3" />}
+          />
+          <Stat
+            label="متوسط وقت الحضور"
+            value={attendance.avg_check_in || "—"}
+            icon={<CalendarClock className="h-3 w-3" />}
+          />
+        </div>
+        {attendance.records.length === 0 ? (
+          <p className="mt-2.5 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+            لا توجد سجلات حضور في هذا الشهر.
+          </p>
+        ) : (
+          <div
+            className="mt-2.5 max-h-44 space-y-1.5 overflow-y-auto pe-1"
+            data-testid={`${testidPrefix}-attendance-list`}
+          >
+            {attendance.records.map((rec) => (
+              <div
+                key={rec.id}
+                className="flex items-center justify-between rounded-lg border border-slate-100 px-2.5 py-1.5 text-[11px]"
+                data-testid={`${testidPrefix}-attendance-${rec.id}`}
+              >
+                <span className="font-semibold tabular-nums text-slate-700">{fmtDate(rec.date)}</span>
+                <span className="tabular-nums text-slate-500">
+                  {rec.check_in || "—"} ← {rec.check_out || "—"}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Leaves taken */}
+      <div>
+        <p className="text-xs font-bold text-slate-800">
+          تقرير الإجازات ({formatNumber(takenLeaves.length)})
+        </p>
+        {leaves.length === 0 ? (
+          <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+            لا توجد إجازات مسجّلة.
+          </p>
+        ) : (
+          <div className="mt-2 max-h-44 space-y-1.5 overflow-y-auto pe-1" data-testid={`${testidPrefix}-leaves-list`}>
+            {leaves.map((leave) => (
+              <div
+                key={leave.id}
+                className="rounded-lg border border-slate-100 px-2.5 py-1.5"
+                data-testid={`${testidPrefix}-leave-${leave.id}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold text-slate-700">
+                    {LEAVE_TYPE_LABELS[leave.leave_type]}
+                  </span>
+                  <StatusBadge tone={TONE[leave.status]} label={LEAVE_STATUS_LABELS[leave.status]} />
+                </div>
+                <p className="mt-1 text-[11px] tabular-nums text-slate-500">
+                  {fmtDate(leave.start_date)} ← {fmtDate(leave.end_date)}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

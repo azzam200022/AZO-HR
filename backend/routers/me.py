@@ -11,9 +11,12 @@ from lib.auth import Principal, require_employee
 from lib.dates import aware, current_month
 from lib.db import db
 from lib.punch import punch_in, punch_out
+from lib.reports import build_report, leave_balance
 from models.hr import (
     AttendanceRecord,
     Employee,
+    EmployeeReport,
+    LeaveBalance,
     LeaveRequest,
     PayrollItem,
     SelfLeaveCreate,
@@ -87,13 +90,44 @@ async def my_leaves(principal: Principal = Depends(require_employee)):
     return [LeaveRequest(**d) for d in docs]
 
 
+@router.get("/leave-balance", response_model=LeaveBalance)
+async def my_leave_balance(principal: Principal = Depends(require_employee)):
+    return await leave_balance(await _my_employee(principal))
+
+
+@router.get("/report", response_model=EmployeeReport)
+async def my_report(month: str | None = None, principal: Principal = Depends(require_employee)):
+    return await build_report(await _my_employee(principal), month)
+
+
 @router.post("/leaves", response_model=LeaveRequest, status_code=201)
 async def request_leave(payload: SelfLeaveCreate, principal: Principal = Depends(require_employee)):
     # The session decides whose leave this is — the body carries no employee_id at all.
+    employee = await _my_employee(principal)
     if payload.end_date < payload.start_date:
         raise HTTPException(
             status_code=400, detail="تاريخ النهاية يجب أن يكون بعد تاريخ البداية أو مساوياً له"
         )
+
+    # Monthly quota, counted over the employee's hire-date cycle (not the calendar month).
+    balance = await leave_balance(employee)
+    if balance.remaining <= 0:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"استنفدت رصيد إجازاتك لهذه الدورة ({balance.used} من {balance.quota}) — "
+                f"الدورة الحالية {balance.cycle_start} إلى {balance.cycle_end}. "
+                "يمكنك التقديم بعد بداية الدورة القادمة."
+            ),
+        )
+    if not (balance.cycle_start <= payload.start_date <= balance.cycle_end):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"يمكنك طلب إجازة ضمن دورتك الحالية فقط ({balance.cycle_start} إلى {balance.cycle_end})"
+            ),
+        )
+
     leave = LeaveRequest(
         **{**payload.model_dump(), "employee_id": principal.employee_id},
     )

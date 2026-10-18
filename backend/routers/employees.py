@@ -3,8 +3,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from lib.auth import Principal, hash_password, new_access_code, require_manager
 from lib.dates import aware
 from lib.db import db
+from lib.reports import build_report
 from models.auth import AccessCodeResult, SetPasswordPayload
-from models.hr import DeleteResult, Employee, EmployeeCreate, EmployeeUpdate
+from models.hr import DeleteResult, Employee, EmployeeCreate, EmployeeReport, EmployeeUpdate
 
 # Every route in this router is manager-only.
 router = APIRouter(prefix="/employees", tags=["employees"], dependencies=[Depends(require_manager)])
@@ -47,6 +48,12 @@ async def create_employee(payload: EmployeeCreate):
             employee.access_code = new_access_code()
     await db.employees.insert_one(employee.model_dump())
     return employee
+
+
+@router.get("/{employee_id}/report", response_model=EmployeeReport)
+async def employee_report(employee_id: str, month: str | None = None):
+    """Same report the employee sees in their own profile."""
+    return await build_report(await _get_employee_or_404(employee_id), month)
 
 
 @router.post("/{employee_id}/regenerate-code", response_model=AccessCodeResult)
