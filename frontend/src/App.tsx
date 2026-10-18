@@ -2,13 +2,16 @@ import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import Navbar from "@/components/layout/Navbar";
+import BottomNav from "@/components/layout/BottomNav";
 import Dashboard from "@/pages/Dashboard";
 import Employees from "@/pages/Employees";
 import Attendance from "@/pages/Attendance";
 import Leaves from "@/pages/Leaves";
 import Payroll from "@/pages/Payroll";
 import Locations from "@/pages/Locations";
-import MyPortal from "@/pages/MyPortal";
+import MyAttendance from "@/pages/portal/MyAttendance";
+import MyLeaves from "@/pages/portal/MyLeaves";
+import MyProfile from "@/pages/portal/MyProfile";
 import Login from "@/pages/Login";
 import { AuthProvider, useAuth } from "@/lib/auth";
 
@@ -42,10 +45,18 @@ function Shell() {
   if (isLoading) return <Splash />;
   if (!session?.authenticated) return <Login />;
 
+  const isEmployee = role === "employee";
+
   return (
     <div className="min-h-svh bg-background text-foreground">
       <Navbar />
-      <main className="mx-auto w-full max-w-7xl px-4 pt-6 pb-12 md:px-8">
+      <main
+        className={
+          isEmployee
+            ? "mx-auto w-full max-w-2xl px-4 pt-6 pb-32 md:px-6"
+            : "mx-auto w-full max-w-7xl px-4 pt-6 pb-12 md:px-8"
+        }
+      >
         <Routes>
           <Route path="/" element={role === "manager" ? <Dashboard /> : <Navigate to="/me" replace />} />
           <Route
@@ -88,17 +99,35 @@ function Shell() {
               </ManagerOnly>
             }
           />
+          {/* Employee portal tabs — driven by the bottom navigation bar */}
           <Route
             path="/me"
             element={
               <EmployeeOnly>
-                <MyPortal />
+                <MyAttendance />
+              </EmployeeOnly>
+            }
+          />
+          <Route
+            path="/me/leaves"
+            element={
+              <EmployeeOnly>
+                <MyLeaves />
+              </EmployeeOnly>
+            }
+          />
+          <Route
+            path="/me/profile"
+            element={
+              <EmployeeOnly>
+                <MyProfile />
               </EmployeeOnly>
             }
           />
           <Route path="*" element={<Navigate to={role === "manager" ? "/" : "/me"} replace />} />
         </Routes>
       </main>
+      {isEmployee && <BottomNav />}
     </div>
   );
 }

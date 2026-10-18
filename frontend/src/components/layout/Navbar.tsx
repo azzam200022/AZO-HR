@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   LogOut,
   MapPin,
-  UserRound,
   Users,
   Wallet,
 } from "lucide-react";
@@ -25,7 +24,8 @@ const MANAGER_NAV = [
   { to: "/locations", label: "المواقع", icon: MapPin, testid: "nav-locations" },
 ];
 
-const EMPLOYEE_NAV = [{ to: "/me", label: "بوابة الموظف", icon: UserRound, testid: "nav-my-portal" }];
+// Employees navigate through the bottom bar, so the top bar carries no links for them.
+const EMPLOYEE_NAV: { to: string; label: string; icon: typeof Users; testid: string }[] = [];
 
 export default function Navbar() {
   const { session, role, logout } = useAuth();

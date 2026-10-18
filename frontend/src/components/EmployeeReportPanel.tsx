@@ -6,7 +6,14 @@ import {
   TrendingUp,
   Wallet,
 } from "lucide-react";
-import { fmtDate, formatNumber, formatSAR, monthLabel } from "@/lib/format";
+import { durationLabel, fmtDate, formatNumber, formatSAR, monthLabel } from "@/lib/format";
+
+const AR_WEEKDAYS = ["الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد"];
+
+const weekdayName = (iso: string) => {
+  const d = new Date(`${iso}T00:00:00`);
+  return AR_WEEKDAYS[(d.getDay() + 6) % 7];
+};
 import {
   LEAVE_STATUS_LABELS,
   LEAVE_TYPE_LABELS,
@@ -152,27 +159,56 @@ export default function EmployeeReportPanel({
             icon={<CalendarClock className="h-3 w-3" />}
           />
         </div>
+        {/* Full daily log — every day of the month with its exact punch times, not just the
+            summary above. */}
+        <p className="mt-3 text-[11px] font-bold text-slate-700">
+          السجل اليومي الكامل ({formatNumber(attendance.records.length)} يوم)
+        </p>
         {attendance.records.length === 0 ? (
-          <p className="mt-2.5 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+          <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
             لا توجد سجلات حضور في هذا الشهر.
           </p>
         ) : (
           <div
-            className="mt-2.5 max-h-44 space-y-1.5 overflow-y-auto pe-1"
+            className="mt-2 overflow-hidden rounded-xl border border-slate-100"
             data-testid={`${testidPrefix}-attendance-list`}
           >
-            {attendance.records.map((rec) => (
-              <div
-                key={rec.id}
-                className="flex items-center justify-between rounded-lg border border-slate-100 px-2.5 py-1.5 text-[11px]"
-                data-testid={`${testidPrefix}-attendance-${rec.id}`}
-              >
-                <span className="font-semibold tabular-nums text-slate-700">{fmtDate(rec.date)}</span>
-                <span className="tabular-nums text-slate-500">
-                  {rec.check_in || "—"} ← {rec.check_out || "—"}
-                </span>
-              </div>
-            ))}
+            <table className="w-full text-[11px]">
+              <thead className="bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="px-2.5 py-1.5 text-start font-semibold">اليوم</th>
+                  <th className="px-2 py-1.5 text-start font-semibold">التاريخ</th>
+                  <th className="px-2 py-1.5 text-center font-semibold">الحضور</th>
+                  <th className="px-2 py-1.5 text-center font-semibold">الانصراف</th>
+                  <th className="px-2 py-1.5 text-center font-semibold">المدة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...attendance.records]
+                  .sort((a, b) => a.date.localeCompare(b.date))
+                  .map((rec) => (
+                    <tr
+                      key={rec.id}
+                      className="border-t border-slate-100 even:bg-slate-50/50"
+                      data-testid={`${testidPrefix}-attendance-${rec.id}`}
+                    >
+                      <td className="px-2.5 py-1.5 font-medium text-slate-600">{weekdayName(rec.date)}</td>
+                      <td className="px-2 py-1.5 font-semibold tabular-nums text-slate-700">
+                        {fmtDate(rec.date)}
+                      </td>
+                      <td className="px-2 py-1.5 text-center font-bold tabular-nums text-emerald-700">
+                        {rec.check_in || "—"}
+                      </td>
+                      <td className="px-2 py-1.5 text-center font-bold tabular-nums text-slate-600">
+                        {rec.check_out || "—"}
+                      </td>
+                      <td className="px-2 py-1.5 text-center tabular-nums text-teal-700">
+                        {durationLabel(rec.check_in, rec.check_out)}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -187,7 +223,7 @@ export default function EmployeeReportPanel({
             لا توجد إجازات مسجّلة.
           </p>
         ) : (
-          <div className="mt-2 max-h-44 space-y-1.5 overflow-y-auto pe-1" data-testid={`${testidPrefix}-leaves-list`}>
+          <div className="mt-2 space-y-1.5" data-testid={`${testidPrefix}-leaves-list`}>
             {leaves.map((leave) => (
               <div
                 key={leave.id}
