@@ -35,6 +35,7 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("id", ASCENDING)], name="id", unique=True),
         IndexModel([("month", ASCENDING), ("employee_id", ASCENDING)], name="month_employee"),
     ],
+    "locations": [IndexModel([("id", ASCENDING)], name="id", unique=True)],
 }
 
 

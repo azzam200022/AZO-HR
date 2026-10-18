@@ -33,6 +33,7 @@ class Employee(BaseModel):
     allowances: float = Field(default=0, ge=0)
     hire_date: str
     status: Literal["active", "inactive"] = "active"
+    location_id: str = ""  # assigned work location; "" = no geofence
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -45,6 +46,7 @@ class EmployeeCreate(BaseModel):
     allowances: float = Field(default=0, ge=0)
     hire_date: str
     status: Literal["active", "inactive"] = "active"
+    location_id: str = ""
 
     @field_validator("hire_date")
     @classmethod
@@ -63,6 +65,7 @@ class EmployeeUpdate(BaseModel):
     allowances: float | None = Field(default=None, ge=0)
     hire_date: str | None = None
     status: Literal["active", "inactive"] | None = None
+    location_id: str | None = None
 
 
 class AttendanceRecord(BaseModel):
@@ -71,6 +74,8 @@ class AttendanceRecord(BaseModel):
     date: str  # YYYY-MM-DD
     check_in: str = ""  # HH:MM — empty when unknown
     check_out: str = ""  # HH:MM
+    location_id: str = ""  # work location the punch was verified against ("" = none)
+    distance_m: float | None = None  # metres from the location at check-in
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -89,6 +94,8 @@ class AttendanceUpdate(BaseModel):
 
 class CheckPunch(BaseModel):
     employee_id: str
+    lat: float | None = None
+    lng: float | None = None
 
 
 class LeaveRequest(BaseModel):
@@ -155,6 +162,29 @@ class PayrollUpdate(BaseModel):
 class GenerateResult(BaseModel):
     month: str
     created: int
+
+
+class WorkLocation(BaseModel):
+    id: str = Field(default_factory=_uuid)
+    name: str
+    latitude: float
+    longitude: float
+    radius_m: int = Field(default=150, ge=10)
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class WorkLocationCreate(BaseModel):
+    name: str
+    latitude: float
+    longitude: float
+    radius_m: int = Field(default=150, ge=10)
+
+
+class WorkLocationUpdate(BaseModel):
+    name: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    radius_m: int | None = Field(default=None, ge=10)
 
 
 class DeleteResult(BaseModel):

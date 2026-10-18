@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CalendarPlus, CheckCircle2, LogIn, LogOut } from "lucide-react";
+import { CalendarPlus, CheckCircle2, LogIn, LogOut, MapPin } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import {
   currentMonthStr,
@@ -22,6 +22,7 @@ import {
   type LeaveType,
   type PayrollItem,
   type TodayResponse,
+  type WorkLocation,
 } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,6 +58,11 @@ export default function MyPortal() {
     queryFn: () => apiGet<Employee[]>("/employees"),
   });
   const employees = employeesQuery.data ?? [];
+  const locationsQuery = useQuery({
+    queryKey: ["locations"],
+    queryFn: () => apiGet<WorkLocation[]>("/locations"),
+  });
+  const locations = locationsQuery.data ?? [];
 
   const [selectedId, setSelectedId] = useState<string>(() => localStorage.getItem("my-employee-id") ?? "");
   useEffect(() => {
@@ -98,6 +104,7 @@ export default function MyPortal() {
   const todayRecord = records.find((r) => r.date === today);
   const monthRecords = records.filter((r) => r.date.startsWith(currentMonthStr()));
   const payslip = (payrollQuery.data ?? []).find((i) => i.employee_id === selectedId);
+  const myLocation = me?.location_id ? locations.find((l) => l.id === me.location_id) ?? null : null;
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -139,7 +146,30 @@ export default function MyPortal() {
   };
 
   const checkInMutation = useMutation({
-    mutationFn: () => apiPost<AttendanceRecord>("/attendance/check-in", { employee_id: selectedId }),
+    // The geofence lives on the server: it rejects the punch (403) when the browser's
+    // coordinates fall outside the assigned location's radius, and 400 when no fix is sent.
+    mutationFn: async () => {
+      let coords: { lat: number; lng: number } | null = null;
+      if (myLocation) {
+        if (!navigator.geolocation) {
+          throw new Error("المتصفح لا يدعم تحديد الموقع — لا يمكن تسجيل الحضور في موقع مقيّد");
+        }
+        coords = await new Promise<{ lat: number; lng: number }>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+            () =>
+              reject(
+                new Error("تعذر تحديد موقعك — فعّل صلاحية الموقع في المتصفح ثم أعد المحاولة"),
+              ),
+            { enableHighAccuracy: true, timeout: 12_000 },
+          );
+        });
+      }
+      return apiPost<AttendanceRecord>("/attendance/check-in", {
+        employee_id: selectedId,
+        ...(coords ? { lat: coords.lat, lng: coords.lng } : {}),
+      });
+    },
     onSuccess: () => {
       invalidate();
       toast.success("تم تسجيل حضورك — يوماً سعيداً!");
@@ -222,6 +252,12 @@ export default function MyPortal() {
             <p className="text-xs font-medium text-teal-200">{clockLabel}</p>
             <h2 className="mt-1 text-2xl font-bold">{me ? me.name : "…"}</h2>
             <p className="mt-1 text-sm text-slate-300">{me?.job_title ?? ""}</p>
+            <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-teal-200" data-testid="my-work-location">
+              <MapPin className="h-3.5 w-3.5" />
+              {myLocation
+                ? `${myLocation.name} — الحضور مسموح ضمن ${myLocation.radius_m} متراً`
+                : "بدون تقييد جغرافي للحضور"}
+            </p>
           </div>
           <div className="flex items-center gap-5">
             {todayRecord && (
@@ -232,6 +268,11 @@ export default function MyPortal() {
                 <p className="mt-1">
                   الانصراف: <span className="font-bold tabular-nums">{todayRecord.check_out || "—"}</span>
                 </p>
+                {todayRecord.distance_m !== null && (
+                  <p className="mt-1" data-testid="punch-distance">
+                    على بُعد <span className="font-bold tabular-nums">{Math.round(todayRecord.distance_m)}</span> متراً من الموقع
+                  </p>
+                )}
                 {live && (
                   <p className="mt-2 text-lg font-bold tabular-nums text-white" data-testid="live-duration">
                     {elapsedLabel()}

@@ -15,6 +15,16 @@ export interface Employee {
   allowances: number;
   hire_date: string;
   status: EmployeeStatus;
+  location_id: string; // "" = no geofence restriction
+  created_at: string;
+}
+
+export interface WorkLocation {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  radius_m: number;
   created_at: string;
 }
 
@@ -24,6 +34,8 @@ export interface AttendanceRecord {
   date: string; // YYYY-MM-DD
   check_in: string; // HH:MM — "" when unknown
   check_out: string; // HH:MM
+  location_id: string; // "" when punch had no geofence
+  distance_m: number | null;
   created_at: string;
 }
 

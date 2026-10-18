@@ -6,9 +6,22 @@ from zoneinfo import ZoneInfo
 
 from lib.db import db, ensure_indexes
 from lib.dates import current_month, today_iso
-from models.hr import AttendanceRecord, Employee, LeaveRequest, PayrollItem
+from models.hr import AttendanceRecord, Employee, LeaveRequest, PayrollItem, WorkLocation
 
 APP_TZ = ZoneInfo("Asia/Riyadh")
+
+LOCATIONS = [
+    {"id": "loc-1", "name": "المقر الرئيسي — طريق الملك فهد", "latitude": 24.7136, "longitude": 46.6753, "radius_m": 250},
+    {"id": "loc-2", "name": "فرع العليا", "latitude": 24.6941, "longitude": 46.6834, "radius_m": 150},
+]
+
+LOCATION_ASSIGN = {
+    "emp-1": "loc-1",
+    "emp-2": "loc-1",
+    "emp-3": "loc-1",
+    "emp-4": "loc-2",
+    "emp-5": "loc-2",
+}
 
 EMPLOYEES = [
     {"id": "emp-1", "name": "أحمد المنصوري", "job_title": "مدير العمليات والتقنية", "email": "ahmed@mawaridi.sa", "phone": "0501234567", "base_salary": 18500, "allowances": 3500, "hire_date": "2022-01-15", "status": "active"},
@@ -38,6 +51,20 @@ def _is_workday(day: str) -> bool:
 
 async def main() -> None:
     await ensure_indexes()
+
+    if await db.locations.count_documents({}) == 0:
+        await db.locations.insert_many([WorkLocation(**l).model_dump() for l in LOCATIONS])
+        print(f"seeded {len(LOCATIONS)} work locations")
+
+    # Bind any employee without an assigned work location (demo default: المقر الرئيسي)
+    unassigned = await db.employees.find({"location_id": {"$in": ["", None]}}).to_list(1000)
+    for e in unassigned:
+        await db.employees.update_one(
+            {"id": e["id"]},
+            {"$set": {"location_id": LOCATION_ASSIGN.get(e["id"], "loc-1")}},
+        )
+    if unassigned:
+        print(f"assigned work locations to {len(unassigned)} employees")
 
     if await db.employees.count_documents({}) == 0:
         await db.employees.insert_many([Employee(**e).model_dump() for e in EMPLOYEES])

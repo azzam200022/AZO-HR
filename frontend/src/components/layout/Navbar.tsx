@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { arSA } from "date-fns/locale";
-import { CalendarDays, Clock, LayoutDashboard, UserRound, Users, Wallet } from "lucide-react";
+import { CalendarDays, Clock, LayoutDashboard, MapPin, UserRound, Users, Wallet } from "lucide-react";
 import { useRole, type Role } from "@/lib/role";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +12,7 @@ const MANAGER_NAV = [
   { to: "/attendance", label: "الحضور", icon: Clock, testid: "nav-attendance" },
   { to: "/leaves", label: "الإجازات", icon: CalendarDays, testid: "nav-leaves" },
   { to: "/payroll", label: "الرواتب", icon: Wallet, testid: "nav-payroll" },
+  { to: "/locations", label: "المواقع", icon: MapPin, testid: "nav-locations" },
 ];
 
 const EMPLOYEE_NAV = [{ to: "/me", label: "بوابة الموظف", icon: UserRound, testid: "nav-my-portal" }];

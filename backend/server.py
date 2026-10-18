@@ -65,11 +65,13 @@ from routers.attendance import router as attendance_router
 from routers.leaves import router as leaves_router
 from routers.payroll import router as payroll_router
 from routers.dashboard import router as dashboard_router
+from routers.locations import router as locations_router
 
 api_router.include_router(employees_router)
 api_router.include_router(attendance_router)
 api_router.include_router(leaves_router)
 api_router.include_router(payroll_router)
+api_router.include_router(locations_router)
 api_router.include_router(dashboard_router)
 
 # Include the router in the main app

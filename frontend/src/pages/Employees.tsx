@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Pencil, Plus, Search, Trash2, UserRoundCheck, UserRoundX } from "lucide-react";
+import { MapPin, Pencil, Plus, Search, Trash2, UserRoundCheck, UserRoundX } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
 import { errorText, fmtDate, formatSAR, todayStr } from "@/lib/format";
-import { EMPLOYEE_STATUS_LABELS, type Employee, type EmployeeStatus } from "@/lib/types";
+import { EMPLOYEE_STATUS_LABELS, type Employee, type EmployeeStatus, type WorkLocation } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -48,6 +48,7 @@ interface EmployeeForm {
   allowances: string;
   hire_date: string;
   status: EmployeeStatus;
+  location_id: string;
 }
 
 const EMPTY_FORM: EmployeeForm = {
@@ -59,6 +60,7 @@ const EMPTY_FORM: EmployeeForm = {
   allowances: "0",
   hire_date: todayStr(),
   status: "active",
+  location_id: "",
 };
 
 export default function Employees() {
@@ -67,6 +69,11 @@ export default function Employees() {
     queryKey: ["employees"],
     queryFn: () => apiGet<Employee[]>("/employees"),
   });
+  const { data: locations = [] } = useQuery({
+    queryKey: ["locations"],
+    queryFn: () => apiGet<WorkLocation[]>("/locations"),
+  });
+  const locationName = (id: string) => locations.find((l) => l.id === id)?.name ?? "";
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -150,6 +157,7 @@ export default function Employees() {
       allowances: String(emp.allowances),
       hire_date: emp.hire_date,
       status: emp.status,
+      location_id: emp.location_id,
     });
     setDialogOpen(true);
   };
@@ -218,6 +226,7 @@ export default function Employees() {
               <TableRow>
                 <TableHead>الموظف</TableHead>
                 <TableHead>المسمى الوظيفي</TableHead>
+                <TableHead>موقع العمل</TableHead>
                 <TableHead>تاريخ التعيين</TableHead>
                 <TableHead>الراتب الأساسي</TableHead>
                 <TableHead>البدلات</TableHead>
@@ -240,6 +249,16 @@ export default function Employees() {
                     </div>
                   </TableCell>
                   <TableCell className="text-sm text-slate-600">{emp.job_title}</TableCell>
+                  <TableCell className="text-xs" data-testid={`employee-location-${emp.id}`}>
+                    {emp.location_id ? (
+                      <span className="inline-flex items-center gap-1 font-medium text-slate-700">
+                        <MapPin className="h-3.5 w-3.5 text-teal-600" />
+                        {locationName(emp.location_id) || "موقع محذوف"}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">بدون تقييد</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-sm tabular-nums text-slate-600">
                     {fmtDate(emp.hire_date)}
                   </TableCell>
@@ -398,6 +417,29 @@ export default function Employees() {
                 <SelectContent>
                   <SelectItem value="active">نشِط</SelectItem>
                   <SelectItem value="inactive">موقوف</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>موقع العمل (تقييد الحضور)</Label>
+              <Select
+                value={form.location_id || "none"}
+                onValueChange={(value: string) =>
+                  setForm({ ...form, location_id: value === "none" ? "" : value })
+                }
+              >
+                <SelectTrigger data-testid="employee-location-select">
+                  <SelectValue>
+                    {(v: string) => (v === "none" ? "بدون تقييد جغرافي" : locationName(v as string))}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">بدون تقييد جغرافي</SelectItem>
+                  {locations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      {loc.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

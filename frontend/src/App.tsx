@@ -7,6 +7,7 @@ import Employees from "@/pages/Employees";
 import Attendance from "@/pages/Attendance";
 import Leaves from "@/pages/Leaves";
 import Payroll from "@/pages/Payroll";
+import Locations from "@/pages/Locations";
 import MyPortal from "@/pages/MyPortal";
 import { RoleProvider, useRole } from "@/lib/role";
 
@@ -59,6 +60,14 @@ export default function App() {
               element={
                 <ManagerRoute>
                   <Payroll />
+                </ManagerRoute>
+              }
+            />
+            <Route
+              path="/locations"
+              element={
+                <ManagerRoute>
+                  <Locations />
                 </ManagerRoute>
               }
             />
