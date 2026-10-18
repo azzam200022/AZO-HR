@@ -66,7 +66,11 @@ from routers.leaves import router as leaves_router
 from routers.payroll import router as payroll_router
 from routers.dashboard import router as dashboard_router
 from routers.locations import router as locations_router
+from routers.auth import router as auth_router
+from routers.me import router as me_router
 
+api_router.include_router(auth_router)
+api_router.include_router(me_router)
 api_router.include_router(employees_router)
 api_router.include_router(attendance_router)
 api_router.include_router(leaves_router)

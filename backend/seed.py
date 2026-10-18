@@ -1,9 +1,11 @@
 """Idempotent demo seed for the HR app. Run: cd /app/backend && python seed.py"""
 
 import asyncio
+import os
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from lib.auth import hash_password, new_access_code
 from lib.db import db, ensure_indexes
 from lib.dates import current_month, today_iso
 from models.hr import AttendanceRecord, Employee, LeaveRequest, PayrollItem, WorkLocation
@@ -51,6 +53,32 @@ def _is_workday(day: str) -> bool:
 
 async def main() -> None:
     await ensure_indexes()
+
+    # Manager account — the only principal allowed into the management console.
+    email = (os.environ.get("MANAGER_EMAIL") or "").strip().lower()
+    password = os.environ.get("MANAGER_PASSWORD") or ""
+    if email and password:
+        await db.users.update_one(
+            {"email": email},
+            {
+                "$set": {"role": "manager", "password_hash": hash_password(password)},
+                "$setOnInsert": {"created_at": datetime.now(APP_TZ)},
+            },
+            upsert=True,
+        )
+        # Any other manager rows are stale — only the configured email may be manager.
+        await db.users.delete_many({"role": "manager", "email": {"$ne": email}})
+        print(f"manager account ready: {email}")
+
+    # Issue a login code to any employee missing one.
+    for doc in await db.employees.find({"access_code": {"$in": ["", None]}}).to_list(1000):
+        code = new_access_code()
+        while await db.employees.find_one({"access_code": code}):
+            code = new_access_code()
+        await db.employees.update_one(
+            {"id": doc["id"]}, {"$set": {"access_code": code, "can_login": True}}
+        )
+        print(f"  code for {doc['name']}: {code}")
 
     if await db.locations.count_documents({}) == 0:
         await db.locations.insert_many([WorkLocation(**l).model_dump() for l in LOCATIONS])

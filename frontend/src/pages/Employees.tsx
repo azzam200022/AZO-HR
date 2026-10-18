@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { MapPin, Pencil, Plus, Search, Trash2, UserRoundCheck, UserRoundX } from "lucide-react";
+import { Copy, KeyRound, MapPin, Pencil, Plus, RefreshCw, Search, Trash2, UserRoundCheck, UserRoundX } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
 import { errorText, fmtDate, formatSAR, todayStr } from "@/lib/format";
-import { EMPLOYEE_STATUS_LABELS, type Employee, type EmployeeStatus, type WorkLocation } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { EMPLOYEE_STATUS_LABELS, type AccessCodeResult, type Employee, type EmployeeStatus, type WorkLocation } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -129,6 +130,34 @@ export default function Employees() {
     onError: (error) => toast.error(errorText(error)),
   });
 
+  const regenerateMutation = useMutation({
+    mutationFn: (id: string) => apiPost<AccessCodeResult>(`/employees/${id}/regenerate-code`),
+    onSuccess: (result) => {
+      invalidate();
+      toast.success(`رمز الدخول الجديد: ${result.access_code}`);
+    },
+    onError: (error) => toast.error(errorText(error)),
+  });
+
+  const toggleLoginMutation = useMutation({
+    mutationFn: ({ id, can_login }: { id: string; can_login: boolean }) =>
+      apiPatch<Employee>(`/employees/${id}`, { can_login }),
+    onSuccess: (emp) => {
+      invalidate();
+      toast.success(emp.can_login ? "تم تفعيل دخول الموظف" : "تم تعطيل دخول الموظف");
+    },
+    onError: (error) => toast.error(errorText(error)),
+  });
+
+  const copyCode = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      toast.success(`تم نسخ الرمز ${code}`);
+    } catch {
+      toast.error("تعذر النسخ — انسخ الرمز يدوياً");
+    }
+  };
+
   const filtered = useMemo(
     () =>
       employees.filter((emp) => {
@@ -227,6 +256,7 @@ export default function Employees() {
                 <TableHead>الموظف</TableHead>
                 <TableHead>المسمى الوظيفي</TableHead>
                 <TableHead>موقع العمل</TableHead>
+                <TableHead>رمز الدخول</TableHead>
                 <TableHead>تاريخ التعيين</TableHead>
                 <TableHead>الراتب الأساسي</TableHead>
                 <TableHead>البدلات</TableHead>
@@ -258,6 +288,47 @@ export default function Employees() {
                     ) : (
                       <span className="text-slate-400">بدون تقييد</span>
                     )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => copyCode(emp.access_code)}
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-lg px-2 py-1 font-mono text-xs font-bold tabular-nums transition-colors",
+                          emp.can_login
+                            ? "bg-teal-50 text-teal-800 hover:bg-teal-100"
+                            : "bg-slate-100 text-slate-400 line-through",
+                        )}
+                        dir="ltr"
+                        title="انسخ الرمز"
+                        data-testid={`employee-code-${emp.id}`}
+                      >
+                        <Copy className="h-3 w-3" />
+                        {emp.access_code || "—"}
+                      </button>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        onClick={() => regenerateMutation.mutate(emp.id)}
+                        data-testid={`regenerate-code-btn-${emp.id}`}
+                        title="توليد رمز جديد"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        className={emp.can_login ? "text-slate-500" : "text-amber-600"}
+                        onClick={() =>
+                          toggleLoginMutation.mutate({ id: emp.id, can_login: !emp.can_login })
+                        }
+                        data-testid={`toggle-login-btn-${emp.id}`}
+                        title={emp.can_login ? "تعطيل الدخول" : "تفعيل الدخول"}
+                      >
+                        <KeyRound className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </TableCell>
                   <TableCell className="text-sm tabular-nums text-slate-600">
                     {fmtDate(emp.hire_date)}

@@ -22,6 +22,7 @@ INDEXES: dict[str, list[IndexModel]] = {
     "employees": [
         IndexModel([("id", ASCENDING)], name="id", unique=True),
         IndexModel([("status", ASCENDING), ("created_at", DESCENDING)], name="status_created"),
+        IndexModel([("access_code", ASCENDING)], name="access_code"),
     ],
     "attendance": [
         IndexModel([("id", ASCENDING)], name="id", unique=True),
@@ -36,6 +37,11 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("month", ASCENDING), ("employee_id", ASCENDING)], name="month_employee"),
     ],
     "locations": [IndexModel([("id", ASCENDING)], name="id", unique=True)],
+    "users": [IndexModel([("email", ASCENDING)], name="email", unique=True)],
+    "sessions": [
+        IndexModel([("token", ASCENDING)], name="token", unique=True),
+        IndexModel([("employee_id", ASCENDING)], name="employee"),
+    ],
 }
 
 

@@ -1,60 +1,73 @@
 # مواردي (Mawaridi HR) — مواصفة التطبيق
 
-تطبيق إدارة موارد بشرية عربي بالكامل (RTL) بدون تسجيل دخول — دورا «مدير» و«موظف» في نفس
-التطبيق عبر مبدّل الأدوار في الشريط العلوي.
+تطبيق إدارة موارد بشرية عربي بالكامل (RTL) بمصادقة حقيقية ودورين منفصلين:
+**مدير النظام** (حساب واحد معتمد) و**الموظف** (دخول برمز يصدره المدير).
 
-## الأدوار
-- **مدير النظام** (افتراضي): لوحة تحكم `/`، الموظفون `/employees`، الحضور `/attendance`،
-  الإجازات `/leaves`، الرواتب `/payroll`. صفحات المدير محمية بمحوّل (employee → /me).
-- **بوابة الموظف** `/me`: اختيار «أنت تتصفح كـ» من القائمة، تسجيل الحضور/الانصراف بمؤقّت
-  حيّ، طلب إجازة، ومسير الراتب الشهري. الخيار يُحفظ في localStorage (`my-employee-id`).
-- الدور محفوظ في localStorage (`hr-role`)؛ التبديل من الشريط العلوي (role-switcher-*).
+## المصادقة والصلاحيات
+- **جلسة بكوكي httpOnly** (`hr_session`، صلاحية 14 يوماً) تُنشأ على الخادم وتُخزَّن في مجموعة
+  `sessions`. الواجهة لا تحمل أي توكن ولا تقرر دوراً — `GET /api/auth/me` هو مصدر الحقيقة.
+- **المدير**: بريد + كلمة مرور مُجزّأة bcrypt في مجموعة `users`. البريد المخوّل يأتي من
+  `MANAGER_EMAIL` في `.env` — أي بريد آخر يُرفض 401 حتى لو طابقت كلمة المرور.
+- **الموظف**: رمز دخول (`access_code`، مثل `MW-4821`) يُولَّد تلقائياً عند إنشاء الموظف،
+  أو اختيارياً بريد + كلمة مرور بعد `POST /employees/{id}/set-password`.
+- **الهوية تُشتق من الجلسة في كل طلب** مقابل مصدر الحقيقة: حذف الموظف، أو تعطيل دخوله
+  (`can_login=false`)، أو إيقاف حالته، أو إعادة توليد رمزه → تسقط الجلسة فوراً (401).
+- **بوابات الخادم** (`lib/auth.py`): `require_manager` على كل راوترات الإدارة، و`require_employee`
+  على `/me/*`. المجهول → 401، والموظف على لوحة المدير → 403. حراس الواجهة تجميلية فقط.
+- **منع IDOR بنيوياً**: مسارات `/me/*` تقرأ `employee_id` من الجلسة ولا تقبله من العميل إطلاقاً
+  (`SelfPunch` و`SelfLeaveCreate` بلا حقل `employee_id`)، فلا يمكن لموظف بلوغ سجل زميله.
+
+## الأدوار والصفحات
+- **مدير النظام**: لوحة التحكم `/`، الموظفون `/employees` (إضافة/تعديل/حذف + عمود «رمز الدخول»
+  للنسخ وإعادة التوليد وتعطيل الدخول)، الحضور `/attendance`، الإجازات `/leaves`،
+  الرواتب `/payroll`، مواقع العمل `/locations`.
+- **الموظف**: بوابته `/me` فقط — حضوره وإجازاته ومسير راتبه هو، وتسجيل حضور/انصراف، وطلب إجازة.
+  لا يرى روابط الإدارة، وأي رابط إداري مباشر يعيده إلى بوابته.
 
 ## الواجهة الخلفية (كلها تحت /api على api_router)
-- `GET /employees` (`?status=`) · `POST /employees` · `GET/PUT/DELETE /employees/{id}`
-  (الحذف يتسلسل لحذف حضور الموظف وإجازاته ورواتب)
-- `GET /attendance` (`?date=&employee_id=`) · `POST /attendance` (يدوي، مكرر نفس اليوم → 409)
-  · `POST /attendance/check-in` · `POST /attendance/check-out` (404/409 عند الخطأ)
-  · `PATCH/DELETE /attendance/{id}`
-- `GET /leaves` (`?status=&employee_id=`) · `POST /leaves` (end<start → 400)
-  · `PATCH /leaves/{id}` (approved/rejected + manager_note) · `DELETE /leaves/{id}`
-- `GET /payroll` (`?month=&employee_id=`) · `POST /payroll/generate {month}` (بنود مسوّدة
-  للموظفين النشِطين الناقصين، idempotent) · `PATCH /payroll/{id}` (يعيد حساب net)
-- `GET /locations` · `POST /locations` · `PUT /locations/{id}` · `DELETE /locations/{id}`
-  (الحذف يُلغي ربط الموقع بالموظفين فيصبحون بلا تقييد)
-- `GET /dashboard` (KPIs + اتجاه 7 أيام + توزيع الإجازات + أحدث الطلبات) ·
-  `GET /today` → `{today, now_hhmm}` بتوقيت APP_TZ — الساعة الحية والمؤقّت في البوابة
-  مثبّتان على وقت الخادم وليس المتصفح.
+- `POST /auth/manager-login` · `POST /auth/employee-login` (`access_code` أو `email`+`password`)
+  · `GET /auth/me` (200 دائماً مع `authenticated`) · `POST /auth/logout`
+- `/me/*` (موظف فقط): `GET /me/profile` · `GET /me/location` · `GET /me/attendance`
+  · `POST /me/check-in` · `POST /me/check-out` · `GET /me/leaves` · `POST /me/leaves`
+  · `GET /me/payroll?month=`
+- مدير فقط: `GET/POST /employees` · `GET/PUT/DELETE /employees/{id}` (الحذف يتسلسل للحضور
+  والإجازات والرواتب والجلسات) · `POST /employees/{id}/regenerate-code` ·
+  `POST /employees/{id}/set-password`
+- مدير فقط: `GET/POST /attendance` · `POST /attendance/check-in|check-out` · `PATCH/DELETE /attendance/{id}`
+- مدير فقط: `GET/POST /leaves` · `PATCH /leaves/{id}` (approved/rejected + manager_note) · `DELETE /leaves/{id}`
+- مدير فقط: `GET /payroll` · `POST /payroll/generate {month}` (idempotent) · `PATCH /payroll/{id}`
+- مدير فقط: `GET/POST /locations` · `PUT/DELETE /locations/{id}` · `GET /dashboard`
+- عام: `GET /today` → `{today, now_hhmm}` بتوقيت APP_TZ (الساعة الحية في البوابة مثبّتة على
+  وقت الخادم لا المتصفح)
 
 ## السياج الجغرافي لتسجيل الحضور (Geofence)
-- المدير يعرّف **مواقع عمل** في صفحة `/locations` (اسم + خط عرض/طول + نطاق سماح بالأمتار،
-  وزر «استخدم موقعي الحالي» لجلب الإحداثيات)، ويربط كل موظف بموقع من نموذج الموظف
-  (`employee-location-select`، أو «بدون تقييد جغرافي»).
-- بوابة الموظف تطلب إحداثيات GPS من المتصفح قبل `POST /attendance/check-in` وترسل `lat`/`lng`.
-- **التحقق على الخادم** (`routers/attendance.py` + `lib/geo.py` بمسافة haversine):
-  - موظف مرتبط بموقع وبلا إحداثيات → **400** «تسجيل الحضور يتطلب تحديد موقعك الجغرافي»
-  - خارج النطاق → **403** مع اسم الموقع والنطاق المسموح
-  - داخل النطاق → **200** ويُخزَّن `location_id` و`distance_m` في سجل الحضور (يظهران في البوابة)
-  - موظف بلا موقع (`location_id=""`) → لا تقييد، يُسجَّل الحضور كالسابق
-- التقييد يسري على تسجيل **الحضور** فقط؛ الانصراف غير مقيّد جغرافياً.
+- المدير يعرّف مواقع عمل (اسم + إحداثيات + نطاق بالأمتار، مع «استخدم موقعي الحالي») ويربط كل
+  موظف بموقع أو يتركه «بدون تقييد».
+- البوابة تطلب إحداثيات GPS قبل `POST /me/check-in`، والقاعدة تُفرض على الخادم
+  (`lib/punch.py` + `lib/geo.py` بمسافة haversine): بلا إحداثيات → **400**، خارج النطاق → **403**،
+  داخل النطاق → يُخزَّن `location_id` و`distance_m`. التقييد على الحضور فقط دون الانصراف.
 
-## النموذج (Pydantic في backend/models/hr.py ↔ TS في frontend/src/lib/types.ts)
-- Employee: id, name, job_title, email, phone, base_salary, allowances, hire_date, status(active/inactive), location_id
-- WorkLocation: id, name, latitude, longitude, radius_m (≥10، افتراضي 150)
-- AttendanceRecord: id, employee_id, date(YYYY-MM-DD), check_in/check_out(HH:MM، قد تكون فارغة), location_id, distance_m
-- LeaveRequest: id, employee_id, leave_type(annual/sick/unpaid), start_date, end_date, reason, status(pending/approved/rejected), manager_note
+## النموذج (Pydantic في backend/models ↔ TS في frontend/src/lib/types.ts)
+- Employee: id, name, job_title, email, phone, base_salary, allowances, hire_date,
+  status(active/inactive), location_id, access_code, can_login
+- WorkLocation: id, name, latitude, longitude, radius_m (≥10)
+- AttendanceRecord: id, employee_id, date, check_in/check_out (HH:MM), location_id, distance_m
+- LeaveRequest: id, employee_id, leave_type(annual/sick/unpaid), start_date, end_date, reason,
+  status(pending/approved/rejected), manager_note
 - PayrollItem: id, employee_id, month(YYYY-MM), base_salary, allowances, deductions, net, status(draft/paid)
-- المعرفات uuid4 نصية؛ التواريخ نصوص ISO؛ created_at تاريخ واعٍ UTC (يُطبَّع بـ `aware()` من lib/dates)
+- SessionInfo: authenticated, role, email, name, employee_id
 
 ## بيانات التجزئة (backend/seed.py — idempotent)
-- 5 موظفين: emp-1 أحمد المنصوري، emp-2 سارة القحطاني، emp-3 فيصل العتيبي، emp-4 نورة الشمري، emp-5 خالد الغامدي (كلهم نشِطون)
-- موقعا عمل: loc-1 «المقر الرئيسي — طريق الملك فهد» (24.7136, 46.6753، نطاق 250م) لـ emp-1/2/3،
-  و loc-2 «فرع العليا» (24.6941, 46.6834، نطاق 150م) لـ emp-4/5
-- 25 سجل حضور لأيام العمل في آخر 8 أيام (عطلة الجمعة/السبت)؛ emp-1 له بصمة اليوم دون انصراف
-- 4 طلبات إجازة: 2 معلقة (emp-2، emp-3)، 1 مقبولة (emp-5)، 1 مرفوضة (emp-4)
-- مسير رواتب الشهر الحالي: 5 بنود (emp-1 مدفوع، الباقي مسوّدة)
+- حساب المدير من `.env`، ورمز دخول لكل موظف ينقصه رمز (يُطبع في المخرجات)
+- 5 موظفين أساسيين + سجلات حضور وإجازات ومسير الشهر الحالي
+- موقعا عمل: «المقر الرئيسي» (24.7136, 46.6753، 250م) و«فرع العليا» (24.6941, 46.6834، 150م)
+
+## ملاحظات تنفيذية
+- حارس `/me` خاص بالموظف: المدير الذي يفتح `/me` (أو يبقى العنوان من جلسة موظف سابقة على
+  نفس المتصفح) يُعاد إلى لوحة التحكم بدل بوابة فارغة.
+- نسبة الحضور في صفحة الحضور تُحتسب ليوم محدد فقط؛ بلا فلتر تاريخ تظهر «—».
 
 ## ملاحظات بيئية
-- `APP_TZ="Asia/Riyadh"` في backend/.env (أُعيد تشغيل الخدمات بعده)؛ عطلة الأسبوع الجمعة/السبت
-- رابط المعاينة العام: https://people-hub-152.preview.emergentagent.com
-- بيانات اعتماد: لا يوجد تسجيل دخول — انظر memory/test_credentials.md
+- `.env`: `APP_TZ="Asia/Riyadh"`, `MANAGER_EMAIL`, `MANAGER_PASSWORD` (تهيئة أولية فقط)
+- بيانات الدخول الفعلية في `memory/test_credentials.md`
+- رابط المعاينة: https://people-hub-152.preview.emergentagent.com

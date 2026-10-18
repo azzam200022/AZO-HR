@@ -96,7 +96,12 @@ export default function Attendance() {
 
   const employeeName = (id: string) => employees.find((e) => e.id === id)?.name ?? "—";
   const activeCount = employees.filter((e) => e.status === "active").length;
-  const rate = activeCount > 0 ? Math.round((records.length / activeCount) * 100) : 0;
+  // The attendance rate only means something for a single day — without a date filter the
+  // list spans many days and the ratio would exceed 100%.
+  const rate =
+    dateFilter && activeCount > 0
+      ? Math.round((records.filter((r) => r.date === dateFilter).length / activeCount) * 100)
+      : null;
 
   const openAdd = () => {
     const firstActive = employees.find((e) => e.status === "active");
@@ -155,9 +160,9 @@ export default function Attendance() {
             </p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-center shadow-xs">
-            <p className="text-xs text-slate-500">نسبة من النشِطين</p>
+            <p className="text-xs text-slate-500">نسبة حضور اليوم المحدد</p>
             <p className="text-lg font-bold tabular-nums text-teal-700" data-testid="attendance-rate">
-              {formatNumber(rate)}%
+              {rate === null ? "—" : `${formatNumber(rate)}%`}
             </p>
           </div>
         </div>

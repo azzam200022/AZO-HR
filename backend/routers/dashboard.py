@@ -1,5 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from lib.auth import require_manager
 from lib.dates import aware, current_month, now_time, past_days, today_iso
 from lib.db import db
 from models.hr import DashboardStats, LeaveWithEmployee, TodayResponse, TrendPoint
@@ -7,7 +8,7 @@ from models.hr import DashboardStats, LeaveWithEmployee, TodayResponse, TrendPoi
 router = APIRouter(tags=["dashboard"])
 
 
-@router.get("/dashboard", response_model=DashboardStats)
+@router.get("/dashboard", response_model=DashboardStats, dependencies=[Depends(require_manager)])
 async def dashboard():
     today = today_iso()
     month = current_month()

@@ -16,7 +16,26 @@ export interface Employee {
   hire_date: string;
   status: EmployeeStatus;
   location_id: string; // "" = no geofence restriction
+  access_code: string; // login code issued by the manager
+  can_login: boolean;
   created_at: string;
+}
+
+export interface SessionInfo {
+  authenticated: boolean;
+  role: "manager" | "employee" | null;
+  email: string;
+  name: string;
+  employee_id: string;
+}
+
+export interface AccessCodeResult {
+  employee_id: string;
+  access_code: string;
+}
+
+export interface LogoutResult {
+  ok: boolean;
 }
 
 export interface WorkLocation {

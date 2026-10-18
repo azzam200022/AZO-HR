@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from lib.auth import require_manager
 from lib.dates import aware
 from lib.db import db
 from models.hr import DeleteResult, LeaveCreate, LeaveRequest, LeaveUpdate
 
-router = APIRouter(prefix="/leaves", tags=["leaves"])
+router = APIRouter(prefix="/leaves", tags=["leaves"], dependencies=[Depends(require_manager)])
 
 
 def _to_model(doc: dict) -> LeaveRequest:

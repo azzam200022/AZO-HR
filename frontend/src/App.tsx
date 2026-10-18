@@ -9,74 +9,105 @@ import Leaves from "@/pages/Leaves";
 import Payroll from "@/pages/Payroll";
 import Locations from "@/pages/Locations";
 import MyPortal from "@/pages/MyPortal";
-import { RoleProvider, useRole } from "@/lib/role";
+import Login from "@/pages/Login";
+import { AuthProvider, useAuth } from "@/lib/auth";
 
-// No login in this app — the role switcher in the navbar decides which workspace renders.
-function ManagerRoute({ children }: { children: ReactNode }) {
-  const { role } = useRole();
+function Splash() {
+  return (
+    <div className="flex min-h-svh items-center justify-center bg-slate-50">
+      <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-teal-600" />
+    </div>
+  );
+}
+
+// The server is the real gate (every manager route sits behind require_manager); these
+// guards only keep the UI honest about what the session may reach.
+function ManagerOnly({ children }: { children: ReactNode }) {
+  const { role } = useAuth();
   if (role !== "manager") return <Navigate to="/me" replace />;
   return <>{children}</>;
 }
 
-function RootRoute() {
-  const { role } = useRole();
-  return role === "manager" ? <Dashboard /> : <MyPortal />;
+// The portal is employee-only: a manager landing on /me (e.g. the URL left over from a
+// previous session on this browser) belongs on the dashboard, not on an empty portal.
+function EmployeeOnly({ children }: { children: ReactNode }) {
+  const { role } = useAuth();
+  if (role !== "employee") return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
+function Shell() {
+  const { session, isLoading, role } = useAuth();
+
+  if (isLoading) return <Splash />;
+  if (!session?.authenticated) return <Login />;
+
+  return (
+    <div className="min-h-svh bg-background text-foreground">
+      <Navbar />
+      <main className="mx-auto w-full max-w-7xl px-4 pt-6 pb-12 md:px-8">
+        <Routes>
+          <Route path="/" element={role === "manager" ? <Dashboard /> : <Navigate to="/me" replace />} />
+          <Route
+            path="/employees"
+            element={
+              <ManagerOnly>
+                <Employees />
+              </ManagerOnly>
+            }
+          />
+          <Route
+            path="/attendance"
+            element={
+              <ManagerOnly>
+                <Attendance />
+              </ManagerOnly>
+            }
+          />
+          <Route
+            path="/leaves"
+            element={
+              <ManagerOnly>
+                <Leaves />
+              </ManagerOnly>
+            }
+          />
+          <Route
+            path="/payroll"
+            element={
+              <ManagerOnly>
+                <Payroll />
+              </ManagerOnly>
+            }
+          />
+          <Route
+            path="/locations"
+            element={
+              <ManagerOnly>
+                <Locations />
+              </ManagerOnly>
+            }
+          />
+          <Route
+            path="/me"
+            element={
+              <EmployeeOnly>
+                <MyPortal />
+              </EmployeeOnly>
+            }
+          />
+          <Route path="*" element={<Navigate to={role === "manager" ? "/" : "/me"} replace />} />
+        </Routes>
+      </main>
+    </div>
+  );
 }
 
 export default function App() {
   return (
-    <RoleProvider>
-      <div className="min-h-svh bg-background text-foreground">
-        <Navbar />
-        <main className="mx-auto w-full max-w-7xl px-4 pt-6 pb-12 md:px-8">
-          <Routes>
-            <Route path="/" element={<RootRoute />} />
-            <Route
-              path="/employees"
-              element={
-                <ManagerRoute>
-                  <Employees />
-                </ManagerRoute>
-              }
-            />
-            <Route
-              path="/attendance"
-              element={
-                <ManagerRoute>
-                  <Attendance />
-                </ManagerRoute>
-              }
-            />
-            <Route
-              path="/leaves"
-              element={
-                <ManagerRoute>
-                  <Leaves />
-                </ManagerRoute>
-              }
-            />
-            <Route
-              path="/payroll"
-              element={
-                <ManagerRoute>
-                  <Payroll />
-                </ManagerRoute>
-              }
-            />
-            <Route
-              path="/locations"
-              element={
-                <ManagerRoute>
-                  <Locations />
-                </ManagerRoute>
-              }
-            />
-            <Route path="/me" element={<MyPortal />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </main>
-      </div>
+    <AuthProvider>
+      <Shell />
       <Toaster />
-    </RoleProvider>
+    </AuthProvider>
   );
 }

@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from lib.auth import require_manager
 from lib.dates import aware
 from lib.db import db
 from models.hr import DeleteResult, WorkLocation, WorkLocationCreate, WorkLocationUpdate
 
-router = APIRouter(prefix="/locations", tags=["locations"])
+router = APIRouter(prefix="/locations", tags=["locations"], dependencies=[Depends(require_manager)])
 
 
 def _to_model(doc: dict) -> WorkLocation:

@@ -51,60 +51,46 @@ import {
   StatusBadge,
 } from "@/components/shared";
 
+// Every request here hits /me/* — the backend resolves "me" from the session cookie, so an
+// employee can never read or write another employee's records.
 export default function MyPortal() {
   const queryClient = useQueryClient();
-  const employeesQuery = useQuery({
-    queryKey: ["employees"],
-    queryFn: () => apiGet<Employee[]>("/employees"),
-  });
-  const employees = employeesQuery.data ?? [];
-  const locationsQuery = useQuery({
-    queryKey: ["locations"],
-    queryFn: () => apiGet<WorkLocation[]>("/locations"),
-  });
-  const locations = locationsQuery.data ?? [];
 
-  const [selectedId, setSelectedId] = useState<string>(() => localStorage.getItem("my-employee-id") ?? "");
-  useEffect(() => {
-    if (selectedId) localStorage.setItem("my-employee-id", selectedId);
-  }, [selectedId]);
-  useEffect(() => {
-    if (employees.length > 0 && !employees.some((e) => e.id === selectedId)) {
-      setSelectedId(employees[0].id);
-    }
-  }, [employees, selectedId]);
-
+  const profileQuery = useQuery({
+    queryKey: ["me", "profile"],
+    queryFn: () => apiGet<Employee>("/me/profile"),
+  });
+  const locationQuery = useQuery({
+    queryKey: ["me", "location"],
+    queryFn: () => apiGet<WorkLocation | null>("/me/location"),
+  });
   const todayQuery = useQuery({
     queryKey: ["today"],
     queryFn: () => apiGet<TodayResponse>("/today"),
     staleTime: 60_000,
   });
-  const today = todayQuery.data?.today ?? todayStr();
-
   const attendanceQuery = useQuery({
-    queryKey: ["attendance", "mine", selectedId],
-    queryFn: () => apiGet<AttendanceRecord[]>(`/attendance?employee_id=${selectedId}`),
-    enabled: !!selectedId,
+    queryKey: ["me", "attendance"],
+    queryFn: () => apiGet<AttendanceRecord[]>("/me/attendance"),
   });
   const leavesQuery = useQuery({
-    queryKey: ["leaves", "mine", selectedId],
-    queryFn: () => apiGet<LeaveRequest[]>(`/leaves?employee_id=${selectedId}`),
-    enabled: !!selectedId,
+    queryKey: ["me", "leaves"],
+    queryFn: () => apiGet<LeaveRequest[]>("/me/leaves"),
   });
   const [payslipMonth, setPayslipMonth] = useState(currentMonthStr());
   const payrollQuery = useQuery({
-    queryKey: ["payroll", payslipMonth, selectedId],
-    queryFn: () => apiGet<PayrollItem[]>(`/payroll?month=${payslipMonth}&employee_id=${selectedId}`),
-    enabled: !!selectedId,
+    queryKey: ["me", "payroll", payslipMonth],
+    queryFn: () => apiGet<PayrollItem[]>(`/me/payroll?month=${payslipMonth}`),
   });
 
-  const me = employees.find((e) => e.id === selectedId);
+  const me = profileQuery.data;
+  const myLocation = locationQuery.data ?? null;
+  const today = todayQuery.data?.today ?? todayStr();
   const records = attendanceQuery.data ?? [];
   const myLeaves = leavesQuery.data ?? [];
   const todayRecord = records.find((r) => r.date === today);
   const monthRecords = records.filter((r) => r.date.startsWith(currentMonthStr()));
-  const payslip = (payrollQuery.data ?? []).find((i) => i.employee_id === selectedId);
-  const myLocation = me?.location_id ? locations.find((l) => l.id === me.location_id) ?? null : null;
+  const payslip = (payrollQuery.data ?? [])[0];
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -112,9 +98,8 @@ export default function MyPortal() {
     return () => clearInterval(timer);
   }, []);
 
-  // Punch times (check_in/check_out) are wall-clock strings in the server timezone (APP_TZ).
-  // Anchor the live clock and the elapsed timer to server time — never to the browser
-  // timezone — so they always agree with the stored records.
+  // Punch times are wall-clock strings in the server timezone — anchor the clock to server
+  // time so it always agrees with the stored records.
   const serverNow = todayQuery.data;
   const [fetchedAt, setFetchedAt] = useState(() => Date.now());
   useEffect(() => {
@@ -140,14 +125,10 @@ export default function MyPortal() {
     return `${Math.floor(minutes / 60)}س ${minutes % 60}د`;
   };
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ["attendance"] });
-    queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-  };
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["me"] });
 
   const checkInMutation = useMutation({
-    // The geofence lives on the server: it rejects the punch (403) when the browser's
-    // coordinates fall outside the assigned location's radius, and 400 when no fix is sent.
+    // The geofence is enforced server-side: 403 outside the radius, 400 without a fix.
     mutationFn: async () => {
       let coords: { lat: number; lng: number } | null = null;
       if (myLocation) {
@@ -158,17 +139,12 @@ export default function MyPortal() {
           navigator.geolocation.getCurrentPosition(
             (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
             () =>
-              reject(
-                new Error("تعذر تحديد موقعك — فعّل صلاحية الموقع في المتصفح ثم أعد المحاولة"),
-              ),
+              reject(new Error("تعذر تحديد موقعك — فعّل صلاحية الموقع في المتصفح ثم أعد المحاولة")),
             { enableHighAccuracy: true, timeout: 12_000 },
           );
         });
       }
-      return apiPost<AttendanceRecord>("/attendance/check-in", {
-        employee_id: selectedId,
-        ...(coords ? { lat: coords.lat, lng: coords.lng } : {}),
-      });
+      return apiPost<AttendanceRecord>("/me/check-in", coords ?? {});
     },
     onSuccess: () => {
       invalidate();
@@ -178,7 +154,7 @@ export default function MyPortal() {
   });
 
   const checkOutMutation = useMutation({
-    mutationFn: () => apiPost<AttendanceRecord>("/attendance/check-out", { employee_id: selectedId }),
+    mutationFn: () => apiPost<AttendanceRecord>("/me/check-out"),
     onSuccess: () => {
       invalidate();
       toast.success("تم تسجيل الانصراف — أحسنت العمل");
@@ -195,10 +171,9 @@ export default function MyPortal() {
   }>({ leave_type: "annual", start_date: todayStr(), end_date: todayStr(), reason: "" });
 
   const leaveMutation = useMutation({
-    mutationFn: () => apiPost<LeaveRequest>("/leaves", { ...leaveForm, employee_id: selectedId }),
+    mutationFn: () => apiPost<LeaveRequest>("/me/leaves", leaveForm),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["leaves"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      invalidate();
       setLeaveOpen(false);
       toast.success("تم إرسال طلب الإجازة — بانتظار موافقة المدير");
     },
@@ -215,30 +190,11 @@ export default function MyPortal() {
 
   return (
     <FadeIn>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl" data-testid="my-portal-title">
-            بوابة الموظف
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">سجّل حضورك، تابع إجازاتك، واطّلع على مسير راتبك.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Label className="text-xs text-slate-500">أنت تتصفح كـ:</Label>
-          <Select value={selectedId} onValueChange={(v: string) => setSelectedId(v)}>
-            <SelectTrigger className="w-52" data-testid="my-employee-select">
-              <SelectValue>
-                {(v: string) => employees.find((e) => e.id === v)?.name ?? "اختر الموظف"}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {employees.map((emp) => (
-                <SelectItem key={emp.id} value={emp.id}>
-                  {emp.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl" data-testid="my-portal-title">
+          بوابة الموظف
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">سجّل حضورك، تابع إجازاتك، واطّلع على مسير راتبك.</p>
       </div>
 
       <section
@@ -249,8 +205,12 @@ export default function MyPortal() {
         <div className="absolute -bottom-14 start-1/3 h-40 w-40 rounded-full bg-teal-400/10" />
         <div className="relative z-10 flex flex-wrap items-center justify-between gap-6">
           <div>
-            <p className="text-xs font-medium text-teal-200">{clockLabel}</p>
-            <h2 className="mt-1 text-2xl font-bold">{me ? me.name : "…"}</h2>
+            <p className="text-xs font-medium tabular-nums text-teal-200" data-testid="server-clock">
+              {clockLabel}
+            </p>
+            <h2 className="mt-1 text-2xl font-bold" data-testid="my-name">
+              {me ? me.name : "…"}
+            </h2>
             <p className="mt-1 text-sm text-slate-300">{me?.job_title ?? ""}</p>
             <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-teal-200" data-testid="my-work-location">
               <MapPin className="h-3.5 w-3.5" />
@@ -283,7 +243,7 @@ export default function MyPortal() {
             {!todayRecord ? (
               <Button
                 onClick={() => checkInMutation.mutate()}
-                disabled={checkInMutation.isPending || !selectedId}
+                disabled={checkInMutation.isPending || attendanceQuery.isLoading}
                 className="bg-teal-500 text-white hover:bg-teal-600"
                 data-testid="my-checkin-btn"
               >
@@ -376,6 +336,9 @@ export default function MyPortal() {
                   <p className="mt-1 text-xs tabular-nums text-slate-500">
                     {fmtDate(leave.start_date)} ← {fmtDate(leave.end_date)}
                   </p>
+                  {leave.manager_note && (
+                    <p className="mt-1 text-xs text-slate-500">ملاحظة المدير: {leave.manager_note}</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -494,7 +457,7 @@ export default function MyPortal() {
             <Button variant="outline" onClick={() => setLeaveOpen(false)} data-testid="leave-cancel-btn">
               إلغاء
             </Button>
-            <Button onClick={submitLeave} disabled={leaveMutation.isPending || !selectedId} data-testid="leave-submit-btn">
+            <Button onClick={submitLeave} disabled={leaveMutation.isPending} data-testid="leave-submit-btn">
               إرسال الطلب
             </Button>
           </DialogFooter>

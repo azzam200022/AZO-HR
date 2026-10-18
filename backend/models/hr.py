@@ -34,6 +34,8 @@ class Employee(BaseModel):
     hire_date: str
     status: Literal["active", "inactive"] = "active"
     location_id: str = ""  # assigned work location; "" = no geofence
+    access_code: str = ""  # login code issued by the manager (e.g. MW-4821)
+    can_login: bool = True
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -66,6 +68,7 @@ class EmployeeUpdate(BaseModel):
     hire_date: str | None = None
     status: Literal["active", "inactive"] | None = None
     location_id: str | None = None
+    can_login: bool | None = None
 
 
 class AttendanceRecord(BaseModel):
@@ -98,6 +101,13 @@ class CheckPunch(BaseModel):
     lng: float | None = None
 
 
+class SelfPunch(BaseModel):
+    """Employee self check-in: the identity comes from the session, only the GPS fix is sent."""
+
+    lat: float | None = None
+    lng: float | None = None
+
+
 class LeaveRequest(BaseModel):
     id: str = Field(default_factory=_uuid)
     employee_id: str
@@ -112,6 +122,22 @@ class LeaveRequest(BaseModel):
 
 class LeaveCreate(BaseModel):
     employee_id: str
+    leave_type: Literal["annual", "sick", "unpaid"] = "annual"
+    start_date: str
+    end_date: str
+    reason: str = ""
+
+    @field_validator("start_date", "end_date")
+    @classmethod
+    def _date_format(cls, v: str) -> str:
+        if not DATE_RE.match(v):
+            raise ValueError("dates must be YYYY-MM-DD")
+        return v
+
+
+class SelfLeaveCreate(BaseModel):
+    """Employee-submitted leave: no employee_id — the session decides whose leave this is."""
+
     leave_type: Literal["annual", "sick", "unpaid"] = "annual"
     start_date: str
     end_date: str

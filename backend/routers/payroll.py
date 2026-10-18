@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from lib.auth import require_manager
 from lib.dates import aware, current_month
 from lib.db import db
 from models.hr import GenerateResult, PayrollGenerate, PayrollItem, PayrollUpdate
 
-router = APIRouter(prefix="/payroll", tags=["payroll"])
+router = APIRouter(prefix="/payroll", tags=["payroll"], dependencies=[Depends(require_manager)])
 
 
 def _to_model(doc: dict) -> PayrollItem:
