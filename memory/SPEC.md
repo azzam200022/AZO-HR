@@ -105,6 +105,27 @@
   المتصفح، وبعدها يظهر تنبيه منبثق عند ارتفاع عدّاد غير المقروء. تعمل والتطبيق مفتوح في تبويب
   (لا تُستخدم خدمة دفع خارجية).
 
+## دورة الشهر لكل موظف (`lib/cycle.py`)
+- **الشهر ليس تقويمياً**: يُحتسب من `payroll_cycle_start` إن حُدِّد، وإلا من `hire_date` — من يوم
+  المرساة إلى ما قبل نفس اليوم من الشهر التالي (مباشرة 20/9 ← دورات 20/9–19/10 ثم 20/10–19/11).
+- الحضور والتأخير والحوافز والخصومات كلها تُحسب داخل دورة الموظف نفسها، فتأخير دورة جديدة
+  **لا يُحمَّل أبداً** على دورة سابقة.
+- المدير يحدد/يعدّل «بداية دورة الراتب» في بطاقة الموظف (اختياري).
+
+## تسوية الدورة عند دفع الراتب (`settle_cycle` في `lib/payroll_rules.py`)
+- اعتماد الدفع (`PATCH /payroll/{id}` بالحالة `paid`) يُنفّذ تسوية: سجلات حضور تلك الدورة
+  **تُنقل إلى `attendance_archive`** وتختفي من السجل الجاري (`attendance`)، وتُقفل حوافزها
+  وخصوماتها (`settled=true`)، ويُحفظ عدد الأيام المؤرشفة في `archived_days`.
+- التقارير تقرأ الأرشيف تلقائياً (`cycle_attendance`)، فتقرير الدورة المسددة يبقى قابلاً للعرض.
+- البند المدفوع محمي: تعديله يرد **409**، و`generate` يتخطّاه، وحذف بند حافز/خصم مُسوّى يرد **409**.
+
+## الحوافز والخصومات (`/api/adjustments` + `GET /me/adjustments`)
+- لكل بند: النوع (`bonus`/`deduction`)، المبلغ (> صفر)، و**السبب إلزامي** (بلا سبب → **400**).
+- البند يقع في الدورة التي يقع فيها تاريخه، ويدخل الصافي مباشرة:
+  الصافي = الأساسي + البدلات + الحوافز − الاستقطاعات اليدوية − خصومات البنود − خصم التأخير.
+- المدير يضيفها من زر «حوافز وخصومات» في صف المسير مع عرض سجل البنود السابقة؛ والموظف يرى
+  بنوده وأسبابها عبر `GET /me/adjustments`.
+
 ## النموذج (Pydantic في backend/models ↔ TS في frontend/src/lib/types.ts)
 - Employee: id, name, job_title, email, phone, base_salary, allowances, hire_date,
   status(active/inactive), location_id, access_code, can_login,
@@ -115,8 +136,12 @@
 - PresenceStatus: inside, distance_m, away_minutes, late_minutes, total_late_minutes, tracking
 - LeaveRequest: id, employee_id, leave_type(annual/sick/unpaid), start_date, end_date, reason,
   status(pending/approved/rejected), manager_note
-- PayrollItem: id, employee_id, month(YYYY-MM), base_salary, allowances, deductions,
-  late_minutes, away_minutes, late_deduction, net, status(draft/paid)
+- PayrollItem: id, employee_id, month(تسمية الدورة YYYY-MM), cycle_start, cycle_end,
+  base_salary, allowances, deductions, late_minutes, away_minutes, late_deduction,
+  bonus_total, adjustment_deductions, archived_days, net, status(draft/paid)
+  — **البند يُطابَق بـ`cycle_start` لا بالتسمية** حتى لا تتصادم الدورات مع بنود تقويمية قديمة.
+- Adjustment: id, employee_id, kind(bonus/deduction), amount(>0), reason(إلزامي), date,
+  cycle_start, cycle_end, settled
 - Notification: id, kind(late/left_site/message), audience(manager/employee), employee_id,
   employee_name, date, at_time, minutes, message, read
 - Message: id, thread(direct/group), employee_id, sender(manager/employee), sender_name, body,

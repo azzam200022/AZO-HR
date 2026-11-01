@@ -20,6 +20,7 @@ export interface Employee {
   shift_end: string; // HH:MM — may wrap past midnight (16:00 → 00:00)
   grace_minutes: number; // late grace window
   monthly_leave_quota: number; // leaves allowed per hire-date cycle
+  payroll_cycle_start: string; // custom cycle anchor; "" = use hire_date
   access_code: string; // login code issued by the manager
   can_login: boolean;
   created_at: string;
@@ -35,6 +36,8 @@ export interface LeaveBalance {
 
 export interface MonthlyAttendanceReport {
   month: string;
+  cycle_start: string;
+  cycle_end: string;
   days_present: number;
   days_complete: number;
   total_minutes: number;
@@ -126,15 +129,34 @@ export interface LeaveWithEmployee extends LeaveRequest {
 export interface PayrollItem {
   id: string;
   employee_id: string;
-  month: string; // YYYY-MM
+  month: string; // YYYY-MM the cycle starts in
   base_salary: number;
   allowances: number;
   deductions: number; // manual deductions
   late_minutes: number;
   away_minutes: number;
   late_deduction: number; // auto deduction for lateness + time away
+  bonus_total: number; // manual bonuses inside the cycle
+  adjustment_deductions: number; // manual deductions inside the cycle
+  cycle_start: string;
+  cycle_end: string;
+  archived_days: number; // attendance days archived when paid
   net: number;
   status: PayrollStatus;
+  created_at: string;
+}
+
+export interface Adjustment {
+  id: string;
+  employee_id: string;
+  employee_name: string;
+  kind: "bonus" | "deduction";
+  amount: number;
+  reason: string;
+  date: string;
+  cycle_start: string;
+  cycle_end: string;
+  settled: boolean;
   created_at: string;
 }
 
@@ -194,6 +216,8 @@ export interface DisciplineRow {
   job_title: string;
   shift_start: string;
   shift_end: string;
+  cycle_start: string;
+  cycle_end: string;
   days_present: number;
   late_days: number;
   on_time_days: number;

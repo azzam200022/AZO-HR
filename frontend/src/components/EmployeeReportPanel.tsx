@@ -1,6 +1,7 @@
 import {
   AlarmClock,
   CalendarCheck,
+  CalendarRange,
   CalendarClock,
   Clock3,
   MapPin,
@@ -107,6 +108,15 @@ export default function EmployeeReportPanel({
           وقت الدوام: <span className="font-semibold tabular-nums" dir="ltr">{shiftLabel(attendance.shift_start, attendance.shift_end)}</span>
           <span className="text-slate-400">(سماح {attendance.grace_minutes} د)</span>
         </p>
+        {attendance.cycle_start && (
+          <p className="flex items-center gap-1.5" data-testid="report-cycle-range">
+            <CalendarRange className="h-3.5 w-3.5 text-slate-400" />
+            دورة الشهر:{" "}
+            <span dir="ltr" className="tabular-nums">
+              {fmtDate(attendance.cycle_start)} ← {fmtDate(attendance.cycle_end)}
+            </span>
+          </p>
+        )}
         {showSalary && (
           <p className="flex items-center gap-1.5">
             <Wallet className="h-3.5 w-3.5 text-teal-600" />

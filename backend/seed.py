@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from lib.auth import hash_password, new_access_code
 from lib.db import db, ensure_indexes
+from lib.cycle import cycle_label, pay_cycle
 from lib.dates import current_month, today_iso
 from models.hr import AttendanceRecord, Employee, LeaveRequest, PayrollItem, WorkLocation
 
@@ -145,22 +146,23 @@ async def main() -> None:
         print(f"seeded {len(leaves)} leave requests")
 
     if await db.payroll.count_documents({}) == 0:
-        month = current_month()
         items = []
         for e in EMPLOYEES:
+            # Each payslip covers the employee's OWN hire-date anchored cycle.
+            cycle_start, cycle_end = pay_cycle(e, today_iso())
             item = PayrollItem(
                 employee_id=e["id"],
-                month=month,
+                month=cycle_label(cycle_start),
+                cycle_start=cycle_start,
+                cycle_end=cycle_end,
                 base_salary=e["base_salary"],
                 allowances=e["allowances"],
                 deductions=0,
                 net=e["base_salary"] + e["allowances"],
             )
-            if e["id"] == "emp-1":
-                item.status = "paid"
             items.append(item.model_dump())
         await db.payroll.insert_many(items)
-        print(f"seeded {len(items)} payroll items for {month}")
+        print(f"seeded {len(items)} payroll items (hire-date cycles)")
 
     print("seed done —", await db.employees.count_documents({}), "employees in db")
 

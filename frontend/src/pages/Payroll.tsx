@@ -1,11 +1,20 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { BadgeCheck, FileSpreadsheet, Pencil } from "lucide-react";
-import { apiGet, apiPatch, apiPost } from "@/lib/api";
-import { currentMonthStr, errorText, formatIQD, formatNumber, lateLabel, monthLabel } from "@/lib/format";
+import { BadgeCheck, FileSpreadsheet, Gift, Pencil, Trash2 } from "lucide-react";
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
+import {
+  currentMonthStr,
+  errorText,
+  fmtDate,
+  formatIQD,
+  formatNumber,
+  lateLabel,
+  monthLabel,
+} from "@/lib/format";
 import {
   PAYROLL_STATUS_LABELS,
+  type Adjustment,
   type Employee,
   type GenerateResult,
   type PayrollItem,
@@ -22,6 +31,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -43,6 +54,11 @@ export default function Payroll() {
   const [month, setMonth] = useState(currentMonthStr());
   const [editing, setEditing] = useState<PayrollItem | null>(null);
   const [editForm, setEditForm] = useState({ allowances: "0", deductions: "0" });
+  const [adjusting, setAdjusting] = useState<PayrollItem | null>(null);
+  const [adjustForm, setAdjustForm] = useState<{ kind: "bonus" | "deduction"; amount: string; reason: string }>(
+    { kind: "bonus", amount: "", reason: "" },
+  );
+  const [paying, setPaying] = useState<PayrollItem | null>(null);
 
   const itemsQuery = useQuery({
     queryKey: ["payroll", month],
@@ -89,6 +105,59 @@ export default function Payroll() {
 
   const totalNet = items.reduce((sum, i) => sum + i.net, 0);
   const totalPaid = items.filter((i) => i.status === "paid").reduce((sum, i) => sum + i.net, 0);
+
+  const adjustmentsQuery = useQuery({
+    queryKey: ["adjustments", adjusting?.employee_id ?? ""],
+    queryFn: () => apiGet<Adjustment[]>(`/adjustments?employee_id=${adjusting?.employee_id}`),
+    enabled: adjusting !== null,
+  });
+
+  const adjustMutation = useMutation({
+    mutationFn: () =>
+      apiPost<Adjustment>("/adjustments", {
+        employee_id: adjusting?.employee_id,
+        kind: adjustForm.kind,
+        amount: Number(adjustForm.amount) || 0,
+        reason: adjustForm.reason,
+      }),
+    onSuccess: async () => {
+      setAdjustForm({ kind: "bonus", amount: "", reason: "" });
+      queryClient.invalidateQueries({ queryKey: ["adjustments"] });
+      // The payslip must reflect the new figure immediately.
+      await apiPost<GenerateResult>("/payroll/generate", { month });
+      queryClient.invalidateQueries({ queryKey: ["payroll"] });
+      toast.success("تمت إضافة البند وتحديث المسير");
+    },
+    onError: (error) => toast.error(errorText(error)),
+  });
+
+  const deleteAdjustMutation = useMutation({
+    mutationFn: (id: string) => apiDelete<{ deleted: boolean }>(`/adjustments/${id}`),
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ["adjustments"] });
+      await apiPost<GenerateResult>("/payroll/generate", { month });
+      queryClient.invalidateQueries({ queryKey: ["payroll"] });
+      toast.success("تم حذف البند");
+    },
+    onError: (error) => toast.error(errorText(error)),
+  });
+
+  const openAdjust = (item: PayrollItem) => {
+    setAdjusting(item);
+    setAdjustForm({ kind: "bonus", amount: "", reason: "" });
+  };
+
+  const submitAdjust = () => {
+    if (!adjustForm.reason.trim()) {
+      toast.error("اذكر سبب الحافز أو الخصم");
+      return;
+    }
+    if (!adjustForm.amount || Number(adjustForm.amount) <= 0) {
+      toast.error("أدخل مبلغاً صحيحاً");
+      return;
+    }
+    adjustMutation.mutate();
+  };
 
   const openEdit = (item: PayrollItem) => {
     setEditing(item);
@@ -169,7 +238,9 @@ export default function Payroll() {
                 <TableHead>الموظف</TableHead>
                 <TableHead>الأساسي</TableHead>
                 <TableHead>البدلات</TableHead>
+                <TableHead>الدورة</TableHead>
                 <TableHead>الاستقطاعات</TableHead>
+                <TableHead>حوافز / خصومات</TableHead>
                 <TableHead>دقائق التأخير</TableHead>
                 <TableHead>خصم التأخير</TableHead>
                 <TableHead>الصافي</TableHead>
@@ -189,8 +260,26 @@ export default function Payroll() {
                   <TableCell className="text-sm tabular-nums text-slate-600">
                     {formatIQD(item.allowances)}
                   </TableCell>
+                  <TableCell
+                    className="text-[11px] tabular-nums text-slate-500"
+                    dir="ltr"
+                    data-testid={`payroll-cycle-${item.id}`}
+                  >
+                    {item.cycle_start ? `${fmtDate(item.cycle_start)} ← ${fmtDate(item.cycle_end)}` : "—"}
+                  </TableCell>
                   <TableCell className="text-sm tabular-nums text-red-700">
                     {formatIQD(item.deductions)}
+                  </TableCell>
+                  <TableCell className="text-xs tabular-nums" data-testid={`payroll-adjustments-${item.id}`}>
+                    {item.bonus_total > 0 && (
+                      <span className="block text-emerald-700">+{formatIQD(item.bonus_total)}</span>
+                    )}
+                    {item.adjustment_deductions > 0 && (
+                      <span className="block text-rose-700">−{formatIQD(item.adjustment_deductions)}</span>
+                    )}
+                    {item.bonus_total === 0 && item.adjustment_deductions === 0 && (
+                      <span className="text-slate-400">—</span>
+                    )}
                   </TableCell>
                   <TableCell
                     className="text-sm tabular-nums text-slate-600"
@@ -230,22 +319,38 @@ export default function Payroll() {
                       <Button
                         size="icon-sm"
                         variant="ghost"
+                        onClick={() => openAdjust(item)}
+                        data-testid={`payroll-adjust-btn-${item.id}`}
+                        title="إضافة حافز أو خصم بسبب"
+                      >
+                        <Gift className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
                         onClick={() => openEdit(item)}
                         data-testid={`payroll-edit-btn-${item.id}`}
                         title="تعديل البدلات والاستقطاعات"
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      {item.status === "draft" && (
+                      {item.status === "draft" ? (
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => updateMutation.mutate({ id: item.id, body: { status: "paid" } })}
+                          onClick={() => setPaying(item)}
                           data-testid={`payroll-mark-paid-btn-${item.id}`}
                         >
                           <BadgeCheck className="h-4 w-4" />
                           اعتماد الدفع
                         </Button>
+                      ) : (
+                        <span
+                          className="text-[11px] text-slate-500"
+                          data-testid={`payroll-archived-${item.id}`}
+                        >
+                          تمت التسوية • أُرشف {formatNumber(item.archived_days)} يوم حضور
+                        </span>
                       )}
                     </div>
                   </TableCell>
@@ -255,6 +360,153 @@ export default function Payroll() {
           </Table>
         </div>
       )}
+
+      {/* Bonus / deduction with a mandatory reason */}
+      <Dialog open={adjusting !== null} onOpenChange={(open) => !open && setAdjusting(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              حوافز وخصومات: {adjusting ? employeeName(adjusting.employee_id) : ""}
+            </DialogTitle>
+            <DialogDescription>
+              كل بند يحتاج سبباً مذكوراً، ويظهر للموظف في مسير راتبه.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="adj-kind">النوع *</Label>
+              <select
+                id="adj-kind"
+                value={adjustForm.kind}
+                onChange={(e) =>
+                  setAdjustForm({ ...adjustForm, kind: e.target.value as "bonus" | "deduction" })
+                }
+                className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                data-testid="adjustment-kind-select"
+              >
+                <option value="bonus">حافز (زيادة)</option>
+                <option value="deduction">خصم</option>
+              </select>
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="adj-amount">المبلغ (د.ع) *</Label>
+              <Input
+                id="adj-amount"
+                type="number"
+                min={1}
+                value={adjustForm.amount}
+                onChange={(e) => setAdjustForm({ ...adjustForm, amount: e.target.value })}
+                data-testid="adjustment-amount-input"
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="adj-reason">السبب *</Label>
+            <Textarea
+              id="adj-reason"
+              rows={2}
+              value={adjustForm.reason}
+              onChange={(e) => setAdjustForm({ ...adjustForm, reason: e.target.value })}
+              placeholder="مثال: مكافأة إنجاز مشروع / خصم مخالفة إدارية"
+              data-testid="adjustment-reason-input"
+            />
+          </div>
+
+          <div className="max-h-40 space-y-1.5 overflow-y-auto" data-testid="adjustment-history">
+            {(adjustmentsQuery.data ?? []).length === 0 ? (
+              <p className="text-xs text-slate-500">لا توجد بنود سابقة لهذا الموظف.</p>
+            ) : (
+              (adjustmentsQuery.data ?? []).map((a) => (
+                <div
+                  key={a.id}
+                  className="flex items-start justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-2"
+                  data-testid={`adjustment-row-${a.id}`}
+                >
+                  <span className="min-w-0">
+                    <span
+                      className={cn(
+                        "block text-xs font-bold tabular-nums",
+                        a.kind === "bonus" ? "text-emerald-700" : "text-rose-700",
+                      )}
+                    >
+                      {a.kind === "bonus" ? "+" : "−"}
+                      {formatIQD(a.amount)}
+                    </span>
+                    <span className="block text-[11px] text-slate-600">{a.reason}</span>
+                    <span className="block text-[10px] text-slate-400">
+                      {fmtDate(a.date)}
+                      {a.settled && " • تمت تسويته"}
+                    </span>
+                  </span>
+                  {!a.settled && (
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      onClick={() => deleteAdjustMutation.mutate(a.id)}
+                      data-testid={`adjustment-delete-btn-${a.id}`}
+                      title="حذف البند"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setAdjusting(null)} data-testid="adjustment-close-btn">
+              إغلاق
+            </Button>
+            <Button
+              onClick={submitAdjust}
+              disabled={adjustMutation.isPending}
+              data-testid="adjustment-save-btn"
+            >
+              إضافة البند
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Paying settles the cycle — say so before it happens */}
+      <Dialog open={paying !== null} onOpenChange={(open) => !open && setPaying(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>اعتماد دفع الراتب</DialogTitle>
+            <DialogDescription>
+              {paying
+                ? paying.cycle_start
+                  ? `سيتم اعتماد راتب ${employeeName(paying.employee_id)} للدورة ${fmtDate(
+                      paying.cycle_start,
+                    )} ← ${fmtDate(paying.cycle_end)}.`
+                  : `سيتم اعتماد راتب ${employeeName(paying.employee_id)}.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <p className="rounded-lg bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-800">
+            بعد الاعتماد تُؤرشف سجلات حضور هذه الدورة وتختفي من السجل الجاري، وتُقفل حوافزها
+            وخصوماتها. الدورة التالية تبدأ من الصفر، ويبقى تقرير الدورة المؤرشفة قابلاً للعرض.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setPaying(null)} data-testid="pay-cancel-btn">
+              إلغاء
+            </Button>
+            <Button
+              onClick={() =>
+                paying &&
+                updateMutation.mutate({ id: paying.id, body: { status: "paid" } }, { onSuccess: () => setPaying(null) })
+              }
+              disabled={updateMutation.isPending}
+              data-testid="pay-confirm-btn"
+            >
+              <BadgeCheck className="h-4 w-4" />
+              اعتماد وتسوية الدورة
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
         <DialogContent className="max-w-md">

@@ -10,11 +10,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from lib.auth import Principal, require_employee
 from lib.dates import aware, current_month
 from lib.db import db
+from lib.adjustments import to_model as adjustment_model
 from lib.messaging import GROUP_THREAD, mark_thread_read, send_message, to_model as message_model
 from lib.punch import punch_in, punch_out, record_presence
 from lib.reports import build_report, leave_balance
 from lib.shift import employee_shift, late_minutes
 from models.hr import (
+    Adjustment,
     AttendanceRecord,
     Employee,
     EmployeeReport,
@@ -225,6 +227,17 @@ async def read_my_messages(payload: MessageSend, principal: Principal = Depends(
         thread=payload.thread, employee_id=principal.employee_id, reader="employee"
     )
     return MarkAllResult(updated=updated)
+
+
+@router.get("/adjustments", response_model=list[Adjustment])
+async def my_adjustments(principal: Principal = Depends(require_employee)):
+    """Own bonuses and deductions, each with the reason the manager stated."""
+    docs = (
+        await db.adjustments.find({"employee_id": principal.employee_id})
+        .sort("date", -1)
+        .to_list(300)
+    )
+    return [adjustment_model(d) for d in docs]
 
 
 @router.get("/payroll", response_model=list[PayrollItem])

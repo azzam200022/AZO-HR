@@ -359,8 +359,7 @@ export default function MyAttendance() {
               <p className="text-[11px] text-slate-500">الاستقطاعات</p>
               <p className="mt-1 text-xs font-bold tabular-nums text-red-700">{formatIQD(payslip.deductions)}</p>
             </div>
-            <div className="rounded-xl bg-rose-50 p-3 text-center" data-testid="payslip-late-deduction">
-              <p className="text-[11px] text-rose-700">خصم التأخير</p>
+            <div className="rounded-xl bg-rose-50 p-3 text-center" data-testid="payslip-late-deduction">              <p className="text-[11px] text-rose-700">خصم التأخير</p>
               <p className="mt-1 text-xs font-bold tabular-nums text-rose-800">
                 {formatIQD(payslip.late_deduction)}
               </p>

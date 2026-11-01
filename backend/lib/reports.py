@@ -1,9 +1,11 @@
 """Report building shared by the employee portal (/me/report) and the manager console
 (/employees/{id}/report) — one implementation, two audiences."""
 
-from lib.dates import aware, current_month
+from lib.cycle import pay_cycle
+from lib.dates import aware, current_month, today_iso
 from lib.db import db
 from lib.leave_cycle import cycle_bounds, overlaps_cycle
+from lib.payroll_rules import cycle_attendance
 from lib.shift import employee_shift, late_minutes, worked_minutes
 from models.hr import (
     AttendanceRecord,
@@ -37,17 +39,16 @@ async def leave_balance(employee: dict) -> LeaveBalance:
 
 
 async def build_report(employee: dict, month: str | None = None) -> EmployeeReport:
+    """Report for the employee's OWN cycle inside `month` (hire-date anchored, not calendar)."""
     month = month or current_month()
+    reference = today_iso() if today_iso().startswith(month) else f"{month}-15"
+    cycle_start, cycle_end = pay_cycle(employee, reference)
 
     shift_start, shift_end, grace = employee_shift(employee)
 
-    docs = (
-        await db.attendance.find(
-            {"employee_id": employee["id"], "date": {"$regex": f"^{month}"}}
-        )
-        .sort("date", -1)
-        .to_list(500)
-    )
+    # Settled cycles live in the archive — the report still shows them, the running log doesn't.
+    docs = await cycle_attendance(employee["id"], cycle_start, cycle_end)
+    docs.sort(key=lambda d: d.get("date", ""), reverse=True)
     for d in docs:
         d["created_at"] = aware(d.get("created_at"))
         # Lateness is always derived from the employee's CURRENT shift, so editing the
@@ -82,6 +83,8 @@ async def build_report(employee: dict, month: str | None = None) -> EmployeeRepo
         location_name=location_name,
         attendance=MonthlyAttendanceReport(
             month=month,
+            cycle_start=cycle_start,
+            cycle_end=cycle_end,
             days_present=len(records),
             days_complete=len(complete),
             total_minutes=total_minutes,

@@ -55,6 +55,7 @@ interface EmployeeForm {
   shift_end: string;
   grace_minutes: string;
   monthly_leave_quota: string;
+  payroll_cycle_start: string;
 }
 
 const EMPTY_FORM: EmployeeForm = {
@@ -71,6 +72,7 @@ const EMPTY_FORM: EmployeeForm = {
   shift_end: "16:00",
   grace_minutes: "5",
   monthly_leave_quota: "2",
+  payroll_cycle_start: "",
 };
 
 export default function Employees() {
@@ -114,6 +116,7 @@ export default function Employees() {
         allowances: Number(payload.allowances) || 0,
         monthly_leave_quota: Number(payload.monthly_leave_quota) || 0,
         grace_minutes: Number(payload.grace_minutes) || 0,
+        payroll_cycle_start: payload.payroll_cycle_start || "",
       };
       return editing
         ? apiPut<Employee>(`/employees/${editing.id}`, body)
@@ -210,6 +213,7 @@ export default function Employees() {
       shift_end: emp.shift_end,
       grace_minutes: String(emp.grace_minutes),
       monthly_leave_quota: String(emp.monthly_leave_quota),
+      payroll_cycle_start: emp.payroll_cycle_start,
     });
     setDialogOpen(true);
   };
@@ -576,6 +580,20 @@ export default function Employees() {
               <p className="text-[11px] text-slate-500">
                 الحضور حتى بداية الدوام + مدة السماح لا يُحتسب تأخيراً؛ وبعدها يُحتسب التأخير من
                 بداية الدوام نفسها (مثال: دوام 08:00 وسماح 5 ← الحضور 08:05 صفر، و08:06 يساوي 6 دقائق).
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="emp-cycle-start">بداية دورة الراتب (اختياري)</Label>
+              <Input
+                id="emp-cycle-start"
+                type="date"
+                value={form.payroll_cycle_start}
+                onChange={(e) => setForm({ ...form, payroll_cycle_start: e.target.value })}
+                data-testid="employee-cycle-start-input"
+              />
+              <p className="text-[11px] leading-relaxed text-slate-500">
+                اتركه فارغاً ليُحتسب الشهر من تاريخ المباشرة. الدورة تمتد شهراً كاملاً من هذا
+                التاريخ، وتأخير كل دورة يُحسب عليها وحدها.
               </p>
             </div>
             <div className="space-y-2">

@@ -38,6 +38,7 @@ class Employee(BaseModel):
     shift_end: str = "16:00"  # HH:MM — may wrap past midnight (e.g. 16:00 → 00:00)
     grace_minutes: int = Field(default=5, ge=0)  # late grace window
     monthly_leave_quota: int = Field(default=2, ge=0)  # leaves allowed per hire-date cycle
+    payroll_cycle_start: str = ""  # custom cycle anchor; "" = use hire_date
     access_code: str = ""  # login code issued by the manager (e.g. MW-4821)
     can_login: bool = True
     created_at: datetime = Field(default_factory=utcnow)
@@ -57,6 +58,7 @@ class EmployeeCreate(BaseModel):
     shift_end: str = "16:00"
     grace_minutes: int = Field(default=5, ge=0)
     monthly_leave_quota: int = Field(default=2, ge=0)
+    payroll_cycle_start: str = ""
 
     @field_validator("hire_date")
     @classmethod
@@ -80,6 +82,7 @@ class EmployeeUpdate(BaseModel):
     shift_end: str | None = None
     grace_minutes: int | None = Field(default=None, ge=0)
     monthly_leave_quota: int | None = Field(default=None, ge=0)
+    payroll_cycle_start: str | None = None
     can_login: bool | None = None
 
 
@@ -179,9 +182,14 @@ class PayrollItem(BaseModel):
     base_salary: float = Field(default=0, ge=0)
     allowances: float = Field(default=0, ge=0)
     deductions: float = Field(default=0, ge=0)  # manual deductions set by the manager
-    late_minutes: int = 0  # lateness billed this month
+    late_minutes: int = 0  # lateness billed this cycle
     away_minutes: int = 0  # minutes spent outside the work site during shifts
     late_deduction: float = Field(default=0, ge=0)  # auto deduction for the two above
+    bonus_total: float = Field(default=0, ge=0)  # manual bonuses in this cycle
+    adjustment_deductions: float = Field(default=0, ge=0)  # manual deductions in this cycle
+    cycle_start: str = ""  # hire-date anchored cycle this payslip covers
+    cycle_end: str = ""
+    archived_days: int = 0  # attendance records archived when it was paid
     net: float = Field(default=0, ge=0)
     status: Literal["draft", "paid"] = "draft"
     created_at: datetime = Field(default_factory=utcnow)
@@ -257,6 +265,41 @@ class BroadcastResult(BaseModel):
     sent: int
 
 
+class Adjustment(BaseModel):
+    """A manual bonus or deduction. `reason` is mandatory by design — money never moves
+    without a stated justification the employee can read on their payslip."""
+
+    id: str = Field(default_factory=_uuid)
+    employee_id: str
+    employee_name: str = ""
+    kind: Literal["bonus", "deduction"]
+    amount: float = Field(gt=0)
+    reason: str = Field(min_length=1, max_length=300)
+    date: str = ""  # YYYY-MM-DD — decides which cycle it lands in
+    cycle_start: str = ""
+    cycle_end: str = ""
+    settled: bool = False  # locked once its payroll item is paid
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class AdjustmentCreate(BaseModel):
+    employee_id: str
+    kind: Literal["bonus", "deduction"]
+    amount: float = Field(gt=0)
+    reason: str = ""
+    date: str = ""
+
+
+class CycleInfo(BaseModel):
+    """The employee's current (open) cycle."""
+
+    anchor: str  # date the cycles count from
+    cycle_start: str
+    cycle_end: str
+    label: str  # YYYY-MM the cycle starts in
+    settled: bool = False  # True once this cycle's payroll was paid
+
+
 class NotificationSummary(BaseModel):
     unread: int
     total: int
@@ -272,6 +315,8 @@ class DisciplineRow(BaseModel):
     job_title: str = ""
     shift_start: str = "08:00"
     shift_end: str = "16:00"
+    cycle_start: str = ""
+    cycle_end: str = ""
     days_present: int = 0
     late_days: int = 0
     on_time_days: int = 0
@@ -327,6 +372,8 @@ class LeaveBalance(BaseModel):
 
 class MonthlyAttendanceReport(BaseModel):
     month: str  # YYYY-MM
+    cycle_start: str = ""  # hire-date anchored cycle the report covers
+    cycle_end: str = ""
     days_present: int
     days_complete: int  # both punches recorded
     total_minutes: int
