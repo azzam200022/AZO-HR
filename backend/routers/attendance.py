@@ -5,6 +5,7 @@ from lib.dates import aware, now_time, today_iso
 from lib.db import db
 from lib.geo import haversine_m
 from lib.punch import punch_in, punch_out
+from lib.shift import employee_shift, late_minutes
 from models.hr import (
     AttendanceCreate,
     AttendanceRecord,
@@ -38,6 +39,14 @@ async def list_attendance(date: str | None = None, employee_id: str | None = Non
     if employee_id:
         query["employee_id"] = employee_id
     docs = await db.attendance.find(query).sort([("date", -1), ("check_in", -1)]).to_list(1000)
+
+    # Derive lateness from each employee's current shift (same rule as the reports).
+    employees = await db.employees.find({}, {"id": 1, "shift_start": 1, "grace_minutes": 1}).to_list(1000)
+    shifts = {e["id"]: e for e in employees}
+    for doc in docs:
+        emp = shifts.get(doc["employee_id"], {})
+        start, _end, grace = employee_shift(emp)
+        doc["late_minutes"] = late_minutes(doc.get("check_in", ""), start, grace)
     return [_to_model(d) for d in docs]
 
 

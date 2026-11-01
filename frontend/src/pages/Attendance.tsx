@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { apiDelete, apiGet, apiPost } from "@/lib/api";
-import { durationLabel, errorText, fmtDate, formatNumber, todayStr } from "@/lib/format";
+import { durationLabel, errorText, fmtDate, formatNumber, lateLabel, todayStr } from "@/lib/format";
 import type { AttendanceRecord, Employee } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -182,6 +182,7 @@ export default function Attendance() {
                 <TableHead>الحضور</TableHead>
                 <TableHead>الانصراف</TableHead>
                 <TableHead>مدة العمل</TableHead>
+                <TableHead>التأخير</TableHead>
                 <TableHead className="text-end">إجراءات</TableHead>
               </TableRow>
             </TableHeader>
@@ -196,6 +197,20 @@ export default function Attendance() {
                   <TableCell className="text-sm tabular-nums text-slate-600">{rec.check_out || "—"}</TableCell>
                   <TableCell className="text-sm tabular-nums text-slate-600">
                     {durationLabel(rec.check_in, rec.check_out)}
+                  </TableCell>
+                  <TableCell data-testid={`attendance-late-${rec.id}`}>
+                    {rec.late_minutes + rec.away_minutes > 0 ? (
+                      <span className="text-sm font-semibold tabular-nums text-red-700">
+                        {lateLabel(rec.late_minutes + rec.away_minutes)}
+                        {rec.away_minutes > 0 && (
+                          <span className="block text-[10px] font-normal text-amber-700">
+                            منها {lateLabel(rec.away_minutes)} خارج الموقع
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-emerald-700">في الوقت</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-end">
                     <Button

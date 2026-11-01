@@ -70,9 +70,18 @@ async def main() -> None:
         await db.users.delete_many({"role": "manager", "email": {"$ne": email}})
         print(f"manager account ready: {email}")
 
-    # Backfill the leave quota for employees created before the field existed.
+    # Backfill the leave quota and the work shift for employees created before those fields.
     await db.employees.update_many(
         {"monthly_leave_quota": {"$exists": False}}, {"$set": {"monthly_leave_quota": 2}}
+    )
+    await db.employees.update_many(
+        {"shift_start": {"$exists": False}},
+        {"$set": {"shift_start": "08:00", "shift_end": "16:00", "grace_minutes": 5}},
+    )
+    # The demo evening-shift employees work 16:00 → 00:00.
+    await db.employees.update_many(
+        {"id": {"$in": ["emp-4", "emp-5"]}},
+        {"$set": {"shift_start": "16:00", "shift_end": "00:00", "grace_minutes": 5}},
     )
 
     # Issue a login code to any employee missing one.

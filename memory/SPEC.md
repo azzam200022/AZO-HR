@@ -47,11 +47,28 @@
   (`lib/punch.py` + `lib/geo.py` بمسافة haversine): بلا إحداثيات → **400**، خارج النطاق → **403**،
   داخل النطاق → يُخزَّن `location_id` و`distance_m`. التقييد على الحضور فقط دون الانصراف.
 
+## أوقات الدوام لكل موظف والتأخير (`lib/shift.py`)
+- لكل موظف `shift_start` و`shift_end` (HH:MM) و`grace_minutes` (افتراضي 5)، يحددها المدير عند
+  الإضافة أو التعديل، وتظهر في عمود «وقت الدوام» بجدول الموظفين. الافتراضي 08:00 → 16:00،
+  والمناوبة المسائية 16:00 → 00:00 مدعومة كدوام عابر لمنتصف الليل.
+- **التأخير**: الحضور حتى `shift_start + grace` = صفر؛ بعدها يُحتسب **من بداية الدوام** حتى لحظة
+  البصمة (دوام 08:00 وسماح 5: 08:05 → صفر، 08:06 → 6 دقائق، 08:30 → 30).
+  الحضور المبكر لا يُحتسب تأخيراً إطلاقاً (`minutes_since_start` فرق بإشارة ضمن ±12 ساعة).
+- **إغلاق نافذة البصمة**: `POST /me/check-in` يرد **403** بعد انتهاء الدوام، وأيضاً قبل بدايته
+  بأكثر من ساعتين (`EARLY_PUNCH_WINDOW_MINUTES`). الانصراف غير مقيّد بالنافذة.
+- **مغادرة الموقع أثناء الدوام تُحتسب تأخيراً**: البوابة ترسل نبضة موقع كل 60 ثانية
+  (`POST /me/presence`) أثناء وجود بصمة مفتوحة. الخروج من النطاق يفتح عدّاد `outside_since`،
+  والعودة (أو الانصراف) تُضيف الفارق إلى `away_minutes`. إجمالي التأخير في التقارير =
+  `late_minutes + away_minutes`، ويظهر `total_away_minutes` منفصلاً.
+
 ## النموذج (Pydantic في backend/models ↔ TS في frontend/src/lib/types.ts)
 - Employee: id, name, job_title, email, phone, base_salary, allowances, hire_date,
-  status(active/inactive), location_id, access_code, can_login
+  status(active/inactive), location_id, access_code, can_login,
+  monthly_leave_quota, shift_start, shift_end, grace_minutes
 - WorkLocation: id, name, latitude, longitude, radius_m (≥10)
-- AttendanceRecord: id, employee_id, date, check_in/check_out (HH:MM), location_id, distance_m
+- AttendanceRecord: id, employee_id, date, check_in/check_out (HH:MM), location_id, distance_m,
+  late_minutes, away_minutes, outside_since, last_seen
+- PresenceStatus: inside, distance_m, away_minutes, late_minutes, total_late_minutes, tracking
 - LeaveRequest: id, employee_id, leave_type(annual/sick/unpaid), start_date, end_date, reason,
   status(pending/approved/rejected), manager_note
 - PayrollItem: id, employee_id, month(YYYY-MM), base_salary, allowances, deductions, net, status(draft/paid)

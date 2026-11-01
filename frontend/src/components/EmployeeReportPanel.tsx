@@ -1,4 +1,5 @@
 import {
+  AlarmClock,
   CalendarCheck,
   CalendarClock,
   Clock3,
@@ -6,7 +7,16 @@ import {
   TrendingUp,
   Wallet,
 } from "lucide-react";
-import { durationLabel, fmtDate, formatNumber, formatSAR, monthLabel } from "@/lib/format";
+import {
+  durationLabel,
+  fmtDate,
+  formatNumber,
+  formatSAR,
+  lateLabel,
+  monthLabel,
+  shiftLabel,
+} from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 const AR_WEEKDAYS = ["الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد"];
 
@@ -92,6 +102,11 @@ export default function EmployeeReportPanel({
           <MapPin className="h-3.5 w-3.5 text-teal-600" />
           {location_name || "بدون تقييد جغرافي"}
         </p>
+        <p className="flex items-center gap-1.5" data-testid={`${testidPrefix}-shift`}>
+          <Clock3 className="h-3.5 w-3.5 text-teal-600" />
+          وقت الدوام: <span className="font-semibold tabular-nums" dir="ltr">{shiftLabel(attendance.shift_start, attendance.shift_end)}</span>
+          <span className="text-slate-400">(سماح {attendance.grace_minutes} د)</span>
+        </p>
         {showSalary && (
           <p className="flex items-center gap-1.5">
             <Wallet className="h-3.5 w-3.5 text-teal-600" />
@@ -158,7 +173,26 @@ export default function EmployeeReportPanel({
             value={attendance.avg_check_in || "—"}
             icon={<CalendarClock className="h-3 w-3" />}
           />
+          <Stat
+            label="أيام التأخير"
+            value={formatNumber(attendance.late_days)}
+            icon={<AlarmClock className="h-3 w-3" />}
+          />
+          <Stat
+            label="إجمالي التأخير"
+            value={lateLabel(attendance.total_late_minutes)}
+            icon={<AlarmClock className="h-3 w-3" />}
+          />
         </div>
+        {attendance.total_away_minutes > 0 && (
+          <p
+            className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800"
+            data-testid={`${testidPrefix}-away-note`}
+          >
+            يشمل الإجمالي {lateLabel(attendance.total_away_minutes)} احتُسبت نتيجة مغادرة موقع
+            العمل أثناء الدوام.
+          </p>
+        )}
         {/* Full daily log — every day of the month with its exact punch times, not just the
             summary above. */}
         <p className="mt-3 text-[11px] font-bold text-slate-700">
@@ -181,6 +215,7 @@ export default function EmployeeReportPanel({
                   <th className="px-2 py-1.5 text-center font-semibold">الحضور</th>
                   <th className="px-2 py-1.5 text-center font-semibold">الانصراف</th>
                   <th className="px-2 py-1.5 text-center font-semibold">المدة</th>
+                  <th className="px-2 py-1.5 text-center font-semibold">التأخير</th>
                 </tr>
               </thead>
               <tbody>
@@ -204,6 +239,19 @@ export default function EmployeeReportPanel({
                       </td>
                       <td className="px-2 py-1.5 text-center tabular-nums text-teal-700">
                         {durationLabel(rec.check_in, rec.check_out)}
+                      </td>
+                      <td
+                        className={cn(
+                          "px-2 py-1.5 text-center font-semibold tabular-nums",
+                          rec.late_minutes + rec.away_minutes > 0 ? "text-red-700" : "text-slate-400",
+                        )}
+                      >
+                        {lateLabel(rec.late_minutes + rec.away_minutes)}
+                        {rec.away_minutes > 0 && (
+                          <span className="block text-[10px] font-normal text-amber-700">
+                            منها {lateLabel(rec.away_minutes)} خارج الموقع
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}

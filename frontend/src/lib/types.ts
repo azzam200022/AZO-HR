@@ -16,6 +16,9 @@ export interface Employee {
   hire_date: string;
   status: EmployeeStatus;
   location_id: string; // "" = no geofence restriction
+  shift_start: string; // HH:MM — this employee's own working hours
+  shift_end: string; // HH:MM — may wrap past midnight (16:00 → 00:00)
+  grace_minutes: number; // late grace window
   monthly_leave_quota: number; // leaves allowed per hire-date cycle
   access_code: string; // login code issued by the manager
   can_login: boolean;
@@ -36,6 +39,13 @@ export interface MonthlyAttendanceReport {
   days_complete: number;
   total_minutes: number;
   avg_check_in: string;
+  late_days: number;
+  total_late_minutes: number;
+  total_away_minutes: number;
+  on_time_days: number;
+  shift_start: string;
+  shift_end: string;
+  grace_minutes: number;
   records: AttendanceRecord[];
 }
 
@@ -81,7 +91,20 @@ export interface AttendanceRecord {
   check_out: string; // HH:MM
   location_id: string; // "" when punch had no geofence
   distance_m: number | null;
+  late_minutes: number; // minutes late against the employee's shift start
+  away_minutes: number; // minutes spent outside the work location during the shift
+  outside_since: string; // HH:MM while currently away, "" when inside
+  last_seen: string; // HH:MM of the last location heartbeat
   created_at: string;
+}
+
+export interface PresenceStatus {
+  inside: boolean;
+  distance_m: number | null;
+  away_minutes: number;
+  late_minutes: number;
+  total_late_minutes: number;
+  tracking: boolean;
 }
 
 export interface LeaveRequest {

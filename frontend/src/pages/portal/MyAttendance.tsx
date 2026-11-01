@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CheckCircle2, Fingerprint, LogOut, MapPin } from "lucide-react";
+import { CheckCircle2, Clock3, Fingerprint, LogOut, MapPin } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import {
   currentMonthStr,
@@ -9,7 +9,9 @@ import {
   errorText,
   fmtDate,
   formatSAR,
+  lateLabel,
   monthLabel,
+  shiftLabel,
   todayStr,
 } from "@/lib/format";
 import {
@@ -17,6 +19,7 @@ import {
   type AttendanceRecord,
   type EmployeeReport,
   type PayrollItem,
+  type PresenceStatus,
   type TodayResponse,
   type WorkLocation,
 } from "@/lib/types";
@@ -52,6 +55,7 @@ export default function MyAttendance() {
   });
 
   const me = profileQuery.data?.employee;
+  const shift = profileQuery.data?.attendance;
   const myLocation = locationQuery.data ?? null;
   const today = todayQuery.data?.today ?? todayStr();
   const records = attendanceQuery.data ?? [];
@@ -93,6 +97,42 @@ export default function MyAttendance() {
   };
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["me"] });
+
+  // Presence heartbeat: while punched in at a geofenced site, report the position every
+  // minute. Time spent outside the site is accrued as lateness by the backend.
+  const [presence, setPresence] = useState<PresenceStatus | null>(null);
+  const liveNow = !!todayRecord && !todayRecord.check_out;
+  useEffect(() => {
+    if (!liveNow || !myLocation || !navigator.geolocation) return;
+
+    let cancelled = false;
+    const ping = () => {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          try {
+            const status = await apiPost<PresenceStatus>("/me/presence", {
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+            });
+            if (!cancelled) setPresence(status);
+          } catch {
+            /* a failed heartbeat must never break the screen */
+          }
+        },
+        () => {
+          /* position unavailable — skip this beat */
+        },
+        { enableHighAccuracy: true, timeout: 12_000, maximumAge: 30_000 },
+      );
+    };
+
+    ping();
+    const timer = setInterval(ping, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [liveNow, myLocation]);
 
   const checkInMutation = useMutation({
     // The geofence is enforced server-side: 403 outside the radius, 400 without a fix.
@@ -153,6 +193,19 @@ export default function MyAttendance() {
               ? `${myLocation.name} — الحضور مسموح ضمن ${myLocation.radius_m} متراً`
               : "بدون تقييد جغرافي للحضور"}
           </p>
+          {shift && (
+            <p
+              className="mt-1 inline-flex items-center gap-1.5 text-xs text-slate-300"
+              data-testid="my-shift-label"
+            >
+              <Clock3 className="h-3.5 w-3.5" />
+              وقت دوامي:{" "}
+              <span className="font-bold tabular-nums" dir="ltr">
+                {shiftLabel(shift.shift_start, shift.shift_end)}
+              </span>
+              <span className="text-slate-400">(سماح {shift.grace_minutes} د)</span>
+            </p>
+          )}
 
           {/* Big fingerprint punch control */}
           <div className="mt-7 flex flex-col items-center gap-4">
@@ -191,6 +244,32 @@ export default function MyAttendance() {
                 <CheckCircle2 className="h-5 w-5" />
                 تم إكمال يوم العمل
               </span>
+            )}
+
+            {/* Live geofence state while punched in */}
+            {liveNow && myLocation && presence?.tracking && (
+              <div
+                className={
+                  presence.inside
+                    ? "rounded-full bg-emerald-500/20 px-4 py-1.5 text-xs font-semibold text-emerald-200"
+                    : "rounded-full bg-red-500/25 px-4 py-1.5 text-xs font-semibold text-red-200"
+                }
+                data-testid="presence-status"
+              >
+                {presence.inside
+                  ? "داخل موقع العمل"
+                  : `خارج موقع العمل — يُحتسب تأخيراً (${lateLabel(presence.away_minutes)})`}
+              </div>
+            )}
+
+            {todayRecord && (todayRecord.late_minutes > 0 || todayRecord.away_minutes > 0) && (
+              <div
+                className="rounded-full bg-red-500/20 px-4 py-1.5 text-xs font-semibold text-red-200"
+                data-testid="today-late-badge"
+              >
+                تأخير اليوم: {lateLabel(todayRecord.late_minutes + todayRecord.away_minutes)}
+                {todayRecord.away_minutes > 0 && ` (منها ${lateLabel(todayRecord.away_minutes)} خارج الموقع)`}
+              </div>
             )}
 
             {todayRecord && (

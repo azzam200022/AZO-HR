@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Copy, FileText, KeyRound, MapPin, Pencil, Plus, RefreshCw, Search, Trash2, UserRoundCheck, UserRoundX } from "lucide-react";
+import { Clock, Copy, FileText, KeyRound, MapPin, Pencil, Plus, RefreshCw, Search, Trash2, UserRoundCheck, UserRoundX } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
-import { currentMonthStr, errorText, fmtDate, formatSAR, todayStr } from "@/lib/format";
+import { currentMonthStr, errorText, fmtDate, formatSAR, shiftLabel, todayStr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { EMPLOYEE_STATUS_LABELS, type AccessCodeResult, type Employee, type EmployeeReport, type EmployeeStatus, type WorkLocation } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,9 @@ interface EmployeeForm {
   hire_date: string;
   status: EmployeeStatus;
   location_id: string;
+  shift_start: string;
+  shift_end: string;
+  grace_minutes: string;
   monthly_leave_quota: string;
 }
 
@@ -64,6 +67,9 @@ const EMPTY_FORM: EmployeeForm = {
   hire_date: todayStr(),
   status: "active",
   location_id: "",
+  shift_start: "08:00",
+  shift_end: "16:00",
+  grace_minutes: "5",
   monthly_leave_quota: "2",
 };
 
@@ -107,6 +113,7 @@ export default function Employees() {
         base_salary: Number(payload.base_salary) || 0,
         allowances: Number(payload.allowances) || 0,
         monthly_leave_quota: Number(payload.monthly_leave_quota) || 0,
+        grace_minutes: Number(payload.grace_minutes) || 0,
       };
       return editing
         ? apiPut<Employee>(`/employees/${editing.id}`, body)
@@ -199,6 +206,9 @@ export default function Employees() {
       hire_date: emp.hire_date,
       status: emp.status,
       location_id: emp.location_id,
+      shift_start: emp.shift_start,
+      shift_end: emp.shift_end,
+      grace_minutes: String(emp.grace_minutes),
       monthly_leave_quota: String(emp.monthly_leave_quota),
     });
     setDialogOpen(true);
@@ -268,6 +278,7 @@ export default function Employees() {
               <TableRow>
                 <TableHead>الموظف</TableHead>
                 <TableHead>المسمى الوظيفي</TableHead>
+                <TableHead>وقت الدوام</TableHead>
                 <TableHead>موقع العمل</TableHead>
                 <TableHead>رمز الدخول</TableHead>
                 <TableHead>إجازات/شهر</TableHead>
@@ -293,6 +304,12 @@ export default function Employees() {
                     </div>
                   </TableCell>
                   <TableCell className="text-sm text-slate-600">{emp.job_title}</TableCell>
+                  <TableCell data-testid={`employee-shift-${emp.id}`}>
+                    <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-[11px] font-semibold tabular-nums text-slate-700">
+                      <Clock className="h-3 w-3 text-teal-600" />
+                      <span dir="ltr">{shiftLabel(emp.shift_start, emp.shift_end)}</span>
+                    </span>
+                  </TableCell>
                   <TableCell className="text-xs" data-testid={`employee-location-${emp.id}`}>
                     {emp.location_id ? (
                       <span className="inline-flex items-center gap-1 font-medium text-slate-700">
@@ -522,6 +539,44 @@ export default function Employees() {
                   <SelectItem value="inactive">موقوف</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="shift-start">بداية الدوام *</Label>
+              <Input
+                id="shift-start"
+                type="time"
+                value={form.shift_start}
+                onChange={(e) => setForm({ ...form, shift_start: e.target.value })}
+                data-testid="employee-shift-start-input"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="shift-end">نهاية الدوام *</Label>
+              <Input
+                id="shift-end"
+                type="time"
+                value={form.shift_end}
+                onChange={(e) => setForm({ ...form, shift_end: e.target.value })}
+                data-testid="employee-shift-end-input"
+              />
+              <p className="text-[11px] text-slate-500">
+                للمناوبة المسائية اختر 16:00 إلى 00:00 — النظام يحتسب العبور بعد منتصف الليل.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="grace-minutes">مدة السماح (دقائق)</Label>
+              <Input
+                id="grace-minutes"
+                type="number"
+                min={0}
+                value={form.grace_minutes}
+                onChange={(e) => setForm({ ...form, grace_minutes: e.target.value })}
+                data-testid="employee-grace-input"
+              />
+              <p className="text-[11px] text-slate-500">
+                الحضور حتى بداية الدوام + مدة السماح لا يُحتسب تأخيراً؛ وبعدها يُحتسب التأخير من
+                بداية الدوام نفسها (مثال: دوام 08:00 وسماح 5 ← الحضور 08:05 صفر، و08:06 يساوي 6 دقائق).
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="emp-quota">عدد الإجازات المسموح بها شهرياً *</Label>

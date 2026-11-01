@@ -4,6 +4,7 @@
 from lib.dates import aware, current_month
 from lib.db import db
 from lib.leave_cycle import cycle_bounds, overlaps_cycle
+from lib.shift import employee_shift, late_minutes, worked_minutes
 from models.hr import (
     AttendanceRecord,
     Employee,
@@ -15,11 +16,8 @@ from models.hr import (
 
 
 def _minutes(check_in: str, check_out: str) -> int:
-    if not check_in or not check_out:
-        return 0
-    in_h, in_m = (int(x) for x in check_in.split(":"))
-    out_h, out_m = (int(x) for x in check_out.split(":"))
-    return max(0, (out_h * 60 + out_m) - (in_h * 60 + in_m))
+    """Night-shift aware worked minutes."""
+    return worked_minutes(check_in, check_out)
 
 
 async def leave_balance(employee: dict) -> LeaveBalance:
@@ -41,6 +39,8 @@ async def leave_balance(employee: dict) -> LeaveBalance:
 async def build_report(employee: dict, month: str | None = None) -> EmployeeReport:
     month = month or current_month()
 
+    shift_start, shift_end, grace = employee_shift(employee)
+
     docs = (
         await db.attendance.find(
             {"employee_id": employee["id"], "date": {"$regex": f"^{month}"}}
@@ -50,10 +50,15 @@ async def build_report(employee: dict, month: str | None = None) -> EmployeeRepo
     )
     for d in docs:
         d["created_at"] = aware(d.get("created_at"))
+        # Lateness is always derived from the employee's CURRENT shift, so editing the
+        # shift re-states history consistently instead of leaving stale stored values.
+        d["late_minutes"] = late_minutes(d.get("check_in", ""), shift_start, grace)
     records = [AttendanceRecord(**d) for d in docs]
 
     complete = [r for r in records if r.check_in and r.check_out]
     total_minutes = sum(_minutes(r.check_in, r.check_out) for r in records)
+    late_records = [r for r in records if r.late_minutes > 0]
+    total_away = sum(r.away_minutes for r in records)
     check_ins = [r.check_in for r in records if r.check_in]
     avg_check_in = ""
     if check_ins:
@@ -81,6 +86,13 @@ async def build_report(employee: dict, month: str | None = None) -> EmployeeRepo
             days_complete=len(complete),
             total_minutes=total_minutes,
             avg_check_in=avg_check_in,
+            late_days=len(late_records),
+            total_late_minutes=sum(r.late_minutes for r in late_records) + total_away,
+            total_away_minutes=total_away,
+            on_time_days=len(records) - len(late_records),
+            shift_start=shift_start,
+            shift_end=shift_end,
+            grace_minutes=grace,
             records=records,
         ),
         leaves=[LeaveRequest(**d) for d in leave_docs],

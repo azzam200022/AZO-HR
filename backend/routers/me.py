@@ -10,8 +10,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from lib.auth import Principal, require_employee
 from lib.dates import aware, current_month
 from lib.db import db
-from lib.punch import punch_in, punch_out
+from lib.punch import punch_in, punch_out, record_presence
 from lib.reports import build_report, leave_balance
+from lib.shift import employee_shift, late_minutes
 from models.hr import (
     AttendanceRecord,
     Employee,
@@ -19,6 +20,7 @@ from models.hr import (
     LeaveBalance,
     LeaveRequest,
     PayrollItem,
+    PresenceStatus,
     SelfLeaveCreate,
     SelfPunch,
     WorkLocation,
@@ -55,6 +57,8 @@ async def my_location(principal: Principal = Depends(require_employee)):
 
 @router.get("/attendance", response_model=list[AttendanceRecord])
 async def my_attendance(principal: Principal = Depends(require_employee)):
+    employee = await _my_employee(principal)
+    shift_start, _shift_end, grace = employee_shift(employee)
     docs = (
         await db.attendance.find({"employee_id": principal.employee_id})
         .sort("date", -1)
@@ -62,6 +66,7 @@ async def my_attendance(principal: Principal = Depends(require_employee)):
     )
     for d in docs:
         d["created_at"] = aware(d.get("created_at"))
+        d["late_minutes"] = late_minutes(d.get("check_in", ""), shift_start, grace)
     return [AttendanceRecord(**d) for d in docs]
 
 
@@ -76,6 +81,23 @@ async def my_check_out(principal: Principal = Depends(require_employee)):
     doc = await punch_out(principal.employee_id)
     doc["created_at"] = aware(doc.get("created_at"))
     return AttendanceRecord(**doc)
+
+
+@router.post("/presence", response_model=PresenceStatus)
+async def my_presence(payload: SelfPunch, principal: Principal = Depends(require_employee)):
+    """Location heartbeat while punched in — leaving the site accrues away minutes."""
+    employee = await _my_employee(principal)
+    doc = await record_presence(employee, payload.lat, payload.lng)
+    late = int(doc.get("late_minutes", 0))
+    away = int(doc.get("away_minutes", 0))
+    return PresenceStatus(
+        inside=bool(doc.get("_inside", True)),
+        distance_m=round(doc["_distance"], 1) if doc.get("_distance") is not None else None,
+        away_minutes=away,
+        late_minutes=late,
+        total_late_minutes=late + away,
+        tracking=bool(doc.get("_tracking", False)),
+    )
 
 
 @router.get("/leaves", response_model=list[LeaveRequest])

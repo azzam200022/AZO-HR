@@ -39,9 +39,21 @@ export const durationLabel = (checkIn: string, checkOut: string) => {
   if (!checkIn || !checkOut) return "—";
   const [inH, inM] = checkIn.split(":").map(Number);
   const [outH, outM] = checkOut.split(":").map(Number);
-  const minutes = Math.max(0, outH * 60 + outM - (inH * 60 + inM));
+  let minutes = outH * 60 + outM - (inH * 60 + inM);
+  if (minutes < 0) minutes += 24 * 60; // night shift crossing midnight
   return `${Math.floor(minutes / 60)}س ${minutes % 60}د`;
 };
+
+/** Minutes of lateness formatted for Arabic UI ("صفر" when on time). */
+export const lateLabel = (minutes: number) => {
+  if (minutes <= 0) return "صفر";
+  if (minutes < 60) return `${minutes} دقيقة`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m === 0 ? `${h}س` : `${h}س ${m}د`;
+};
+
+export const shiftLabel = (start: string, end: string) => `${start} ← ${end}`;
 
 export function errorText(error: unknown): string {
   if (error && typeof error === "object" && "body" in error) {

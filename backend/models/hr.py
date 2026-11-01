@@ -34,6 +34,9 @@ class Employee(BaseModel):
     hire_date: str
     status: Literal["active", "inactive"] = "active"
     location_id: str = ""  # assigned work location; "" = no geofence
+    shift_start: str = "08:00"  # HH:MM — this employee's own working hours
+    shift_end: str = "16:00"  # HH:MM — may wrap past midnight (e.g. 16:00 → 00:00)
+    grace_minutes: int = Field(default=5, ge=0)  # late grace window
     monthly_leave_quota: int = Field(default=2, ge=0)  # leaves allowed per hire-date cycle
     access_code: str = ""  # login code issued by the manager (e.g. MW-4821)
     can_login: bool = True
@@ -50,6 +53,9 @@ class EmployeeCreate(BaseModel):
     hire_date: str
     status: Literal["active", "inactive"] = "active"
     location_id: str = ""
+    shift_start: str = "08:00"
+    shift_end: str = "16:00"
+    grace_minutes: int = Field(default=5, ge=0)
     monthly_leave_quota: int = Field(default=2, ge=0)
 
     @field_validator("hire_date")
@@ -70,6 +76,9 @@ class EmployeeUpdate(BaseModel):
     hire_date: str | None = None
     status: Literal["active", "inactive"] | None = None
     location_id: str | None = None
+    shift_start: str | None = None
+    shift_end: str | None = None
+    grace_minutes: int | None = Field(default=None, ge=0)
     monthly_leave_quota: int | None = Field(default=None, ge=0)
     can_login: bool | None = None
 
@@ -82,6 +91,10 @@ class AttendanceRecord(BaseModel):
     check_out: str = ""  # HH:MM
     location_id: str = ""  # work location the punch was verified against ("" = none)
     distance_m: float | None = None  # metres from the location at check-in
+    late_minutes: int = 0  # minutes late against the employee's shift start
+    away_minutes: int = 0  # minutes spent outside the work location during the shift
+    outside_since: str = ""  # HH:MM when the employee was last seen outside ("" = inside)
+    last_seen: str = ""  # HH:MM of the last location heartbeat
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -232,6 +245,13 @@ class MonthlyAttendanceReport(BaseModel):
     days_complete: int  # both punches recorded
     total_minutes: int
     avg_check_in: str = ""
+    late_days: int = 0
+    total_late_minutes: int = 0
+    total_away_minutes: int = 0
+    on_time_days: int = 0
+    shift_start: str = "08:00"
+    shift_end: str = "16:00"
+    grace_minutes: int = 5
     records: list["AttendanceRecord"] = []
 
 
@@ -244,6 +264,17 @@ class EmployeeReport(BaseModel):
     attendance: MonthlyAttendanceReport
     leaves: list["LeaveRequest"] = []
     balance: LeaveBalance
+
+
+class PresenceStatus(BaseModel):
+    """Live geofence state for the open punch of the day."""
+
+    inside: bool
+    distance_m: float | None = None
+    away_minutes: int = 0
+    late_minutes: int = 0
+    total_late_minutes: int = 0
+    tracking: bool = False  # false when the employee has no assigned work location
 
 
 class DeleteResult(BaseModel):
