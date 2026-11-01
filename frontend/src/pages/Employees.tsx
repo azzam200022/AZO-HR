@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Clock, Copy, FileText, KeyRound, MapPin, Pencil, Plus, RefreshCw, Search, Trash2, UserRoundCheck, UserRoundX } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
-import { currentMonthStr, errorText, fmtDate, formatSAR, shiftLabel, todayStr } from "@/lib/format";
+import { currentMonthStr, errorText, fmtDate, formatIQD, shiftLabel, todayStr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { EMPLOYEE_STATUS_LABELS, type AccessCodeResult, type Employee, type EmployeeReport, type EmployeeStatus, type WorkLocation } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -371,10 +371,10 @@ export default function Employees() {
                     {fmtDate(emp.hire_date)}
                   </TableCell>
                   <TableCell className="text-sm font-semibold tabular-nums text-slate-900">
-                    {formatSAR(emp.base_salary)}
+                    {formatIQD(emp.base_salary)}
                   </TableCell>
                   <TableCell className="text-sm tabular-nums text-slate-600">
-                    {formatSAR(emp.allowances)}
+                    {formatIQD(emp.allowances)}
                   </TableCell>
                   <TableCell>
                     <StatusBadge
@@ -492,7 +492,7 @@ export default function Employees() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="emp-salary">الراتب الأساسي (ر.س) *</Label>
+              <Label htmlFor="emp-salary">الراتب الأساسي (د.ع) *</Label>
               <Input
                 id="emp-salary"
                 type="number"
@@ -503,7 +503,7 @@ export default function Employees() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="emp-allowances">البدلات (ر.س)</Label>
+              <Label htmlFor="emp-allowances">البدلات (د.ع)</Label>
               <Input
                 id="emp-allowances"
                 type="number"

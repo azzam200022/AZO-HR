@@ -8,7 +8,7 @@ import {
   durationLabel,
   errorText,
   fmtDate,
-  formatSAR,
+  formatIQD,
   lateLabel,
   monthLabel,
   shiftLabel,
@@ -346,22 +346,31 @@ export default function MyAttendance() {
             description="سيظهر المسير هنا بعد اعتماده من الإدارة."
           />
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5" data-testid="payslip-breakdown">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-6" data-testid="payslip-breakdown">
             <div className="rounded-xl bg-slate-50 p-3 text-center">
               <p className="text-[11px] text-slate-500">الأساسي</p>
-              <p className="mt-1 text-xs font-bold tabular-nums text-slate-900">{formatSAR(payslip.base_salary)}</p>
+              <p className="mt-1 text-xs font-bold tabular-nums text-slate-900">{formatIQD(payslip.base_salary)}</p>
             </div>
             <div className="rounded-xl bg-slate-50 p-3 text-center">
               <p className="text-[11px] text-slate-500">البدلات</p>
-              <p className="mt-1 text-xs font-bold tabular-nums text-slate-900">{formatSAR(payslip.allowances)}</p>
+              <p className="mt-1 text-xs font-bold tabular-nums text-slate-900">{formatIQD(payslip.allowances)}</p>
             </div>
             <div className="rounded-xl bg-slate-50 p-3 text-center">
               <p className="text-[11px] text-slate-500">الاستقطاعات</p>
-              <p className="mt-1 text-xs font-bold tabular-nums text-red-700">{formatSAR(payslip.deductions)}</p>
+              <p className="mt-1 text-xs font-bold tabular-nums text-red-700">{formatIQD(payslip.deductions)}</p>
+            </div>
+            <div className="rounded-xl bg-rose-50 p-3 text-center" data-testid="payslip-late-deduction">
+              <p className="text-[11px] text-rose-700">خصم التأخير</p>
+              <p className="mt-1 text-xs font-bold tabular-nums text-rose-800">
+                {formatIQD(payslip.late_deduction)}
+              </p>
+              <p className="mt-0.5 text-[10px] text-rose-600">
+                {lateLabel(payslip.late_minutes + payslip.away_minutes)}
+              </p>
             </div>
             <div className="rounded-xl bg-teal-50 p-3 text-center">
               <p className="text-[11px] text-teal-700">الصافي</p>
-              <p className="mt-1 text-sm font-bold tabular-nums text-teal-800">{formatSAR(payslip.net)}</p>
+              <p className="mt-1 text-sm font-bold tabular-nums text-teal-800">{formatIQD(payslip.net)}</p>
             </div>
             <div className="flex items-center justify-center">
               <StatusBadge

@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from lib.auth import require_manager
 from lib.dates import aware, current_month
 from lib.db import db
+from lib.payroll_rules import late_summary, net_of
 from models.hr import GenerateResult, PayrollGenerate, PayrollItem, PayrollUpdate
 
 router = APIRouter(prefix="/payroll", tags=["payroll"], dependencies=[Depends(require_manager)])
@@ -24,25 +25,53 @@ async def list_payroll(month: str | None = None, employee_id: str | None = None)
 
 @router.post("/generate", response_model=GenerateResult)
 async def generate_payroll(payload: PayrollGenerate):
-    """Create draft payroll items for every active employee missing one this month."""
+    """Create draft items for employees missing one, and refresh the late deduction on all.
+
+    The lateness deduction is always recomputed from attendance, so regenerating after new
+    punches keeps the month's payroll honest.
+    """
     employees = await db.employees.find({"status": "active"}).to_list(1000)
     existing = await db.payroll.find({"month": payload.month}).to_list(1000)
-    have = {d["employee_id"] for d in existing}
-    fresh = [
-        PayrollItem(
-            employee_id=e["id"],
-            month=payload.month,
-            base_salary=e["base_salary"],
-            allowances=e["allowances"],
-            deductions=0,
-            net=e["base_salary"] + e["allowances"],
-        ).model_dump()
-        for e in employees
-        if e["id"] not in have
-    ]
-    if fresh:
-        await db.payroll.insert_many(fresh)
-    return GenerateResult(month=payload.month, created=len(fresh))
+    have = {d["employee_id"]: d for d in existing}
+
+    created = 0
+    updated = 0
+    for emp in employees:
+        late, away, deduction = await late_summary(emp, payload.month)
+        current = have.get(emp["id"])
+        if current is None:
+            item = PayrollItem(
+                employee_id=emp["id"],
+                month=payload.month,
+                base_salary=emp["base_salary"],
+                allowances=emp["allowances"],
+                deductions=0,
+                late_minutes=late,
+                away_minutes=away,
+                late_deduction=deduction,
+            )
+            fresh = item.model_dump()
+            fresh["net"] = net_of(fresh)
+            await db.payroll.insert_one(fresh)
+            created += 1
+            continue
+        if current.get("status") == "paid":
+            continue  # a paid payslip is settled — never rewrite it
+        merged = {**current, "late_minutes": late, "away_minutes": away, "late_deduction": deduction}
+        await db.payroll.update_one(
+            {"id": current["id"]},
+            {
+                "$set": {
+                    "late_minutes": late,
+                    "away_minutes": away,
+                    "late_deduction": deduction,
+                    "net": net_of(merged),
+                }
+            },
+        )
+        updated += 1
+
+    return GenerateResult(month=payload.month, created=created, updated=updated)
 
 
 @router.patch("/{item_id}", response_model=PayrollItem)
@@ -53,7 +82,6 @@ async def update_payroll(item_id: str, payload: PayrollUpdate):
     updates = payload.model_dump(exclude_none=True)
     if updates:
         merged = {**doc, **updates}
-        net = merged["base_salary"] + merged["allowances"] - merged["deductions"]
-        await db.payroll.update_one({"id": item_id}, {"$set": {**updates, "net": net}})
+        await db.payroll.update_one({"id": item_id}, {"$set": {**updates, "net": net_of(merged)}})
     fresh = await db.payroll.find_one({"id": item_id})
     return _to_model(fresh)

@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from lib.dates import now_time, today_iso
 from lib.db import db
 from lib.geo import haversine_m
+from lib.notify import notify_late, notify_left_site
 from lib.shift import (
     EARLY_PUNCH_WINDOW_MINUTES,
     employee_shift,
@@ -75,16 +76,19 @@ async def punch_in(employee: dict, lat: float | None, lng: float | None) -> Atte
     if await db.attendance.find_one({"employee_id": employee["id"], "date": date}):
         raise HTTPException(status_code=409, detail="تم تسجيل الحضور مسبقاً لهذا اليوم")
 
+    late = late_minutes(punched_at, shift_start, grace)
     record = AttendanceRecord(
         employee_id=employee["id"],
         date=date,
         check_in=punched_at,
         location_id=location_doc["id"] if location_doc else "",
         distance_m=round(distance, 1) if distance is not None else None,
-        late_minutes=late_minutes(punched_at, shift_start, grace),
+        late_minutes=late,
         last_seen=punched_at,
     )
     await db.attendance.insert_one(record.model_dump())
+    if late > 0:
+        await notify_late(employee, late, shift_start, punched_at)
     return record
 
 
@@ -150,6 +154,8 @@ async def record_presence(employee: dict, lat: float | None, lng: float | None) 
         updates.update(_close_away_interval(doc, now))
     elif within_window and not doc.get("outside_since"):
         updates["outside_since"] = now  # started being away right now
+        # One alert per departure — re-entering and leaving again raises a fresh one.
+        await notify_left_site(employee, location_doc["name"], now, distance)
 
     await db.attendance.update_one({"id": doc["id"]}, {"$set": updates})
     fresh = await db.attendance.find_one({"id": doc["id"]})

@@ -178,7 +178,10 @@ class PayrollItem(BaseModel):
     month: str  # YYYY-MM
     base_salary: float = Field(default=0, ge=0)
     allowances: float = Field(default=0, ge=0)
-    deductions: float = Field(default=0, ge=0)
+    deductions: float = Field(default=0, ge=0)  # manual deductions set by the manager
+    late_minutes: int = 0  # lateness billed this month
+    away_minutes: int = 0  # minutes spent outside the work site during shifts
+    late_deduction: float = Field(default=0, ge=0)  # auto deduction for the two above
     net: float = Field(default=0, ge=0)
     status: Literal["draft", "paid"] = "draft"
     created_at: datetime = Field(default_factory=utcnow)
@@ -204,6 +207,55 @@ class PayrollUpdate(BaseModel):
 class GenerateResult(BaseModel):
     month: str
     created: int
+    updated: int = 0
+
+
+class Notification(BaseModel):
+    id: str = Field(default_factory=_uuid)
+    kind: Literal["late", "left_site"]
+    employee_id: str
+    employee_name: str = ""
+    date: str = ""  # YYYY-MM-DD
+    at_time: str = ""  # HH:MM
+    minutes: int = 0
+    message: str = ""
+    read: bool = False
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class NotificationSummary(BaseModel):
+    unread: int
+    total: int
+
+
+class MarkAllResult(BaseModel):
+    updated: int
+
+
+class DisciplineRow(BaseModel):
+    employee_id: str
+    name: str
+    job_title: str = ""
+    shift_start: str = "08:00"
+    shift_end: str = "16:00"
+    days_present: int = 0
+    late_days: int = 0
+    on_time_days: int = 0
+    late_minutes: int = 0
+    away_minutes: int = 0
+    total_late_minutes: int = 0
+    avg_late_minutes: int = 0
+    deduction: float = 0
+    score: int = 0  # 0-100 punctuality score
+    rank: int = 0
+
+
+class DisciplineReport(BaseModel):
+    month: str
+    rows: list[DisciplineRow] = []
+    employees: int = 0
+    total_late_minutes: int = 0
+    total_deduction: float = 0
 
 
 class WorkLocation(BaseModel):

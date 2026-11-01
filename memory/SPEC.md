@@ -61,6 +61,29 @@
   والعودة (أو الانصراف) تُضيف الفارق إلى `away_minutes`. إجمالي التأخير في التقارير =
   `late_minutes + away_minutes`، ويظهر `total_away_minutes` منفصلاً.
 
+## العملة
+- عملة التطبيق **الدينار العراقي (د.ع)** في كل الواجهات عبر `formatIQD` في `lib/format.ts`.
+
+## خصم التأخير التلقائي في المسير (`lib/payroll_rules.py`)
+- قيمة الدقيقة = (الراتب الأساسي ÷ 30 يوماً) ÷ دقائق دوام الموظف، فالخصم متناسب مع راتبه ودوامه.
+- `POST /payroll/generate` ينشئ البنود الناقصة **ويحدّث خصم التأخير** لكل بند غير مدفوع من واقع
+  سجل الحضور: `late_minutes + away_minutes` (تأخير + مغادرة الموقع). البند المعتمد `paid` لا يُمسّ.
+- الصافي = الأساسي + البدلات − الاستقطاعات اليدوية − خصم التأخير (`net_of` مصدر وحيد للمعادلة).
+- يظهر للمدير في عمودَي «دقائق التأخير» و«خصم التأخير»، وللموظف في بطاقة مسيره.
+
+## تقرير الانضباط (`lib/discipline.py` + `GET /reports/discipline?month=`)
+- صفحة `/discipline` للمدير: ترتيب الموظفين النشِطين شهرياً مع أيام الحضور وأيام التأخير
+  ومجموع التأخير ودقائق مغادرة الموقع والخصم ودرجة الالتزام.
+- الدرجة = 70% نسبة الأيام في الوقت + 30% خفّة التأخير (متوسط ساعة يُلغي هذا الشق).
+- من لا حضور له في الشهر يُعرض «لا حضور هذا الشهر» ويُرتَّب في الذيل لا في الصدارة.
+
+## تنبيهات المدير الفورية (`lib/notify.py` + `/api/notifications`)
+- يُنشأ إشعار لحظة حدوث الحدث: `late` عند بصمة متأخرة (بعد مدة السماح)، و`left_site` عند أول
+  مغادرة لنطاق الموقع أثناء الدوام (إشعار واحد لكل مغادرة).
+- جرس في شريط المدير (`components/layout/NotificationBell.tsx`) بعدّاد غير المقروء، يُحدَّث كل
+  30 ثانية عبر `GET /notifications/summary`، مع تعليم إشعار أو الكل كمقروء.
+- الإشعارات والتقرير للمدير فقط — وصول الموظف يرد **403**.
+
 ## النموذج (Pydantic في backend/models ↔ TS في frontend/src/lib/types.ts)
 - Employee: id, name, job_title, email, phone, base_salary, allowances, hire_date,
   status(active/inactive), location_id, access_code, can_login,
@@ -71,7 +94,10 @@
 - PresenceStatus: inside, distance_m, away_minutes, late_minutes, total_late_minutes, tracking
 - LeaveRequest: id, employee_id, leave_type(annual/sick/unpaid), start_date, end_date, reason,
   status(pending/approved/rejected), manager_note
-- PayrollItem: id, employee_id, month(YYYY-MM), base_salary, allowances, deductions, net, status(draft/paid)
+- PayrollItem: id, employee_id, month(YYYY-MM), base_salary, allowances, deductions,
+  late_minutes, away_minutes, late_deduction, net, status(draft/paid)
+- Notification: id, kind(late/left_site), employee_id, employee_name, date, at_time, minutes, message, read
+- DisciplineRow/DisciplineReport: ترتيب الانضباط الشهري (rank, score, deduction, …)
 - SessionInfo: authenticated, role, email, name, employee_id
 
 ## بيانات التجزئة (backend/seed.py — idempotent)

@@ -3,7 +3,10 @@ const numberFmt = new Intl.NumberFormat("ar-SA-u-nu-latn", { maximumFractionDigi
 
 export const formatNumber = (value: number) => numberFmt.format(value);
 
-export const formatSAR = (value: number) => `${numberFmt.format(Math.round(value))} ر.س`;
+/** Iraqi dinar — the app's currency. */
+export const formatIQD = (value: number) => `${numberFmt.format(Math.round(value))} د.ع`;
+
+export const CURRENCY_LABEL = "د.ع";
 
 const AR_MONTHS = [
   "يناير",

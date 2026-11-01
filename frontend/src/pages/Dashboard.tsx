@@ -15,7 +15,7 @@ import {
 } from "recharts";
 import { CalendarDays, UserCheck, Users, Wallet } from "lucide-react";
 import { apiGet } from "@/lib/api";
-import { fmtDate, formatNumber, formatSAR } from "@/lib/format";
+import { fmtDate, formatNumber, formatIQD } from "@/lib/format";
 import {
   LEAVE_STATUS_LABELS,
   LEAVE_TYPE_LABELS,
@@ -103,7 +103,7 @@ export default function Dashboard() {
         <KpiCard
           testid="kpi-payroll-total"
           label="صافي رواتب الشهر"
-          value={stats ? formatSAR(stats.payroll_total) : "—"}
+          value={stats ? formatIQD(stats.payroll_total) : "—"}
           hint={stats ? `مسير ${stats.payroll_month}` : undefined}
           icon={<Wallet className="h-5 w-5" />}
         />

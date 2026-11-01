@@ -11,7 +11,7 @@ import {
   durationLabel,
   fmtDate,
   formatNumber,
-  formatSAR,
+  formatIQD,
   lateLabel,
   monthLabel,
   shiftLabel,
@@ -110,7 +110,7 @@ export default function EmployeeReportPanel({
         {showSalary && (
           <p className="flex items-center gap-1.5">
             <Wallet className="h-3.5 w-3.5 text-teal-600" />
-            الأساسي {formatSAR(employee.base_salary)} • البدلات {formatSAR(employee.allowances)}
+            الأساسي {formatIQD(employee.base_salary)} • البدلات {formatIQD(employee.allowances)}
           </p>
         )}
       </div>

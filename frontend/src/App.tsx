@@ -9,6 +9,7 @@ import Attendance from "@/pages/Attendance";
 import Leaves from "@/pages/Leaves";
 import Payroll from "@/pages/Payroll";
 import Locations from "@/pages/Locations";
+import Discipline from "@/pages/Discipline";
 import MyAttendance from "@/pages/portal/MyAttendance";
 import MyLeaves from "@/pages/portal/MyLeaves";
 import MyProfile from "@/pages/portal/MyProfile";
@@ -96,6 +97,14 @@ function Shell() {
             element={
               <ManagerOnly>
                 <Locations />
+              </ManagerOnly>
+            }
+          />
+          <Route
+            path="/discipline"
+            element={
+              <ManagerOnly>
+                <Discipline />
               </ManagerOnly>
             }
           />

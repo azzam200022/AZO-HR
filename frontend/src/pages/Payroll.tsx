@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { BadgeCheck, FileSpreadsheet, Pencil } from "lucide-react";
 import { apiGet, apiPatch, apiPost } from "@/lib/api";
-import { currentMonthStr, errorText, formatNumber, formatSAR, monthLabel } from "@/lib/format";
+import { currentMonthStr, errorText, formatIQD, formatNumber, lateLabel, monthLabel } from "@/lib/format";
 import {
   PAYROLL_STATUS_LABELS,
   type Employee,
@@ -63,8 +63,8 @@ export default function Payroll() {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       toast.success(
         result.created > 0
-          ? `تم توليد المسير — ${formatNumber(result.created)} بند جديد`
-          : "المسير مولد مسبقاً لهذا الشهر",
+          ? `تم توليد المسير — ${formatNumber(result.created)} بند جديد، وتحديث خصم التأخير لـ ${formatNumber(result.updated)} بند`
+          : `تم تحديث خصم التأخير لـ ${formatNumber(result.updated)} بند في المسير`,
       );
     },
     onError: (error) => toast.error(errorText(error)),
@@ -110,7 +110,7 @@ export default function Payroll() {
     <FadeIn>
       <PageHeader
         title="مسير الرواتب"
-        description={`توليد واعتماد رواتب شهر ${monthLabel(month)}.`}
+        description={`توليد واعتماد رواتب شهر ${monthLabel(month)} — خصم التأخير ومغادرة الموقع يُحتسب تلقائياً.`}
         testid="payroll-title"
         action={
           <div className="flex flex-wrap items-center gap-2">
@@ -127,7 +127,7 @@ export default function Payroll() {
               data-testid="payroll-generate-btn"
             >
               <FileSpreadsheet className="h-4 w-4" />
-              توليد المسير
+              توليد وتحديث المسير
             </Button>
           </div>
         }
@@ -143,13 +143,13 @@ export default function Payroll() {
         <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-xs">
           <p className="text-xs text-slate-500">إجمالي الصافي</p>
           <p className="text-xl font-bold tabular-nums text-teal-700" data-testid="payroll-total-net">
-            {formatSAR(totalNet)}
+            {formatIQD(totalNet)}
           </p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-xs">
           <p className="text-xs text-slate-500">المدفوع حتى الآن</p>
           <p className="text-xl font-bold tabular-nums text-emerald-700" data-testid="payroll-total-paid">
-            {formatSAR(totalPaid)}
+            {formatIQD(totalPaid)}
           </p>
         </div>
       </div>
@@ -170,6 +170,8 @@ export default function Payroll() {
                 <TableHead>الأساسي</TableHead>
                 <TableHead>البدلات</TableHead>
                 <TableHead>الاستقطاعات</TableHead>
+                <TableHead>دقائق التأخير</TableHead>
+                <TableHead>خصم التأخير</TableHead>
                 <TableHead>الصافي</TableHead>
                 <TableHead>الحالة</TableHead>
                 <TableHead className="text-end">إجراءات</TableHead>
@@ -182,16 +184,39 @@ export default function Payroll() {
                     {employeeName(item.employee_id)}
                   </TableCell>
                   <TableCell className="text-sm tabular-nums text-slate-600">
-                    {formatSAR(item.base_salary)}
+                    {formatIQD(item.base_salary)}
                   </TableCell>
                   <TableCell className="text-sm tabular-nums text-slate-600">
-                    {formatSAR(item.allowances)}
+                    {formatIQD(item.allowances)}
                   </TableCell>
                   <TableCell className="text-sm tabular-nums text-red-700">
-                    {formatSAR(item.deductions)}
+                    {formatIQD(item.deductions)}
+                  </TableCell>
+                  <TableCell
+                    className="text-sm tabular-nums text-slate-600"
+                    data-testid={`payroll-late-minutes-${item.id}`}
+                  >
+                    {item.late_minutes + item.away_minutes > 0 ? (
+                      <span className="inline-flex flex-col">
+                        <span className="text-amber-700">{lateLabel(item.late_minutes + item.away_minutes)}</span>
+                        {item.away_minutes > 0 && (
+                          <span className="text-[10px] text-rose-600">
+                            منها {lateLabel(item.away_minutes)} خارج الموقع
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-emerald-700">في الوقت</span>
+                    )}
+                  </TableCell>
+                  <TableCell
+                    className="text-sm tabular-nums text-rose-700"
+                    data-testid={`payroll-late-deduction-${item.id}`}
+                  >
+                    {item.late_deduction > 0 ? formatIQD(item.late_deduction) : <span className="text-slate-400">—</span>}
                   </TableCell>
                   <TableCell className="text-sm font-bold tabular-nums text-slate-900">
-                    {formatSAR(item.net)}
+                    {formatIQD(item.net)}
                   </TableCell>
                   <TableCell>
                     <StatusBadge
@@ -235,11 +260,13 @@ export default function Payroll() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>تعديل بند: {editing ? employeeName(editing.employee_id) : ""}</DialogTitle>
-            <DialogDescription>يُعاد حساب الصافي تلقائياً بعد الحفظ.</DialogDescription>
+            <DialogDescription>
+              يُعاد حساب الصافي تلقائياً بعد الحفظ. خصم التأخير محسوب من سجل الحضور ولا يُعدَّل يدوياً.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="pay-allowances">البدلات (ر.س)</Label>
+              <Label htmlFor="pay-allowances">البدلات (د.ع)</Label>
               <Input
                 id="pay-allowances"
                 type="number"
@@ -250,7 +277,7 @@ export default function Payroll() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="pay-deductions">الاستقطاعات (ر.س)</Label>
+              <Label htmlFor="pay-deductions">الاستقطاعات (د.ع)</Label>
               <Input
                 id="pay-deductions"
                 type="number"

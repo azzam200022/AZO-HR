@@ -5,6 +5,7 @@ import { arSA } from "date-fns/locale";
 import {
   CalendarDays,
   Clock,
+  Gauge,
   LayoutDashboard,
   LogOut,
   MapPin,
@@ -14,6 +15,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import NotificationBell from "@/components/layout/NotificationBell";
 
 const MANAGER_NAV = [
   { to: "/", label: "لوحة التحكم", icon: LayoutDashboard, testid: "nav-dashboard" },
@@ -21,6 +23,7 @@ const MANAGER_NAV = [
   { to: "/attendance", label: "الحضور", icon: Clock, testid: "nav-attendance" },
   { to: "/leaves", label: "الإجازات", icon: CalendarDays, testid: "nav-leaves" },
   { to: "/payroll", label: "الرواتب", icon: Wallet, testid: "nav-payroll" },
+  { to: "/discipline", label: "الانضباط", icon: Gauge, testid: "nav-discipline" },
   { to: "/locations", label: "المواقع", icon: MapPin, testid: "nav-locations" },
 ];
 
@@ -77,6 +80,7 @@ export default function Navbar() {
           <span className="hidden text-xs font-medium text-slate-500 xl:block" data-testid="header-date">
             {format(now, "EEEE، d MMMM yyyy", { locale: arSA })}
           </span>
+          {role === "manager" && <NotificationBell />}
           <div className="flex items-center gap-2 rounded-full bg-slate-100 py-1 ps-3 pe-1">
             <span className="text-xs font-semibold text-slate-700" data-testid="current-user-label">
               {session?.name || session?.email || "—"}

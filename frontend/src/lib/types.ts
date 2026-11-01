@@ -129,10 +129,57 @@ export interface PayrollItem {
   month: string; // YYYY-MM
   base_salary: number;
   allowances: number;
-  deductions: number;
+  deductions: number; // manual deductions
+  late_minutes: number;
+  away_minutes: number;
+  late_deduction: number; // auto deduction for lateness + time away
   net: number;
   status: PayrollStatus;
   created_at: string;
+}
+
+export interface AppNotification {
+  id: string;
+  kind: "late" | "left_site";
+  employee_id: string;
+  employee_name: string;
+  date: string;
+  at_time: string;
+  minutes: number;
+  message: string;
+  read: boolean;
+  created_at: string;
+}
+
+export interface NotificationSummary {
+  unread: number;
+  total: number;
+}
+
+export interface DisciplineRow {
+  employee_id: string;
+  name: string;
+  job_title: string;
+  shift_start: string;
+  shift_end: string;
+  days_present: number;
+  late_days: number;
+  on_time_days: number;
+  late_minutes: number;
+  away_minutes: number;
+  total_late_minutes: number;
+  avg_late_minutes: number;
+  deduction: number;
+  score: number;
+  rank: number;
+}
+
+export interface DisciplineReport {
+  month: string;
+  rows: DisciplineRow[];
+  employees: number;
+  total_late_minutes: number;
+  total_deduction: number;
 }
 
 export interface TrendPoint {
@@ -155,6 +202,7 @@ export interface DashboardStats {
 export interface GenerateResult {
   month: string;
   created: number;
+  updated: number;
 }
 
 export interface DeleteResult {
