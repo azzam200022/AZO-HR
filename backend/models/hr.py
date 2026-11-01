@@ -212,7 +212,8 @@ class GenerateResult(BaseModel):
 
 class Notification(BaseModel):
     id: str = Field(default_factory=_uuid)
-    kind: Literal["late", "left_site"]
+    kind: Literal["late", "left_site", "message"]
+    audience: Literal["manager", "employee"] = "manager"
     employee_id: str
     employee_name: str = ""
     date: str = ""  # YYYY-MM-DD
@@ -221,6 +222,39 @@ class Notification(BaseModel):
     message: str = ""
     read: bool = False
     created_at: datetime = Field(default_factory=utcnow)
+
+
+class Message(BaseModel):
+    id: str = Field(default_factory=_uuid)
+    thread: Literal["direct", "group"] = "direct"
+    employee_id: str = ""  # the employee side of a private thread; "" for the team channel
+    sender: Literal["manager", "employee"]
+    sender_name: str = ""
+    body: str = Field(min_length=1, max_length=2000)
+    read_by_manager: bool = False
+    read_by_employee: bool = False
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class MessageSend(BaseModel):
+    thread: Literal["direct", "group"] = "direct"
+    employee_id: str = ""
+    body: str = ""
+
+
+class MessageThread(BaseModel):
+    thread: Literal["direct", "group"]
+    employee_id: str = ""
+    name: str
+    job_title: str = ""
+    messages: int = 0
+    unread: int = 0
+    last_body: str = ""
+    last_at: str = ""
+
+
+class BroadcastResult(BaseModel):
+    sent: int
 
 
 class NotificationSummary(BaseModel):

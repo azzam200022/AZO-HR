@@ -84,6 +84,27 @@
   30 ثانية عبر `GET /notifications/summary`، مع تعليم إشعار أو الكل كمقروء.
 - الإشعارات والتقرير للمدير فقط — وصول الموظف يرد **403**.
 
+## الرسائل (`lib/messaging.py` + `/api/messages` للمدير و`/api/me/messages` للموظف)
+- قناتان: **محادثة خاصة لكل موظف** (`thread="direct"`) و**مجموعة الفريق** (`thread="group"`)
+  يقرأها ويكتب فيها الجميع.
+- المدير: صفحة `/messages` بقائمة المحادثات (المجموعة + كل موظف) مع عدّاد غير المقروء، وزر
+  **«إرسال للجميع»** (`POST /messages/broadcast`) يضع الرسالة في محادثة كل موظف نشِط على حدة.
+- الموظف: صفحة `/me/messages` بتبويبين (محادثتي مع الإدارة / مجموعة الفريق) وأيقونة في شريطه العلوي.
+- العزل: `/me/messages` يشتق هوية الموظف من الجلسة — تمرير `employee_id` لموظف آخر يُتجاهل،
+  و`/messages/*` للمدير فقط (**403** للموظف). الرسالة الفارغة **400** والموظف غير الموجود **404**.
+- فتح المحادثة يصفّر غير المقروء (`POST /messages/read` و`POST /me/messages/read`).
+
+## الإشعارات لكلا الدورين
+- `Notification.audience` يفصل جمهور الإشعار: `manager` (تأخير/مغادرة موقع/رسالة واردة) و
+  `employee` (رسالة من الإدارة أو إعلان للفريق). كل طرف يرى إشعاراته فقط.
+- نقاط النهاية: `/notifications` + `/notifications/summary` + `/notifications/read-all` للمدير،
+  و`/me/notifications` + `/me/notifications/summary` + `/me/notifications/read-all` للموظف.
+- الجرس `components/layout/NotificationBell.tsx` يخدم الدورين عبر `audience`، ويُحدِّث العدّاد كل
+  20 ثانية.
+- **إشعارات المتصفح المنبثقة** (`lib/push.ts`): زر «تمكين الإشعارات المنبثقة» داخل الجرس يطلب إذن
+  المتصفح، وبعدها يظهر تنبيه منبثق عند ارتفاع عدّاد غير المقروء. تعمل والتطبيق مفتوح في تبويب
+  (لا تُستخدم خدمة دفع خارجية).
+
 ## النموذج (Pydantic في backend/models ↔ TS في frontend/src/lib/types.ts)
 - Employee: id, name, job_title, email, phone, base_salary, allowances, hire_date,
   status(active/inactive), location_id, access_code, can_login,
@@ -96,7 +117,11 @@
   status(pending/approved/rejected), manager_note
 - PayrollItem: id, employee_id, month(YYYY-MM), base_salary, allowances, deductions,
   late_minutes, away_minutes, late_deduction, net, status(draft/paid)
-- Notification: id, kind(late/left_site), employee_id, employee_name, date, at_time, minutes, message, read
+- Notification: id, kind(late/left_site/message), audience(manager/employee), employee_id,
+  employee_name, date, at_time, minutes, message, read
+- Message: id, thread(direct/group), employee_id, sender(manager/employee), sender_name, body,
+  read_by_manager, read_by_employee
+- MessageThread: thread, employee_id, name, job_title, messages, unread, last_body, last_at
 - DisciplineRow/DisciplineReport: ترتيب الانضباط الشهري (rank, score, deduction, …)
 - SessionInfo: authenticated, role, email, name, employee_id
 

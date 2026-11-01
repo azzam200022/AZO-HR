@@ -68,6 +68,7 @@ from routers.dashboard import router as dashboard_router
 from routers.locations import router as locations_router
 from routers.auth import router as auth_router
 from routers.me import router as me_router
+from routers.messages import router as messages_router
 from routers.notifications import router as notifications_router
 from routers.reports import router as reports_router
 
@@ -79,6 +80,7 @@ api_router.include_router(leaves_router)
 api_router.include_router(payroll_router)
 api_router.include_router(locations_router)
 api_router.include_router(dashboard_router)
+api_router.include_router(messages_router)
 api_router.include_router(notifications_router)
 api_router.include_router(reports_router)
 

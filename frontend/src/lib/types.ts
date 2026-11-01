@@ -140,7 +140,8 @@ export interface PayrollItem {
 
 export interface AppNotification {
   id: string;
-  kind: "late" | "left_site";
+  kind: "late" | "left_site" | "message";
+  audience: "manager" | "employee";
   employee_id: string;
   employee_name: string;
   date: string;
@@ -149,6 +150,37 @@ export interface AppNotification {
   message: string;
   read: boolean;
   created_at: string;
+}
+
+export interface Message {
+  id: string;
+  thread: "direct" | "group";
+  employee_id: string;
+  sender: "manager" | "employee";
+  sender_name: string;
+  body: string;
+  read_by_manager: boolean;
+  read_by_employee: boolean;
+  created_at: string;
+}
+
+export interface MessageThread {
+  thread: "direct" | "group";
+  employee_id: string;
+  name: string;
+  job_title: string;
+  messages: number;
+  unread: number;
+  last_body: string;
+  last_at: string;
+}
+
+export interface BroadcastResult {
+  sent: number;
+}
+
+export interface MarkAllResult {
+  updated: number;
 }
 
 export interface NotificationSummary {

@@ -10,6 +10,8 @@ import Leaves from "@/pages/Leaves";
 import Payroll from "@/pages/Payroll";
 import Locations from "@/pages/Locations";
 import Discipline from "@/pages/Discipline";
+import Messages from "@/pages/Messages";
+import MyMessages from "@/pages/portal/MyMessages";
 import MyAttendance from "@/pages/portal/MyAttendance";
 import MyLeaves from "@/pages/portal/MyLeaves";
 import MyProfile from "@/pages/portal/MyProfile";
@@ -108,7 +110,23 @@ function Shell() {
               </ManagerOnly>
             }
           />
+          <Route
+            path="/messages"
+            element={
+              <ManagerOnly>
+                <Messages />
+              </ManagerOnly>
+            }
+          />
           {/* Employee portal tabs — driven by the bottom navigation bar */}
+          <Route
+            path="/me/messages"
+            element={
+              <EmployeeOnly>
+                <MyMessages />
+              </EmployeeOnly>
+            }
+          />
           <Route
             path="/me"
             element={

@@ -17,15 +17,18 @@ def _to_model(doc: dict) -> Notification:
 
 @router.get("", response_model=list[Notification])
 async def list_notifications(unread_only: bool = False, limit: int = 50):
-    query: dict = {"read": False} if unread_only else {}
+    query: dict = {"audience": {"$ne": "employee"}}
+    if unread_only:
+        query["read"] = False
     docs = await db.notifications.find(query).sort("created_at", -1).to_list(min(limit, 200))
     return [_to_model(d) for d in docs]
 
 
 @router.get("/summary", response_model=NotificationSummary)
 async def notifications_summary():
-    unread = await db.notifications.count_documents({"read": False})
-    total = await db.notifications.count_documents({})
+    base = {"audience": {"$ne": "employee"}}
+    unread = await db.notifications.count_documents({**base, "read": False})
+    total = await db.notifications.count_documents(base)
     return NotificationSummary(unread=unread, total=total)
 
 
@@ -40,5 +43,7 @@ async def mark_read(note_id: str):
 
 @router.post("/read-all", response_model=MarkAllResult)
 async def mark_all_read():
-    result = await db.notifications.update_many({"read": False}, {"$set": {"read": True}})
+    result = await db.notifications.update_many(
+        {"read": False, "audience": {"$ne": "employee"}}, {"$set": {"read": True}}
+    )
     return MarkAllResult(updated=result.modified_count)

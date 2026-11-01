@@ -14,6 +14,7 @@ async def notify_manager(
 ) -> Notification:
     note = Notification(
         kind=kind,  # "late" | "left_site"
+        audience="manager",
         employee_id=employee["id"],
         employee_name=employee.get("name", ""),
         date=today_iso(),

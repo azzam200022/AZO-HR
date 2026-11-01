@@ -1,37 +1,49 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlarmClock, Bell, CheckCheck, MapPinOff } from "lucide-react";
+import { AlarmClock, Bell, BellRing, CheckCheck, MapPinOff, MessageSquare } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { fmtDate, formatNumber } from "@/lib/format";
-import type { AppNotification, NotificationSummary } from "@/lib/types";
+import { pushPermission, requestPush, showPush, type PushPermission } from "@/lib/push";
+import type { AppNotification, MarkAllResult, NotificationSummary } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-/** Manager-only alert feed: fires when an employee is late or steps off site mid-shift. */
-export default function NotificationBell() {
+type Props = { audience: "manager" | "employee" };
+
+/** Alert feed for both roles: lateness and site exits for the manager, messages for everyone. */
+export default function NotificationBell({ audience }: Props) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [permission, setPermission] = useState<PushPermission>(() => pushPermission());
+  const lastUnread = useRef<number | null>(null);
+
+  const base = audience === "manager" ? "/notifications" : "/me/notifications";
+  const scope = audience === "manager" ? ["notifications"] : ["me", "notifications"];
 
   const summaryQuery = useQuery({
-    queryKey: ["notifications", "summary"],
-    queryFn: () => apiGet<NotificationSummary>("/notifications/summary"),
-    refetchInterval: 30_000,
+    queryKey: [...scope, "summary"],
+    queryFn: () => apiGet<NotificationSummary>(`${base}/summary`),
+    refetchInterval: 20_000,
   });
 
   const listQuery = useQuery({
-    queryKey: ["notifications", "list"],
-    queryFn: () => apiGet<AppNotification[]>("/notifications?limit=30"),
+    queryKey: [...scope, "list"],
+    queryFn: () => apiGet<AppNotification[]>(`${base}?limit=30`),
     enabled: open,
   });
 
-  const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["notifications"] });
-  };
+  const unread = summaryQuery.data?.unread ?? 0;
+
+  // A rise in the unread counter raises a browser pop-up, when the user allowed them.
+  useEffect(() => {
+    if (lastUnread.current !== null && unread > lastUnread.current) {
+      showPush("مواردي — تنبيه جديد", `لديك ${unread} تنبيهاً غير مقروء`);
+    }
+    lastUnread.current = unread;
+  }, [unread]);
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: scope });
 
   const readOne = useMutation({
     mutationFn: (id: string) => apiPost<AppNotification>(`/notifications/${id}/read`, {}),
@@ -39,18 +51,33 @@ export default function NotificationBell() {
   });
 
   const readAll = useMutation({
-    mutationFn: () => apiPost<{ updated: number }>("/notifications/read-all", {}),
+    mutationFn: () => apiPost<MarkAllResult>(`${base}/read-all`, {}),
     onSuccess: refresh,
   });
 
-  const unread = summaryQuery.data?.unread ?? 0;
+  const enablePush = async () => {
+    const result = await requestPush();
+    setPermission(result);
+    if (result === "granted") showPush("تم تفعيل الإشعارات", "ستصلك تنبيهات مواردي فور وصولها");
+  };
+
   const notifications = listQuery.data ?? [];
+
+  const iconFor = (kind: AppNotification["kind"]) =>
+    kind === "late" ? AlarmClock : kind === "left_site" ? MapPinOff : MessageSquare;
+
+  const toneFor = (kind: AppNotification["kind"]) =>
+    kind === "late"
+      ? "bg-amber-100 text-amber-700"
+      : kind === "left_site"
+        ? "bg-rose-100 text-rose-700"
+        : "bg-teal-100 text-teal-700";
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         className="relative flex h-9 w-9 items-center justify-center rounded-full text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
-        title="تنبيهات التأخير"
+        title="الإشعارات"
         data-testid="notifications-bell"
       >
         <Bell className="h-4.5 w-4.5" />
@@ -63,9 +90,9 @@ export default function NotificationBell() {
           </span>
         )}
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[22rem] p-0" data-testid="notifications-panel">
+      <PopoverContent align="end" className="w-[21rem] p-0" data-testid="notifications-panel">
         <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2.5">
-          <p className="text-sm font-bold text-slate-900">تنبيهات الانضباط</p>
+          <p className="text-sm font-bold text-slate-900">الإشعارات</p>
           {unread > 0 && (
             <Button
               size="sm"
@@ -79,44 +106,66 @@ export default function NotificationBell() {
             </Button>
           )}
         </div>
+
+        {permission !== "granted" && (
+          <div className="border-b border-slate-100 bg-teal-50/70 px-3 py-2.5">
+            {permission === "unsupported" ? (
+              <p className="text-[11px] text-slate-600">متصفحك لا يدعم الإشعارات المنبثقة.</p>
+            ) : permission === "denied" ? (
+              <p className="text-[11px] text-slate-600" data-testid="push-denied-note">
+                الإشعارات المنبثقة محظورة من إعدادات المتصفح — فعّلها من إعدادات الموقع.
+              </p>
+            ) : (
+              <button
+                type="button"
+                onClick={enablePush}
+                className="flex w-full items-center gap-2 text-start text-[11px] font-semibold text-teal-800"
+                data-testid="enable-push-btn"
+              >
+                <BellRing className="h-3.5 w-3.5" />
+                تمكين الإشعارات المنبثقة في هذا المتصفح
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="max-h-80 overflow-y-auto">
           {notifications.length === 0 ? (
             <p className="px-3 py-8 text-center text-xs text-slate-500" data-testid="notifications-empty">
-              لا توجد تنبيهات — جميع الموظفين ملتزمون بمواعيد دوامهم.
+              لا توجد إشعارات حالياً.
             </p>
           ) : (
-            notifications.map((note) => (
-              <button
-                key={note.id}
-                type="button"
-                onClick={() => !note.read && readOne.mutate(note.id)}
-                className={cn(
-                  "flex w-full gap-2.5 border-b border-slate-50 px-3 py-2.5 text-start transition-colors hover:bg-slate-50",
-                  !note.read && "bg-amber-50/60",
-                )}
-                data-testid={`notification-item-${note.id}`}
-              >
-                <span
+            notifications.map((note) => {
+              const Icon = iconFor(note.kind);
+              return (
+                <button
+                  key={note.id}
+                  type="button"
+                  onClick={() => !note.read && audience === "manager" && readOne.mutate(note.id)}
                   className={cn(
-                    "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
-                    note.kind === "late" ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700",
+                    "flex w-full gap-2.5 border-b border-slate-50 px-3 py-2.5 text-start transition-colors hover:bg-slate-50",
+                    !note.read && "bg-amber-50/60",
                   )}
+                  data-testid={`notification-item-${note.id}`}
                 >
-                  {note.kind === "late" ? (
-                    <AlarmClock className="h-3.5 w-3.5" />
-                  ) : (
-                    <MapPinOff className="h-3.5 w-3.5" />
-                  )}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-xs leading-relaxed text-slate-700">{note.message}</span>
-                  <span className="mt-1 block text-[10px] text-slate-400">
-                    {fmtDate(note.date)} • {note.at_time}
-                    {!note.read && " • غير مقروء"}
+                  <span
+                    className={cn(
+                      "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
+                      toneFor(note.kind),
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
                   </span>
-                </span>
-              </button>
-            ))
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs leading-relaxed text-slate-700">{note.message}</span>
+                    <span className="mt-1 block text-[10px] text-slate-400">
+                      {fmtDate(note.date)} • {note.at_time}
+                      {!note.read && " • غير مقروء"}
+                    </span>
+                  </span>
+                </button>
+              );
+            })
           )}
         </div>
       </PopoverContent>

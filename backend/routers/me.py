@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from lib.auth import Principal, require_employee
 from lib.dates import aware, current_month
 from lib.db import db
+from lib.messaging import GROUP_THREAD, mark_thread_read, send_message, to_model as message_model
 from lib.punch import punch_in, punch_out, record_presence
 from lib.reports import build_report, leave_balance
 from lib.shift import employee_shift, late_minutes
@@ -19,6 +20,11 @@ from models.hr import (
     EmployeeReport,
     LeaveBalance,
     LeaveRequest,
+    MarkAllResult,
+    Message,
+    MessageSend,
+    Notification,
+    NotificationSummary,
     PayrollItem,
     PresenceStatus,
     SelfLeaveCreate,
@@ -155,6 +161,70 @@ async def request_leave(payload: SelfLeaveCreate, principal: Principal = Depends
     )
     await db.leaves.insert_one(leave.model_dump())
     return leave
+
+
+@router.get("/notifications", response_model=list[Notification])
+async def my_notifications(limit: int = 30, principal: Principal = Depends(require_employee)):
+    docs = (
+        await db.notifications.find({"audience": "employee", "employee_id": principal.employee_id})
+        .sort("created_at", -1)
+        .to_list(min(limit, 100))
+    )
+    for d in docs:
+        d["created_at"] = aware(d.get("created_at"))
+    return [Notification(**d) for d in docs]
+
+
+@router.get("/notifications/summary", response_model=NotificationSummary)
+async def my_notifications_summary(principal: Principal = Depends(require_employee)):
+    base = {"audience": "employee", "employee_id": principal.employee_id}
+    unread = await db.notifications.count_documents({**base, "read": False})
+    total = await db.notifications.count_documents(base)
+    return NotificationSummary(unread=unread, total=total)
+
+
+@router.post("/notifications/read-all", response_model=MarkAllResult)
+async def read_my_notifications(principal: Principal = Depends(require_employee)):
+    result = await db.notifications.update_many(
+        {"audience": "employee", "employee_id": principal.employee_id, "read": False},
+        {"$set": {"read": True}},
+    )
+    return MarkAllResult(updated=result.modified_count)
+
+
+@router.get("/messages", response_model=list[Message])
+async def my_messages(thread: str = "direct", principal: Principal = Depends(require_employee)):
+    """Own private thread with the manager, or the team channel."""
+    query: dict = (
+        {"thread": GROUP_THREAD}
+        if thread == GROUP_THREAD
+        else {"thread": "direct", "employee_id": principal.employee_id}
+    )
+    docs = await db.messages.find(query).sort("created_at", 1).to_list(500)
+    return [message_model(d) for d in docs]
+
+
+@router.post("/messages", response_model=Message, status_code=201)
+async def send_my_message(payload: MessageSend, principal: Principal = Depends(require_employee)):
+    if not payload.body.strip():
+        raise HTTPException(status_code=400, detail="لا يمكن إرسال رسالة فارغة")
+    employee = await _my_employee(principal)
+    # The employee id always comes from the session — a spoofed one in the body is ignored.
+    return await send_message(
+        thread=payload.thread,
+        employee_id=employee["id"],
+        sender="employee",
+        sender_name=employee.get("name", ""),
+        body=payload.body,
+    )
+
+
+@router.post("/messages/read", response_model=MarkAllResult)
+async def read_my_messages(payload: MessageSend, principal: Principal = Depends(require_employee)):
+    updated = await mark_thread_read(
+        thread=payload.thread, employee_id=principal.employee_id, reader="employee"
+    )
+    return MarkAllResult(updated=updated)
 
 
 @router.get("/payroll", response_model=list[PayrollItem])

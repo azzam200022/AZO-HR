@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   LogOut,
   MapPin,
+  MessageSquare,
   Users,
   Wallet,
 } from "lucide-react";
@@ -24,6 +25,7 @@ const MANAGER_NAV = [
   { to: "/leaves", label: "الإجازات", icon: CalendarDays, testid: "nav-leaves" },
   { to: "/payroll", label: "الرواتب", icon: Wallet, testid: "nav-payroll" },
   { to: "/discipline", label: "الانضباط", icon: Gauge, testid: "nav-discipline" },
+  { to: "/messages", label: "الرسائل", icon: MessageSquare, testid: "nav-messages" },
   { to: "/locations", label: "المواقع", icon: MapPin, testid: "nav-locations" },
 ];
 
@@ -80,7 +82,22 @@ export default function Navbar() {
           <span className="hidden text-xs font-medium text-slate-500 xl:block" data-testid="header-date">
             {format(now, "EEEE، d MMMM yyyy", { locale: arSA })}
           </span>
-          {role === "manager" && <NotificationBell />}
+          {role === "employee" && (
+            <NavLink
+              to="/me/messages"
+              title="الرسائل"
+              className={({ isActive }) =>
+                cn(
+                  "flex h-9 w-9 items-center justify-center rounded-full transition-colors",
+                  isActive ? "bg-teal-50 text-teal-700" : "text-slate-600 hover:bg-slate-100",
+                )
+              }
+              data-testid="employee-messages-link"
+            >
+              <MessageSquare className="h-4.5 w-4.5" />
+            </NavLink>
+          )}
+          <NotificationBell audience={role === "manager" ? "manager" : "employee"} />
           <div className="flex items-center gap-2 rounded-full bg-slate-100 py-1 ps-3 pe-1">
             <span className="text-xs font-semibold text-slate-700" data-testid="current-user-label">
               {session?.name || session?.email || "—"}
