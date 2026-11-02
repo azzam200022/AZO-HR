@@ -50,15 +50,63 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
         working-directory: frontend
-      - name: Build installable APK
+      - name: Set Android version and signing config
+        run: python3 android-override/configure-gradle.py
+        working-directory: frontend
+      - name: Build debug APK
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: ./gradlew assembleDebug --no-daemon
         working-directory: frontend/android
-      - name: Save APK artifact
-        if: github.event_name != 'pull_request'
+      - name: Validate release signing with temporary key
+        if: github.event_name == 'pull_request'
+        run: |
+          keytool -genkeypair -noprompt -v \
+            -keystore "$RUNNER_TEMP/ci-release-test.jks" \
+            -storepass ci-test-only -keypass ci-test-only \
+            -alias ci-release-test -keyalg RSA -keysize 2048 \
+            -validity 10000 -dname "CN=Android CI Test"
+          trap 'rm -f "$RUNNER_TEMP/ci-release-test.jks"' EXIT
+          ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/ci-release-test.jks" \
+          ANDROID_KEYSTORE_PASSWORD=ci-test-only \
+          ANDROID_KEY_ALIAS=ci-release-test \
+          ANDROID_KEY_PASSWORD=ci-test-only \
+            ./gradlew assembleRelease --no-daemon
+        working-directory: frontend/android
+      - name: Build signed release APK
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for secret_name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [[ -z "${!secret_name:-}" ]]; then
+              echo "::error::Missing required repository secret: ${secret_name}"
+              exit 1
+            fi
+          done
+          keystore_path="$RUNNER_TEMP/azo-release.jks"
+          trap 'rm -f "$keystore_path"' EXIT
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+          test -s "$keystore_path"
+          unset ANDROID_KEYSTORE_BASE64
+          ANDROID_KEYSTORE_FILE="$keystore_path" ./gradlew assembleRelease --no-daemon
+        working-directory: frontend/android
+      - name: Save debug APK artifact
+        if: ${{ github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/v') }}
         uses: actions/upload-artifact@v4
         with:
           name: android-apk-${{ github.ref_name }}
           path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+      - name: Save signed release APK artifact
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-${{ github.ref_name }}
+          path: frontend/android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
 
   release:
@@ -68,13 +116,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download APK artifact
+      - name: Download signed APK artifact
         uses: actions/download-artifact@v4
         with:
           name: android-apk-${{ github.ref_name }}
           path: release-assets
       - name: Name release APK
-        run: mv release-assets/app-debug.apk "release-assets/azo-${GITHUB_REF_NAME}.apk"
+        run: mv release-assets/app-release.apk "release-assets/azo-${GITHUB_REF_NAME}.apk"
       - name: Publish permanent GitHub Release asset
         env:
           GH_TOKEN: ${{ github.token }}
