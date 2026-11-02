@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 
 from lib.auth import (
     SESSION_COOKIE,
@@ -19,12 +19,15 @@ INVALID_MANAGER = "البريد الإلكتروني أو كلمة المرور 
 INVALID_EMPLOYEE = "رمز الدخول غير صحيح أو تم تعطيله"
 
 
-def _set_cookie(response: Response, token: str) -> None:
+def _set_cookie(response: Response, token: str, origin: str | None) -> None:
+    # Capacitor uses https://localhost; only that fixed origin receives a
+    # cross-site cookie. Browser clients keep the existing SameSite=Lax policy.
+    same_site = "none" if origin == "https://localhost" else "lax"
     response.set_cookie(
         key=SESSION_COOKIE,
         value=token,
         httponly=True,
-        samesite="lax",
+        samesite=same_site,
         secure=True,
         max_age=SESSION_TTL_DAYS * 24 * 3600,
         path="/",
@@ -32,19 +35,19 @@ def _set_cookie(response: Response, token: str) -> None:
 
 
 @router.post("/manager-login", response_model=SessionInfo)
-async def manager_login(payload: ManagerLogin, response: Response):
+async def manager_login(payload: ManagerLogin, response: Response, request: Request):
     email = payload.email.strip().lower()
     account = await db.users.find_one({"email": email, "role": "manager"})
     # Only the configured manager email may ever hold the manager role.
     if not account or email != manager_email() or not verify_password(payload.password, account.get("password_hash", "")):
         raise HTTPException(status_code=401, detail=INVALID_MANAGER)
     token = await create_session("manager", email=email)
-    _set_cookie(response, token)
+    _set_cookie(response, token, request.headers.get("origin"))
     return SessionInfo(authenticated=True, role="manager", email=email, name="مدير النظام")
 
 
 @router.post("/employee-login", response_model=SessionInfo)
-async def employee_login(payload: EmployeeLogin, response: Response):
+async def employee_login(payload: EmployeeLogin, response: Response, request: Request):
     """Employees sign in with the access code the manager issued, or with their email +
     password when the manager has set one."""
     employee = None
@@ -66,7 +69,7 @@ async def employee_login(payload: EmployeeLogin, response: Response):
         raise HTTPException(status_code=403, detail="حساب الموظف موقوف — راجع مدير النظام")
 
     token = await create_session("employee", email=employee.get("email", ""), employee_id=employee["id"])
-    _set_cookie(response, token)
+    _set_cookie(response, token, request.headers.get("origin"))
     return SessionInfo(
         authenticated=True,
         role="employee",
