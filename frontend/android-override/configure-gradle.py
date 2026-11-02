@@ -26,7 +26,7 @@ if ref.startswith("refs/tags/v"):
 else:
     version_name = f"0.0.{run_number}"
 text, name_count = re.subn(
-    r"(?m)^(\s*versionName)\s+"[^"]+"\s*$",
+    r'(?m)^(\s*versionName)\s+"[^"]+"\s*$',
     lambda match: f'{match.group(1)} "{version_name}"',
     text,
     count=1,
