@@ -1,0 +1,79 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Install frontend dependencies
+        run: npm install --no-audit --no-fund --legacy-peer-deps
+        working-directory: frontend
+      - name: Build web app
+        run: npm run build
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: ${{ vars.API_BASE_URL || 'https://https-github-com-azzam200022-azo.onrender.com' }}
+      - name: Add Android platform
+        run: npx cap add android
+        working-directory: frontend
+      - name: Enable Android session cookies
+        run: |
+          mkdir -p frontend/android/app/src/main/java/com/azzam200022/azo
+          cp frontend/android-override/MainActivity.java frontend/android/app/src/main/java/com/azzam200022/azo/MainActivity.java
+      - name: Sync Capacitor
+        run: npx cap sync android
+        working-directory: frontend
+      - name: Build installable APK
+        run: ./gradlew assembleDebug --no-daemon
+        working-directory: frontend/android
+      - name: Save APK artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-${{ github.ref_name }}
+          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-apk-${{ github.ref_name }}
+          path: release-assets
+      - name: Name release APK
+        run: mv release-assets/app-debug.apk "release-assets/azo-${GITHUB_REF_NAME}.apk"
+      - name: Publish permanent GitHub Release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "release-assets/azo-${GITHUB_REF_NAME}.apk" --title "AZO $GITHUB_REF_NAME" --generate-notes --verify-tag
