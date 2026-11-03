@@ -3,7 +3,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlarmClock, Bell, BellRing, CheckCheck, MapPinOff, MessageSquare } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { fmtDate, formatNumber } from "@/lib/format";
-import { pushPermission, requestPush, showPush, type PushPermission } from "@/lib/push";
+import {
+  currentPushPermission,
+  isNativePushPlatform,
+  pushPermission,
+  requestPush,
+  showPush,
+  type PushPermission,
+} from "@/lib/push";
 import type { AppNotification, MarkAllResult, NotificationSummary } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -17,6 +24,16 @@ export default function NotificationBell({ audience }: Props) {
   const [open, setOpen] = useState(false);
   const [permission, setPermission] = useState<PushPermission>(() => pushPermission());
   const lastUnread = useRef<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void currentPushPermission().then((current) => {
+      if (active) setPermission(current);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const base = audience === "manager" ? "/notifications" : "/me/notifications";
   const scope = audience === "manager" ? ["notifications"] : ["me", "notifications"];
@@ -35,10 +52,10 @@ export default function NotificationBell({ audience }: Props) {
 
   const unread = summaryQuery.data?.unread ?? 0;
 
-  // A rise in the unread counter raises a browser pop-up, when the user allowed them.
+  // A rise in the unread counter raises a local/browser notification when allowed.
   useEffect(() => {
     if (lastUnread.current !== null && unread > lastUnread.current) {
-      showPush("مواردي — تنبيه جديد", `لديك ${unread} تنبيهاً غير مقروء`);
+      void showPush("مواردي — تنبيه جديد", `لديك ${unread} تنبيهاً غير مقروء`);
     }
     lastUnread.current = unread;
   }, [unread]);
@@ -58,7 +75,9 @@ export default function NotificationBell({ audience }: Props) {
   const enablePush = async () => {
     const result = await requestPush();
     setPermission(result);
-    if (result === "granted") showPush("تم تفعيل الإشعارات", "ستصلك تنبيهات مواردي فور وصولها");
+    if (result === "granted") {
+      await showPush("تم تفعيل الإشعارات", "ستصلك تنبيهات مواردي فور وصولها");
+    }
   };
 
   const notifications = listQuery.data ?? [];
@@ -110,10 +129,16 @@ export default function NotificationBell({ audience }: Props) {
         {permission !== "granted" && (
           <div className="border-b border-slate-100 bg-teal-50/70 px-3 py-2.5">
             {permission === "unsupported" ? (
-              <p className="text-[11px] text-slate-600">متصفحك لا يدعم الإشعارات المنبثقة.</p>
+              <p className="text-[11px] text-slate-600">
+                {isNativePushPlatform()
+                  ? "تعذر تفعيل إشعارات الجهاز."
+                  : "متصفحك لا يدعم الإشعارات المنبثقة."}
+              </p>
             ) : permission === "denied" ? (
               <p className="text-[11px] text-slate-600" data-testid="push-denied-note">
-                الإشعارات المنبثقة محظورة من إعدادات المتصفح — فعّلها من إعدادات الموقع.
+                {isNativePushPlatform()
+                  ? "الإشعارات محظورة — فعّلها من إعدادات التطبيق في الجهاز."
+                  : "الإشعارات محظورة من إعدادات المتصفح — فعّلها من إعدادات الموقع."}
               </p>
             ) : (
               <button
@@ -123,7 +148,9 @@ export default function NotificationBell({ audience }: Props) {
                 data-testid="enable-push-btn"
               >
                 <BellRing className="h-3.5 w-3.5" />
-                تمكين الإشعارات المنبثقة في هذا المتصفح
+                {isNativePushPlatform()
+                  ? "تمكين إشعارات التطبيق"
+                  : "تمكين الإشعارات المنبثقة في هذا المتصفح"}
               </button>
             )}
           </div>

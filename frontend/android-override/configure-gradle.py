@@ -9,6 +9,7 @@ manifest = manifest_file.read_text(encoding="utf-8")
 for permission in (
     "android.permission.ACCESS_COARSE_LOCATION",
     "android.permission.ACCESS_FINE_LOCATION",
+    "android.permission.POST_NOTIFICATIONS",
 ):
     declaration = f'<uses-permission android:name="{permission}"'
     if declaration not in manifest:

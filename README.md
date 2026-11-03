@@ -80,8 +80,9 @@ Set `MANAGER_EMAIL` and `MANAGER_PASSWORD` in the backend's runtime environment,
   above its local imports, and `lib/db.py` self-loads it so standalone scripts
   inherit it too. The pod runs `mongod` locally, so `MONGO_URL` points at
   `localhost`. Add new secrets/config here; read them with `os.environ`.
-- **Dates**: `backend/lib/dates.py` — `today_iso(tz=None)`. The pod clock is
-  UTC; anchor "today" server-side with this, never with client-side date math.
+- **Dates/time zone**: `backend/lib/dates.py` — `today_iso(tz=None)`. Server-side
+  dates and punch times use `APP_TZ`, defaulting to `Asia/Baghdad`; set
+  `APP_TZ=Asia/Baghdad` in the deployed backend environment as well.
 - **Interactive check**: `cd /app/backend && python -c 'import server'` catches
   syntax/import errors without waiting for the supervisor log.
 
