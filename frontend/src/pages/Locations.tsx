@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Capacitor } from "@capacitor/core";
+import { Geolocation } from "@capacitor/geolocation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Crosshair, MapPin, Pencil, Plus, Trash2 } from "lucide-react";
@@ -88,28 +90,43 @@ export default function Locations() {
     onError: (error) => toast.error(errorText(error)),
   });
 
-  const useMyLocation = () => {
-    if (!navigator.geolocation) {
-      toast.error("المتصفح لا يدعم تحديد الموقع الجغرافي");
-      return;
-    }
+  const useMyLocation = async () => {
     setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocating(false);
-        setForm((f) => ({
-          ...f,
-          latitude: pos.coords.latitude.toFixed(6),
-          longitude: pos.coords.longitude.toFixed(6),
-        }));
-        toast.success("تم جلب إحداثيات موقعك الحالي");
-      },
-      () => {
-        setLocating(false);
-        toast.error("تعذر تحديد موقعك — فعّل صلاحية الموقع في المتصفح");
-      },
-      { enableHighAccuracy: true, timeout: 10_000 },
-    );
+    try {
+      const position = Capacitor.isNativePlatform()
+        ? await Geolocation.getCurrentPosition({
+            enableHighAccuracy: true,
+            timeout: 10_000,
+          })
+        : await new Promise<GeolocationPosition>((resolve, reject) => {
+            if (!navigator.geolocation) {
+              reject(new Error("المتصفح لا يدعم تحديد الموقع الجغرافي"));
+              return;
+            }
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 10_000,
+            });
+          });
+
+      setForm((f) => ({
+        ...f,
+        latitude: position.coords.latitude.toFixed(6),
+        longitude: position.coords.longitude.toFixed(6),
+      }));
+      toast.success("تم جلب إحداثيات موقعك الحالي");
+    } catch (error) {
+      const code = (error as { code?: number | string } | null)?.code;
+      if (code === 1 || code === "OS-PLUG-GLOC-0003") {
+        toast.error("لم يتم منح إذن الموقع. اسمح لتطبيق AZO HR بالوصول للموقع من إعدادات Android.");
+      } else if (code === "OS-PLUG-GLOC-0007") {
+        toast.error("خدمات الموقع متوقفة. فعّل الموقع (GPS) ثم أعد المحاولة.");
+      } else {
+        toast.error("تعذر تحديد موقعك. تحقق من تشغيل GPS ومنح إذن الموقع.");
+      }
+    } finally {
+      setLocating(false);
+    }
   };
 
   const openAdd = () => {
