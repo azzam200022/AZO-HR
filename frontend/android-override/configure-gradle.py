@@ -4,6 +4,23 @@ import os
 import re
 from pathlib import Path
 
+manifest_file = Path("android/app/src/main/AndroidManifest.xml")
+manifest = manifest_file.read_text(encoding="utf-8")
+for permission in (
+    "android.permission.ACCESS_COARSE_LOCATION",
+    "android.permission.ACCESS_FINE_LOCATION",
+):
+    declaration = f'<uses-permission android:name="{permission}"'
+    if declaration not in manifest:
+        if "</manifest>" not in manifest:
+            raise SystemExit("Could not locate the closing Android manifest tag")
+        manifest = manifest.replace(
+            "</manifest>",
+            f'    <uses-permission android:name="{permission}" />\n</manifest>',
+            1,
+        )
+manifest_file.write_text(manifest, encoding="utf-8")
+
 gradle_file = Path("android/app/build.gradle")
 text = gradle_file.read_text(encoding="utf-8")
 run_number = os.environ.get("GITHUB_RUN_NUMBER", "")
