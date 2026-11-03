@@ -8,6 +8,7 @@ The principal is always derived on the server from the session cookie; the clien
 sends a role or an employee_id for authorization purposes.
 """
 
+import logging
 import os
 import secrets
 import string
@@ -22,6 +23,8 @@ from lib.db import db
 
 SESSION_COOKIE = "hr_session"
 SESSION_TTL_DAYS = 14
+
+logger = logging.getLogger(__name__)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -41,6 +44,25 @@ def verify_password(raw: str, hashed: str) -> bool:
 
 def manager_email() -> str:
     return (os.environ.get("MANAGER_EMAIL") or "").strip().lower()
+
+
+async def ensure_manager_account() -> None:
+    """Provision the sole manager from runtime configuration, never source code."""
+    email = manager_email()
+    password = os.environ.get("MANAGER_PASSWORD") or ""
+    if not email or not password:
+        logger.warning("MANAGER_EMAIL and MANAGER_PASSWORD must be set to provision the manager account")
+        return
+
+    await db.users.update_one(
+        {"email": email},
+        {
+            "$set": {"role": "manager", "password_hash": hash_password(password)},
+            "$setOnInsert": {"created_at": datetime.now(timezone.utc)},
+        },
+        upsert=True,
+    )
+    logger.info("Manager account provisioned from runtime configuration")
 
 
 def new_access_code() -> str:

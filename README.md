@@ -36,7 +36,13 @@ origin).
 
 ## Backend
 
-FastAPI, async throughout. `python` is the app venv interpreter
+FastAPI, async throughout.
+
+### Manager account
+
+Set `MANAGER_EMAIL` and `MANAGER_PASSWORD` in the backend's runtime environment, not in Git. On startup, the backend creates or updates the manager record using the configured email and a bcrypt hash of the password. Only the configured email can sign in as manager. Changing `MANAGER_PASSWORD` takes effect at the next restart. If either variable is missing, manager provisioning is skipped and a warning is logged. You do not need to run `seed.py` just to provision the manager account.
+
+ `python` is the app venv interpreter
 (`/root/.venv/bin/python`); backend deps are pip-installed from
 `backend/requirements.txt`.
 
