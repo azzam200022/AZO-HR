@@ -448,7 +448,7 @@ export default function Employees() {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-2xl overflow-y-auto overscroll-y-contain">
           <DialogHeader>
             <DialogTitle>{editing ? `تعديل بيانات: ${editing.name}` : "إضافة موظف جديد"}</DialogTitle>
             <DialogDescription>أدخل بيانات الموظف الوظيفية والمالية.</DialogDescription>
