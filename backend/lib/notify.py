@@ -4,6 +4,7 @@ import logging
 
 from lib.dates import now_time, today_iso
 from lib.db import db
+from lib.push import send_notification
 from models.hr import Notification
 
 
@@ -25,6 +26,7 @@ async def notify_manager(
         message=message,
     )
     await db.notifications.insert_one(note.model_dump())
+    await send_notification(note.model_dump())
     return note
 
 
@@ -74,6 +76,7 @@ async def notify_employee_adjustment(employee: dict, adjustment: dict) -> None:
     )
     try:
         await db.notifications.insert_one(note.model_dump())
+        await send_notification(note.model_dump())
     except Exception:
         # Keep the saved adjustment successful if the separate notification insert fails.
         logging.getLogger(__name__).exception(

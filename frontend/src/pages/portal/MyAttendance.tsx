@@ -4,6 +4,12 @@ import { toast } from "sonner";
 import { CheckCircle2, Clock3, Fingerprint, LogOut, MapPin } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import {
+  isBackgroundLocationActive,
+  startBackgroundLocationTracking,
+  stopBackgroundLocationTracking,
+  supportsBackgroundLocation,
+} from "@/lib/background-location";
+import {
   currentMonthStr,
   durationLabel,
   errorText,
@@ -105,6 +111,65 @@ export default function MyAttendance() {
     enabled: false,
   });
   const presence = presenceQuery.data ?? null;
+  const [backgroundTrackingActive, setBackgroundTrackingActive] = useState(false);
+  const [backgroundTrackingBusy, setBackgroundTrackingBusy] = useState(false);
+
+  useEffect(() => {
+    if (!supportsBackgroundLocation()) return;
+    let active = true;
+    const refresh = () => {
+      void isBackgroundLocationActive().then((running) => {
+        if (active) setBackgroundTrackingActive(running);
+      });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 15_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+
+  const enableBackgroundTracking = async () => {
+    if (!todayRecord || !shift || serverNowMinutes === null) {
+      toast.error("تعذر التحقق من دوامك الحالي؛ أعد المحاولة بعد تحديث الصفحة.");
+      return;
+    }
+    const currentMinutes = Math.floor(((serverNowMinutes % 1440) + 1440) % 1440);
+    const startMinutes = toMinutes(shift.shift_start);
+    const endMinutes = toMinutes(shift.shift_end);
+    let remainingMinutes = endMinutes - currentMinutes;
+    if (endMinutes <= startMinutes && todayRecord.date === today) {
+      remainingMinutes += 1440;
+    }
+    if (remainingMinutes <= 0) {
+      toast.error("انتهى وقت الوردية المسجل؛ لا يمكن بدء تتبع الموقع الآن.");
+      return;
+    }
+
+    setBackgroundTrackingBusy(true);
+    try {
+      await startBackgroundLocationTracking(Date.now() + remainingMinutes * 60_000);
+      setBackgroundTrackingActive(true);
+      toast.success("بدأ تتبع الموقع أثناء دوامك المسجل.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "تعذر بدء تتبع الموقع بالخلفية.");
+    } finally {
+      setBackgroundTrackingBusy(false);
+    }
+  };
+
+  const disableBackgroundTracking = async () => {
+    setBackgroundTrackingBusy(true);
+    await stopBackgroundLocationTracking();
+    setBackgroundTrackingActive(false);
+    setBackgroundTrackingBusy(false);
+    toast.success("تم إيقاف تتبع الموقع بالخلفية.");
+  };
 
   const checkInMutation = useMutation({
     // The geofence is enforced server-side: 403 outside the radius, 400 without a fix.
@@ -135,6 +200,8 @@ export default function MyAttendance() {
   const checkOutMutation = useMutation({
     mutationFn: () => apiPost<AttendanceRecord>("/me/check-out"),
     onSuccess: () => {
+      void stopBackgroundLocationTracking();
+      setBackgroundTrackingActive(false);
       invalidate();
       toast.success("تم تسجيل الانصراف — أحسنت العمل");
     },
@@ -217,6 +284,44 @@ export default function MyAttendance() {
                 تم إكمال يوم العمل
               </span>
             )}
+
+            {supportsBackgroundLocation() &&
+              ((live && myLocation) || backgroundTrackingActive) && (
+                <div
+                  className="w-full max-w-md rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-start"
+                  data-testid="background-location-controls"
+                >
+                  <p className="text-sm font-semibold text-white">تتبع الموقع أثناء الدوام</p>
+                  <p className="mt-1 text-xs leading-relaxed text-teal-100">
+                    {backgroundTrackingActive
+                      ? "التتبع نشط حتى الانصراف أو نهاية الوردية. سيبقى إشعار Android ظاهرًا عند إغلاق التطبيق."
+                      : "اختياري: يرسل موقعك أثناء دوام مسجل فقط، مع إشعار Android دائم. يتوقف عند الانصراف أو نهاية الوردية، ولا يحفظ التطبيق سجل مسار تحركاتك."}
+                  </p>
+                  {backgroundTrackingActive ? (
+                    <Button
+                      className="mt-3"
+                      size="sm"
+                      variant="outline"
+                      onClick={disableBackgroundTracking}
+                      disabled={backgroundTrackingBusy}
+                      data-testid="stop-background-location-btn"
+                    >
+                      إيقاف التتبع
+                    </Button>
+                  ) : (
+                    <Button
+                      className="mt-3"
+                      size="sm"
+                      variant="outline"
+                      onClick={enableBackgroundTracking}
+                      disabled={backgroundTrackingBusy || !live || !myLocation}
+                      data-testid="start-background-location-btn"
+                    >
+                      {backgroundTrackingBusy ? "جارٍ تفعيل التتبع…" : "تفعيل التتبع عند إغلاق التطبيق"}
+                    </Button>
+                  )}
+                </div>
+              )}
 
             {/* Live geofence state while punched in */}
             {liveNow && myLocation && presence?.tracking && (

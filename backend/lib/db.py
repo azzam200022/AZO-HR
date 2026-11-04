@@ -42,6 +42,10 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("token", ASCENDING)], name="token", unique=True),
         IndexModel([("employee_id", ASCENDING)], name="employee"),
     ],
+    "push_tokens": [
+        IndexModel([("token", ASCENDING)], name="token", unique=True),
+        IndexModel([("role", ASCENDING), ("employee_id", ASCENDING)], name="recipient"),
+    ],
 }
 
 

@@ -3,6 +3,8 @@
 import { createContext, useContext, useEffect, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost } from "@/lib/api";
+import { stopBackgroundLocationTracking } from "@/lib/background-location";
+import { bindCurrentPushToken, unregisterCurrentPushToken } from "@/lib/push";
 import type { SessionInfo } from "@/lib/types";
 
 export type Role = "manager" | "employee";
@@ -32,7 +34,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const { mutate: logout } = useMutation({
-    mutationFn: () => apiPost("/auth/logout"),
+    mutationFn: async () => {
+      await unregisterCurrentPushToken();
+      await stopBackgroundLocationTracking();
+      return apiPost("/auth/logout");
+    },
     onSuccess: () => {
       queryClient.clear();
       queryClient.setQueryData(["session"], { authenticated: false, role: null });
@@ -43,6 +49,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     document.documentElement.dir = "rtl";
     document.documentElement.lang = "ar";
   }, []);
+
+  useEffect(() => {
+    if (session?.authenticated) void bindCurrentPushToken();
+  }, [session?.authenticated, session?.role, session?.email, session?.employee_id]);
 
   const role = session?.authenticated ? (session.role as Role) : null;
 

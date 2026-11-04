@@ -1,7 +1,9 @@
-/** Device/browser notifications — opt-in, and only while the app is open. */
+/** Push notification permissions and native FCM registration. */
 
 import { Capacitor } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
+import { PushNotifications } from "@capacitor/push-notifications";
+import { apiPost } from "@/lib/api";
 
 export type PushPermission = "unsupported" | "default" | "granted" | "denied";
 
@@ -19,12 +21,57 @@ const fromNativePermission = (permission: string): PushPermission => {
   return "default";
 };
 
+let nativeListeners: Promise<void> | null = null;
+let registeredToken: string | null = null;
+let tokenRegistration: Promise<void> = Promise.resolve();
+
+function bindToken(token: string) {
+  registeredToken = token;
+  tokenRegistration = apiPost("/auth/push-token", { token }).then(
+    () => undefined,
+    () => undefined,
+  );
+  return tokenRegistration;
+}
+
+async function ensureNativeListeners() {
+  if (!isNativePushPlatform()) return;
+  if (!nativeListeners) {
+    nativeListeners = (async () => {
+      await PushNotifications.addListener("registration", ({ value }) => {
+        // The token is sent over the authenticated session and is never logged or returned.
+        void bindToken(value);
+      });
+      await PushNotifications.addListener("registrationError", () => {
+        console.warn("Firebase push registration failed.");
+      });
+    })().catch((error) => {
+      nativeListeners = null;
+      throw error;
+    });
+  }
+  await nativeListeners;
+}
+
+export async function initializeNativePush() {
+  if (!isNativePushPlatform()) return;
+  try {
+    await ensureNativeListeners();
+    const permission = await PushNotifications.checkPermissions();
+    if (permission.receive === "granted") {
+      await PushNotifications.register();
+    }
+  } catch {
+    // Push setup is optional; the in-app notification feed remains available.
+  }
+}
+
 export async function currentPushPermission(): Promise<PushPermission> {
   if (!isNativePushPlatform()) return pushPermission();
 
   try {
-    const result = await LocalNotifications.checkPermissions();
-    return fromNativePermission(result.display);
+    const result = await PushNotifications.checkPermissions();
+    return fromNativePermission(result.receive);
   } catch {
     return "default";
   }
@@ -33,8 +80,11 @@ export async function currentPushPermission(): Promise<PushPermission> {
 export async function requestPush(): Promise<PushPermission> {
   if (isNativePushPlatform()) {
     try {
-      const result = await LocalNotifications.requestPermissions();
-      return fromNativePermission(result.display);
+      await ensureNativeListeners();
+      const result = await PushNotifications.requestPermissions();
+      const permission = fromNativePermission(result.receive);
+      if (permission === "granted") await PushNotifications.register();
+      return permission;
     } catch {
       return "unsupported";
     }
@@ -45,7 +95,25 @@ export async function requestPush(): Promise<PushPermission> {
   return result as PushPermission;
 }
 
-/** Shows a local Android or browser notification while the app is active. */
+export async function bindCurrentPushToken() {
+  if (registeredToken) await bindToken(registeredToken);
+}
+
+export async function unregisterCurrentPushToken() {
+  await tokenRegistration;
+  const token = registeredToken;
+  registeredToken = null;
+  tokenRegistration = Promise.resolve();
+  if (token) {
+    await apiPost("/auth/push-token/unregister", { token }).catch(() => undefined);
+  }
+  if (isNativePushPlatform()) {
+    await PushNotifications.removeAllListeners().catch(() => undefined);
+    nativeListeners = null;
+  }
+}
+
+/** Shows a local confirmation notification after the user grants permission. */
 export async function showPush(title: string, body: string) {
   if ((await currentPushPermission()) !== "granted") return;
 

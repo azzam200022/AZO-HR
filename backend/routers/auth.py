@@ -1,10 +1,14 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
+from pydantic import BaseModel, Field
 
 from lib.auth import (
     SESSION_COOKIE,
     SESSION_TTL_DAYS,
     Principal,
     create_session,
+    current_principal,
     destroy_session,
     manager_email,
     optional_principal,
@@ -17,6 +21,10 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 INVALID_MANAGER = "البريد الإلكتروني أو كلمة المرور غير صحيحة"
 INVALID_EMPLOYEE = "رمز الدخول غير صحيح أو تم تعطيله"
+
+
+class PushTokenRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=4096)
 
 
 def _set_cookie(response: Response, token: str, origin: str | None) -> None:
@@ -32,6 +40,44 @@ def _set_cookie(response: Response, token: str, origin: str | None) -> None:
         max_age=SESSION_TTL_DAYS * 24 * 3600,
         path="/",
     )
+
+
+@router.post("/push-token")
+async def register_push_token(
+    payload: PushTokenRequest,
+    principal: Principal = Depends(current_principal),
+):
+    """Bind this device's FCM token to the identity in its authenticated session."""
+    now = datetime.now(timezone.utc)
+    await db.push_tokens.update_one(
+        {"token": payload.token},
+        {
+            "$set": {
+                "role": principal.role,
+                "email": principal.email,
+                "employee_id": principal.employee_id if principal.role == "employee" else "",
+                "updated_at": now,
+            },
+            "$setOnInsert": {"created_at": now},
+        },
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@router.post("/push-token/unregister")
+async def unregister_push_token(
+    payload: PushTokenRequest,
+    principal: Principal = Depends(current_principal),
+):
+    """Remove only this signed-in identity's device token."""
+    query: dict = {"token": payload.token, "role": principal.role}
+    if principal.role == "employee":
+        query["employee_id"] = principal.employee_id
+    else:
+        query["email"] = principal.email
+    result = await db.push_tokens.delete_one(query)
+    return {"ok": True, "removed": result.deleted_count > 0}
 
 
 @router.post("/manager-login", response_model=SessionInfo)
