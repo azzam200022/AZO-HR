@@ -98,41 +98,13 @@ export default function MyAttendance() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["me"] });
 
-  // Presence heartbeat: while punched in at a geofenced site, report the position every
-  // minute. Time spent outside the site is accrued as lateness by the backend.
-  const [presence, setPresence] = useState<PresenceStatus | null>(null);
   const liveNow = !!todayRecord && !todayRecord.check_out;
-  useEffect(() => {
-    if (!liveNow || !myLocation || !navigator.geolocation) return;
-
-    let cancelled = false;
-    const ping = () => {
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          try {
-            const status = await apiPost<PresenceStatus>("/me/presence", {
-              lat: pos.coords.latitude,
-              lng: pos.coords.longitude,
-            });
-            if (!cancelled) setPresence(status);
-          } catch {
-            /* a failed heartbeat must never break the screen */
-          }
-        },
-        () => {
-          /* position unavailable — skip this beat */
-        },
-        { enableHighAccuracy: true, timeout: 12_000, maximumAge: 30_000 },
-      );
-    };
-
-    ping();
-    const timer = setInterval(ping, 60_000);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [liveNow, myLocation]);
+  const presenceQuery = useQuery<PresenceStatus | null>({
+    queryKey: ["me", "presence"],
+    queryFn: async () => null,
+    enabled: false,
+  });
+  const presence = presenceQuery.data ?? null;
 
   const checkInMutation = useMutation({
     // The geofence is enforced server-side: 403 outside the radius, 400 without a fix.

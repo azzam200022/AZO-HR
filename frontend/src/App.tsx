@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import Navbar from "@/components/layout/Navbar";
 import BottomNav from "@/components/layout/BottomNav";
+import PresenceTracker from "@/components/layout/PresenceTracker";
 import Dashboard from "@/pages/Dashboard";
 import Employees from "@/pages/Employees";
 import Attendance from "@/pages/Attendance";
@@ -53,6 +54,7 @@ function Shell() {
   return (
     <div className="min-h-svh bg-background text-foreground">
       <Navbar />
+      {isEmployee && <PresenceTracker />}
       <main
         className={
           isEmployee

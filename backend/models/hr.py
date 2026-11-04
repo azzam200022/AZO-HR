@@ -442,6 +442,7 @@ class PresenceStatus(BaseModel):
     late_minutes: int = 0
     total_late_minutes: int = 0
     tracking: bool = False  # false when the employee has no assigned work location
+    checked_out: bool = False  # true when an after-shift departure closed the attendance record
 
 
 class DeleteResult(BaseModel):

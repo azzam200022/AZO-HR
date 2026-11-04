@@ -109,6 +109,7 @@ export interface PresenceStatus {
   late_minutes: number;
   total_late_minutes: number;
   tracking: boolean;
+  checked_out: boolean;
 }
 
 export interface LeaveRequest {
