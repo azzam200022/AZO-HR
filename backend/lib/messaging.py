@@ -6,6 +6,7 @@ an employee may read is always derived from the session, never from a client-sup
 
 from lib.dates import aware, now_time, today_iso
 from lib.db import db
+from lib.push import send_notification
 from models.hr import Message, Notification
 
 GROUP_THREAD = "group"
@@ -29,6 +30,7 @@ async def _notify(
         message=message,
     )
     await db.notifications.insert_one(note.model_dump())
+    await send_notification(note.model_dump())
 
 
 async def send_message(

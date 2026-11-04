@@ -1,6 +1,8 @@
+import { Capacitor } from "@capacitor/core";
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost } from "@/lib/api";
+import { isBackgroundLocationActive } from "@/lib/background-location";
 import type { AttendanceRecord, PresenceStatus, TodayResponse, WorkLocation } from "@/lib/types";
 
 /** Keep geofence heartbeats alive across every employee-portal tab while the app is open. */
@@ -33,36 +35,33 @@ export default function PresenceTracker() {
 
     let cancelled = false;
     let pending = false;
-    const ping = () => {
+    const ping = async () => {
       if (cancelled || pending || document.visibilityState === "hidden") return;
       pending = true;
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          if (cancelled) {
-            pending = false;
-            return;
-          }
-          try {
-            const status = await apiPost<PresenceStatus>("/me/presence", {
-              lat: pos.coords.latitude,
-              lng: pos.coords.longitude,
-            });
-            if (cancelled) return;
-            queryClient.setQueryData(["me", "presence"], status);
-            if (status.checked_out) {
-              void queryClient.invalidateQueries({ queryKey: ["me"] });
-            }
-          } catch {
-            /* a missed heartbeat must never break the employee portal */
-          } finally {
-            pending = false;
-          }
-        },
-        () => {
-          pending = false;
-        },
-        { enableHighAccuracy: true, timeout: 12_000, maximumAge: 30_000 },
-      );
+      try {
+        if (Capacitor.getPlatform() === "android" && (await isBackgroundLocationActive())) return;
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 12_000,
+            maximumAge: 30_000,
+          });
+        });
+        if (cancelled) return;
+        const status = await apiPost<PresenceStatus>("/me/presence", {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+        if (cancelled) return;
+        queryClient.setQueryData(["me", "presence"], status);
+        if (status.checked_out) {
+          void queryClient.invalidateQueries({ queryKey: ["me"] });
+        }
+      } catch {
+        /* a missed heartbeat must never break the employee portal */
+      } finally {
+        pending = false;
+      }
     };
 
     const onVisibilityChange = () => {

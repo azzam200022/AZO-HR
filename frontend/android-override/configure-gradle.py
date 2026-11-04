@@ -10,16 +10,32 @@ for permission in (
     "android.permission.ACCESS_COARSE_LOCATION",
     "android.permission.ACCESS_FINE_LOCATION",
     "android.permission.POST_NOTIFICATIONS",
+    "android.permission.FOREGROUND_SERVICE",
+    "android.permission.FOREGROUND_SERVICE_LOCATION",
 ):
     declaration = f'<uses-permission android:name="{permission}"'
     if declaration not in manifest:
-        if "</manifest>" not in manifest:
-            raise SystemExit("Could not locate the closing Android manifest tag")
-        manifest = manifest.replace(
-            "</manifest>",
-            f'    <uses-permission android:name="{permission}" />\n</manifest>',
-            1,
+        application_index = manifest.find("<application")
+        if application_index < 0:
+            raise SystemExit("Could not locate the Android application element")
+        manifest = (
+            manifest[:application_index]
+            + f'    <uses-permission android:name="{permission}" />\n'
+            + manifest[application_index:]
         )
+
+service_declaration = (
+    '<service android:name="com.azzam200022.azo.BackgroundLocationService" '
+    'android:exported="false" android:foregroundServiceType="location" />'
+)
+if service_declaration not in manifest:
+    if "</application>" not in manifest:
+        raise SystemExit("Could not locate the closing Android application tag")
+    manifest = manifest.replace(
+        "</application>",
+        f"        {service_declaration}\n    </application>",
+        1,
+    )
 manifest_file.write_text(manifest, encoding="utf-8")
 
 gradle_file = Path("android/app/build.gradle")

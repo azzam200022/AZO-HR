@@ -5,6 +5,7 @@ import { apiGet, apiPost } from "@/lib/api";
 import { fmtDate, formatNumber } from "@/lib/format";
 import {
   currentPushPermission,
+  initializeNativePush,
   isNativePushPlatform,
   pushPermission,
   requestPush,
@@ -27,6 +28,7 @@ export default function NotificationBell({ audience }: Props) {
 
   useEffect(() => {
     let active = true;
+    void initializeNativePush();
     void currentPushPermission().then((current) => {
       if (active) setPermission(current);
     });
@@ -54,6 +56,11 @@ export default function NotificationBell({ audience }: Props) {
 
   // A rise in the unread counter raises a local/browser notification when allowed.
   useEffect(() => {
+    if (isNativePushPlatform()) {
+      // Android receives these through FCM; a second local notification would duplicate it.
+      lastUnread.current = unread;
+      return;
+    }
     if (lastUnread.current !== null && unread > lastUnread.current) {
       const fallback = `لديك ${unread} تنبيهاً غير مقروء`;
       void apiGet<AppNotification[]>(`${base}?limit=30`)
@@ -92,7 +99,7 @@ export default function NotificationBell({ audience }: Props) {
     const result = await requestPush();
     setPermission(result);
     if (result === "granted") {
-      await showPush("تم تفعيل الإشعارات", "ستصلك تنبيهات مواردي فور وصولها");
+      await showPush("تم السماح بالإشعارات", "سيستخدم التطبيق هذا الإذن لإرسال التنبيهات.");
     }
   };
 

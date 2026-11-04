@@ -47,6 +47,19 @@ jobs:
         run: |
           mkdir -p frontend/android/app/src/main/java/com/azzam200022/azo
           cp frontend/android-override/MainActivity.java frontend/android/app/src/main/java/com/azzam200022/azo/MainActivity.java
+          cp frontend/android-override/BackgroundTrackingPlugin.java frontend/android/app/src/main/java/com/azzam200022/azo/BackgroundTrackingPlugin.java
+          cp frontend/android-override/BackgroundLocationService.java frontend/android/app/src/main/java/com/azzam200022/azo/BackgroundLocationService.java
+      - name: Configure Firebase Android app
+        working-directory: frontend
+        env:
+          FIREBASE_GOOGLE_SERVICES_JSON: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON }}
+        run: |
+          if [[ -z "$FIREBASE_GOOGLE_SERVICES_JSON" ]]; then
+            echo "::warning::Firebase Android configuration is missing; FCM registration will not work in this APK."
+          else
+            printf '%s' "$FIREBASE_GOOGLE_SERVICES_JSON" > android/app/google-services.json
+            node -e 'const fs=require("fs");const data=JSON.parse(fs.readFileSync("android/app/google-services.json","utf8"));const clients=data.client||[];if(!clients.some((client)=>client.client_info?.android_client_info?.package_name==="com.azzam200022.azo")){console.error("Firebase config does not contain package com.azzam200022.azo");process.exit(1)}'
+          fi
       - name: Sync Capacitor
         run: npx cap sync android
         working-directory: frontend
