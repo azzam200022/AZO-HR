@@ -18,6 +18,7 @@ import {
   shiftLabel,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { workDaysLabel } from "@/lib/work-days";
 
 const AR_WEEKDAYS = ["الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد"];
 
@@ -107,6 +108,10 @@ export default function EmployeeReportPanel({
           <Clock3 className="h-3.5 w-3.5 text-teal-600" />
           وقت الدوام: <span className="font-semibold tabular-nums" dir="ltr">{shiftLabel(attendance.shift_start, attendance.shift_end)}</span>
           <span className="text-slate-400">(سماح {attendance.grace_minutes} د)</span>
+        </p>
+        <p className="flex items-center gap-1.5" data-testid={`${testidPrefix}-work-days`}>
+          <CalendarCheck className="h-3.5 w-3.5 text-teal-600" />
+          أيام الدوام: {workDaysLabel(employee.work_days)}
         </p>
         {attendance.cycle_start && (
           <p className="flex items-center gap-1.5" data-testid="report-cycle-range">

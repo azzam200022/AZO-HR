@@ -14,7 +14,7 @@ from lib.adjustments import to_model as adjustment_model
 from lib.messaging import GROUP_THREAD, mark_thread_read, send_message, to_model as message_model
 from lib.punch import punch_in, punch_out, record_presence
 from lib.reports import build_report, leave_balance
-from lib.shift import employee_shift, late_minutes
+from lib.shift import employee_shift, is_working_day, late_minutes
 from models.hr import (
     Adjustment,
     AttendanceRecord,
@@ -74,7 +74,15 @@ async def my_attendance(principal: Principal = Depends(require_employee)):
     )
     for d in docs:
         d["created_at"] = aware(d.get("created_at"))
-        d["late_minutes"] = late_minutes(d.get("check_in", ""), shift_start, grace)
+        d["late_minutes"] = late_minutes(
+            d.get("check_in", ""),
+            shift_start,
+            grace,
+            work_date=d.get("date"),
+            work_days=employee.get("work_days"),
+        )
+        if not is_working_day(d.get("date", ""), employee.get("work_days")):
+            d["away_minutes"] = 0
     return [AttendanceRecord(**d) for d in docs]
 
 

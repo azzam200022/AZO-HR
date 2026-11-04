@@ -7,7 +7,7 @@ calendar month — so a new cycle's lateness can never be charged to a settled o
 from lib.adjustments import adjustment_totals
 from lib.cycle import pay_cycle
 from lib.db import db
-from lib.shift import employee_shift, late_minutes, shift_minutes
+from lib.shift import employee_shift, is_working_day, late_minutes, shift_minutes
 
 #: payroll month is treated as 30 paid days
 PAID_DAYS_PER_MONTH = 30
@@ -38,8 +38,22 @@ async def late_summary(employee: dict, on: str | None = None) -> tuple[int, int,
     start, end = pay_cycle(employee, on)
     docs = await cycle_attendance(employee["id"], start, end)
 
-    total_late = sum(late_minutes(d.get("check_in", ""), shift_start, grace) for d in docs)
-    total_away = sum(int(d.get("away_minutes", 0)) for d in docs)
+    work_days = employee.get("work_days")
+    total_late = sum(
+        late_minutes(
+            d.get("check_in", ""),
+            shift_start,
+            grace,
+            work_date=d.get("date"),
+            work_days=work_days,
+        )
+        for d in docs
+    )
+    total_away = sum(
+        int(d.get("away_minutes", 0))
+        for d in docs
+        if is_working_day(d.get("date", ""), work_days)
+    )
     billable = total_late + total_away
     deduction = round(
         minute_rate(float(employee.get("base_salary", 0)), shift_start, shift_end) * billable, 2

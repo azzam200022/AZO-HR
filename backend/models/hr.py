@@ -23,6 +23,18 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _validate_work_days(value: list[int] | None) -> list[int] | None:
+    if value is None:
+        return None
+    if not value:
+        raise ValueError("work_days must include at least one weekday")
+    if any(day not in range(7) for day in value):
+        raise ValueError("work_days values must be weekdays from 0 (Monday) to 6 (Sunday)")
+    if len(set(value)) != len(value):
+        raise ValueError("work_days cannot contain duplicate weekdays")
+    return sorted(value)
+
+
 class Employee(BaseModel):
     id: str = Field(default_factory=_uuid)
     name: str
@@ -36,12 +48,20 @@ class Employee(BaseModel):
     location_id: str = ""  # assigned work location; "" = no geofence
     shift_start: str = "08:00"  # HH:MM — this employee's own working hours
     shift_end: str = "16:00"  # HH:MM — may wrap past midnight (e.g. 16:00 → 00:00)
+    work_days: list[int] = Field(
+        default_factory=lambda: list(range(7)), min_length=1, max_length=7
+    )
     grace_minutes: int = Field(default=5, ge=0)  # late grace window
     monthly_leave_quota: int = Field(default=2, ge=0)  # leaves allowed per hire-date cycle
     payroll_cycle_start: str = ""  # custom cycle anchor; "" = use hire_date
     access_code: str = ""  # login code issued by the manager (e.g. MW-4821)
     can_login: bool = True
     created_at: datetime = Field(default_factory=utcnow)
+
+    @field_validator("work_days")
+    @classmethod
+    def _work_days_valid(cls, value: list[int]) -> list[int]:
+        return _validate_work_days(value)  # type: ignore[return-value]
 
 
 class EmployeeCreate(BaseModel):
@@ -56,9 +76,17 @@ class EmployeeCreate(BaseModel):
     location_id: str = ""
     shift_start: str = "08:00"
     shift_end: str = "16:00"
+    work_days: list[int] = Field(
+        default_factory=lambda: list(range(7)), min_length=1, max_length=7
+    )
     grace_minutes: int = Field(default=5, ge=0)
     monthly_leave_quota: int = Field(default=2, ge=0)
     payroll_cycle_start: str = ""
+
+    @field_validator("work_days")
+    @classmethod
+    def _work_days_valid(cls, value: list[int]) -> list[int]:
+        return _validate_work_days(value)  # type: ignore[return-value]
 
     @field_validator("hire_date")
     @classmethod
@@ -80,10 +108,16 @@ class EmployeeUpdate(BaseModel):
     location_id: str | None = None
     shift_start: str | None = None
     shift_end: str | None = None
+    work_days: list[int] | None = Field(default=None, min_length=1, max_length=7)
     grace_minutes: int | None = Field(default=None, ge=0)
     monthly_leave_quota: int | None = Field(default=None, ge=0)
     payroll_cycle_start: str | None = None
     can_login: bool | None = None
+
+    @field_validator("work_days")
+    @classmethod
+    def _work_days_valid(cls, value: list[int] | None) -> list[int] | None:
+        return _validate_work_days(value)
 
 
 class AttendanceRecord(BaseModel):
