@@ -5,6 +5,7 @@ from lib.auth import require_manager
 from lib.cycle import pay_cycle
 from lib.dates import today_iso
 from lib.db import db
+from lib.notify import notify_employee_adjustment
 from models.hr import Adjustment, AdjustmentCreate, DeleteResult
 
 router = APIRouter(
@@ -47,6 +48,7 @@ async def create_adjustment(payload: AdjustmentCreate):
         cycle_end=end,
     )
     await db.adjustments.insert_one(item.model_dump())
+    await notify_employee_adjustment(employee, item.model_dump())
     return item
 
 

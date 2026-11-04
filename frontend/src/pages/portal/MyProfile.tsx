@@ -18,7 +18,7 @@ export default function MyProfile() {
     <FadeIn>
       <PageHeader
         title="ملفي الشخصي"
-        description="سجل حضورك اليومي الكامل وتقرير إجازاتك."
+        description="سجل حضورك وإجازاتك والحوافز والخصومات المسجّلة."
         testid="my-profile-title"
       />
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
@@ -27,6 +27,7 @@ export default function MyProfile() {
           isLoading={reportQuery.isLoading}
           month={month}
           onMonthChange={setMonth}
+          adjustmentsPath="/me/adjustments"
           testidPrefix="my-report"
         />
       </div>

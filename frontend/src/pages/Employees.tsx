@@ -708,7 +708,7 @@ export default function Employees() {
           <DialogHeader>
             <DialogTitle>الملف الشخصي والتقرير الشهري</DialogTitle>
             <DialogDescription>
-              نفس التقرير الذي يراه الموظف في بوابته — الحضور الشهري وسجل الإجازات والرصيد.
+              الملف الشخصي والتقرير الشهري، بما فيه الحضور والإجازات والحوافز والخصومات.
             </DialogDescription>
           </DialogHeader>
           <EmployeeReportPanel
@@ -716,6 +716,7 @@ export default function Employees() {
             isLoading={reportQuery.isLoading}
             month={reportMonth}
             onMonthChange={setReportMonth}
+            adjustmentsPath={`/adjustments?employee_id=${reportFor?.id ?? ""}`}
             showSalary
             testidPrefix="manager-report"
           />

@@ -1,9 +1,13 @@
+import { useQuery } from "@tanstack/react-query";
+import { apiGet } from "@/lib/api";
 import {
   AlarmClock,
   CalendarCheck,
   CalendarRange,
   CalendarClock,
+  CircleDollarSign,
   Clock3,
+  Gift,
   MapPin,
   TrendingUp,
   Wallet,
@@ -29,6 +33,7 @@ const weekdayName = (iso: string) => {
 import {
   LEAVE_STATUS_LABELS,
   LEAVE_TYPE_LABELS,
+  type Adjustment,
   type EmployeeReport,
   type LeaveStatus,
 } from "@/lib/types";
@@ -65,6 +70,7 @@ export default function EmployeeReportPanel({
   isLoading,
   month,
   onMonthChange,
+  adjustmentsPath,
   showSalary = false,
   testidPrefix = "report",
 }: {
@@ -72,9 +78,16 @@ export default function EmployeeReportPanel({
   isLoading: boolean;
   month: string;
   onMonthChange: (month: string) => void;
+  adjustmentsPath: string;
   showSalary?: boolean;
   testidPrefix?: string;
 }) {
+  const adjustmentsQuery = useQuery({
+    queryKey: ["employee-adjustments", adjustmentsPath],
+    queryFn: () => apiGet<Adjustment[]>(adjustmentsPath),
+    enabled: Boolean(adjustmentsPath),
+  });
+
   if (isLoading) return <LoadingBlock className="h-72" />;
   if (!report) return <EmptyState title="لا يوجد تقرير" />;
 
@@ -98,6 +111,67 @@ export default function EmployeeReportPanel({
           </p>
         </div>
       </div>
+
+      {/* Bonuses and deductions */}
+      <section
+        className="rounded-xl border border-slate-200 bg-white p-3.5"
+        data-testid={testidPrefix + "-adjustments"}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-bold text-slate-800">الحوافز والخصومات</p>
+          {adjustmentsQuery.data && (
+            <span className="text-[10px] text-slate-500">
+              {formatNumber(adjustmentsQuery.data.length)} بند
+            </span>
+          )}
+        </div>
+        {adjustmentsQuery.isLoading ? (
+          <LoadingBlock className="mt-2 h-16" />
+        ) : (adjustmentsQuery.data ?? []).length === 0 ? (
+          <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+            لا توجد حوافز أو خصومات مسجّلة.
+          </p>
+        ) : (
+          <div className="mt-2 space-y-2">
+            {(adjustmentsQuery.data ?? []).map((item) => {
+              const isBonus = item.kind === "bonus";
+              return (
+                <div
+                  key={item.id}
+                  className="rounded-lg border border-slate-100 px-3 py-2.5"
+                  data-testid={testidPrefix + "-adjustment-" + item.id}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-semibold",
+                        isBonus ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700",
+                      )}
+                    >
+                      {isBonus ? <Gift className="h-3.5 w-3.5" /> : <CircleDollarSign className="h-3.5 w-3.5" />}
+                      {isBonus ? "حافز" : "خصم"}
+                    </span>
+                    <span
+                      dir="ltr"
+                      className={cn(
+                        "text-xs font-bold tabular-nums",
+                        isBonus ? "text-emerald-700" : "text-rose-700",
+                      )}
+                    >
+                      {isBonus ? "+" : "−"} {formatIQD(item.amount)}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-[11px] leading-relaxed text-slate-700">السبب: {item.reason}</p>
+                  <div className="mt-1 flex flex-wrap items-center justify-between gap-1 text-[10px] text-slate-500">
+                    <span>التاريخ: {fmtDate(item.date)}</span>
+                    <span>{item.settled ? "تمت تسويته مع الراتب" : "لم تتم تسويته بعد"}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <div className="space-y-1.5 rounded-xl bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
         <p className="flex items-center gap-1.5">

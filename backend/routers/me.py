@@ -203,6 +203,23 @@ async def read_my_notifications(principal: Principal = Depends(require_employee)
     return MarkAllResult(updated=result.modified_count)
 
 
+@router.post("/notifications/{note_id}/read", response_model=Notification)
+async def read_my_notification(note_id: str, principal: Principal = Depends(require_employee)):
+    "Mark one of the signed-in employee's own notifications as read."
+    query = {
+        "id": note_id,
+        "audience": "employee",
+        "employee_id": principal.employee_id,
+    }
+    doc = await db.notifications.find_one(query)
+    if not doc:
+        raise HTTPException(status_code=404, detail="الإشعار غير موجود")
+    await db.notifications.update_one(query, {"$set": {"read": True}})
+    fresh = await db.notifications.find_one(query)
+    fresh["created_at"] = aware(fresh.get("created_at"))
+    return Notification(**fresh)
+
+
 @router.get("/messages", response_model=list[Message])
 async def my_messages(thread: str = "direct", principal: Principal = Depends(require_employee)):
     """Own private thread with the manager, or the team channel."""

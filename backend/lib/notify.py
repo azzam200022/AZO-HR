@@ -1,4 +1,6 @@
-"""Manager notifications — raised the moment an employee is late or leaves the site."""
+"""In-app notifications for managers and employees."""
+
+import logging
 
 from lib.dates import now_time, today_iso
 from lib.db import db
@@ -48,3 +50,32 @@ async def notify_left_site(employee: dict, location_name: str, at_time: str, dis
             f"أثناء دوامه — يبعد الآن {int(distance_m)} متراً"
         ),
     )
+
+
+async def notify_employee_adjustment(employee: dict, adjustment: dict) -> None:
+    'Create a private in-app alert when a bonus or deduction is recorded.'
+    kind = adjustment.get('kind')
+    if kind not in {'bonus', 'deduction'}:
+        return
+
+    label = 'حافز' if kind == 'bonus' else 'خصم'
+    amount = float(adjustment.get('amount', 0))
+    note = Notification(
+        kind=kind,
+        audience='employee',
+        employee_id=employee['id'],
+        employee_name=employee.get('name', ''),
+        date=adjustment.get('date') or today_iso(),
+        at_time=now_time(),
+        message=(
+            f'تم تسجيل {label} بقيمة {amount:,.0f} د.ع. '
+            f'السبب: {adjustment.get("reason", "")}'
+        ),
+    )
+    try:
+        await db.notifications.insert_one(note.model_dump())
+    except Exception:
+        # Keep the saved adjustment successful if the separate notification insert fails.
+        logging.getLogger(__name__).exception(
+            'Could not create employee notification for adjustment %s', adjustment.get('id')
+        )
