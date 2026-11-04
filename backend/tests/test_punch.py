@@ -6,17 +6,12 @@ import sys
 import pytest
 
 
-# Keep these unit tests independent of MongoDB and optional web-server packages.
-class StubHTTPException(Exception):
-    def __init__(self, status_code=None, detail=None):
-        super().__init__(detail)
-        self.status_code = status_code
-        self.detail = detail
-
-
-fastapi_module = sys.modules.setdefault("fastapi", ModuleType("fastapi"))
-if not hasattr(fastapi_module, "HTTPException"):
-    fastapi_module.HTTPException = StubHTTPException
+# Keep punch tests independent of a live database and outbound notifications.
+_MISSING_MODULE = object()
+_previous_modules = {
+    name: sys.modules.get(name, _MISSING_MODULE)
+    for name in ("lib.db", "lib.notify")
+}
 
 database_module = ModuleType("lib.db")
 database_module.db = SimpleNamespace()
@@ -29,7 +24,15 @@ notification_module.notify_late = _noop_notification
 notification_module.notify_left_site = _noop_notification
 sys.modules["lib.notify"] = notification_module
 
-from lib import punch
+try:
+    # FastAPI is a backend dependency; do not replace it with a stub visible to other tests.
+    from lib import punch
+finally:
+    for module_name, original in _previous_modules.items():
+        if original is _MISSING_MODULE:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = original
 
 
 class MemoryCollection:
