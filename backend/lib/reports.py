@@ -6,7 +6,7 @@ from lib.dates import aware, current_month, today_iso
 from lib.db import db
 from lib.leave_cycle import cycle_bounds, overlaps_cycle
 from lib.payroll_rules import cycle_attendance
-from lib.shift import employee_shift, late_minutes, worked_minutes
+from lib.shift import employee_shift, is_working_day, late_minutes, worked_minutes
 from models.hr import (
     AttendanceRecord,
     Employee,
@@ -51,14 +51,26 @@ async def build_report(employee: dict, month: str | None = None) -> EmployeeRepo
     docs.sort(key=lambda d: d.get("date", ""), reverse=True)
     for d in docs:
         d["created_at"] = aware(d.get("created_at"))
-        # Lateness is always derived from the employee's CURRENT shift, so editing the
-        # shift re-states history consistently instead of leaving stale stored values.
-        d["late_minutes"] = late_minutes(d.get("check_in", ""), shift_start, grace)
+        # Lateness is always derived from the employee's CURRENT shift and work schedule,
+        # so edits re-state history consistently instead of leaving stale stored values.
+        work_days = employee.get("work_days")
+        d["late_minutes"] = late_minutes(
+            d.get("check_in", ""),
+            shift_start,
+            grace,
+            work_date=d.get("date"),
+            work_days=work_days,
+        )
+        if not is_working_day(d.get("date", ""), work_days):
+            d["away_minutes"] = 0
     records = [AttendanceRecord(**d) for d in docs]
 
     complete = [r for r in records if r.check_in and r.check_out]
     total_minutes = sum(_minutes(r.check_in, r.check_out) for r in records)
-    late_records = [r for r in records if r.late_minutes > 0]
+    scheduled_records = [
+        r for r in records if is_working_day(r.date, employee.get("work_days"))
+    ]
+    late_records = [r for r in scheduled_records if r.late_minutes > 0]
     total_away = sum(r.away_minutes for r in records)
     check_ins = [r.check_in for r in records if r.check_in]
     avg_check_in = ""
@@ -92,7 +104,7 @@ async def build_report(employee: dict, month: str | None = None) -> EmployeeRepo
             late_days=len(late_records),
             total_late_minutes=sum(r.late_minutes for r in late_records) + total_away,
             total_away_minutes=total_away,
-            on_time_days=len(records) - len(late_records),
+            on_time_days=len(scheduled_records) - len(late_records),
             shift_start=shift_start,
             shift_end=shift_end,
             grace_minutes=grace,

@@ -5,6 +5,7 @@ import { Clock, Copy, FileText, KeyRound, MapPin, Pencil, Plus, RefreshCw, Searc
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
 import { currentMonthStr, errorText, fmtDate, formatIQD, shiftLabel, todayStr } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { DEFAULT_WORK_DAYS, WORK_DAYS, workDaysLabel } from "@/lib/work-days";
 import { EMPLOYEE_STATUS_LABELS, type AccessCodeResult, type Employee, type EmployeeReport, type EmployeeStatus, type WorkLocation } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,6 +54,7 @@ interface EmployeeForm {
   location_id: string;
   shift_start: string;
   shift_end: string;
+  work_days: number[];
   grace_minutes: string;
   monthly_leave_quota: string;
   payroll_cycle_start: string;
@@ -70,6 +72,7 @@ const EMPTY_FORM: EmployeeForm = {
   location_id: "",
   shift_start: "08:00",
   shift_end: "16:00",
+  work_days: DEFAULT_WORK_DAYS,
   grace_minutes: "5",
   monthly_leave_quota: "2",
   payroll_cycle_start: "",
@@ -211,6 +214,7 @@ export default function Employees() {
       location_id: emp.location_id,
       shift_start: emp.shift_start,
       shift_end: emp.shift_end,
+      work_days: emp.work_days ?? DEFAULT_WORK_DAYS,
       grace_minutes: String(emp.grace_minutes),
       monthly_leave_quota: String(emp.monthly_leave_quota),
       payroll_cycle_start: emp.payroll_cycle_start,
@@ -227,7 +231,20 @@ export default function Employees() {
       toast.error("أدخل راتباً أساسياً صحيحاً");
       return;
     }
+    if (form.work_days.length === 0) {
+      toast.error("اختر يوم دوام واحداً على الأقل");
+      return;
+    }
     saveMutation.mutate(form);
+  };
+
+  const toggleWorkDay = (day: number) => {
+    setForm((current) => ({
+      ...current,
+      work_days: current.work_days.includes(day)
+        ? current.work_days.filter((value) => value !== day)
+        : [...current.work_days, day].sort((a, b) => a - b),
+    }));
   };
 
   return (
@@ -282,7 +299,7 @@ export default function Employees() {
               <TableRow>
                 <TableHead>الموظف</TableHead>
                 <TableHead>المسمى الوظيفي</TableHead>
-                <TableHead>وقت الدوام</TableHead>
+                <TableHead>الدوام وأيامه</TableHead>
                 <TableHead>موقع العمل</TableHead>
                 <TableHead>رمز الدخول</TableHead>
                 <TableHead>إجازات/شهر</TableHead>
@@ -309,10 +326,15 @@ export default function Employees() {
                   </TableCell>
                   <TableCell className="text-sm text-slate-600">{emp.job_title}</TableCell>
                   <TableCell data-testid={`employee-shift-${emp.id}`}>
-                    <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-[11px] font-semibold tabular-nums text-slate-700">
-                      <Clock className="h-3 w-3 text-teal-600" />
-                      <span dir="ltr">{shiftLabel(emp.shift_start, emp.shift_end)}</span>
-                    </span>
+                    <div className="space-y-1">
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-[11px] font-semibold tabular-nums text-slate-700">
+                        <Clock className="h-3 w-3 text-teal-600" />
+                        <span dir="ltr">{shiftLabel(emp.shift_start, emp.shift_end)}</span>
+                      </span>
+                      <span className="block max-w-48 text-[10px] leading-relaxed text-slate-500">
+                        {workDaysLabel(emp.work_days)}
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell className="text-xs" data-testid={`employee-location-${emp.id}`}>
                     {emp.location_id ? (
@@ -582,6 +604,41 @@ export default function Employees() {
                 بداية الدوام نفسها (مثال: دوام 08:00 وسماح 5 ← الحضور 08:05 صفر، و08:06 يساوي 6 دقائق).
               </p>
             </div>
+            <fieldset
+              className="space-y-2 border-0 p-0 sm:col-span-2"
+              data-testid="employee-work-days-field"
+            >
+              <legend className="text-sm font-medium">أيام الدوام *</legend>
+              <p className="text-[11px] text-slate-500">
+                حدد أيام عمل هذا الموظف. الأيام غير المحددة لا يُحتسب فيها تأخير أو خصم مغادرة الموقع.
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {WORK_DAYS.map((day) => (
+                  <label
+                    key={day.value}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
+                      form.work_days.includes(day.value)
+                        ? "border-teal-300 bg-teal-50 text-teal-900"
+                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={form.work_days.includes(day.value)}
+                      onChange={() => toggleWorkDay(day.value)}
+                      className="h-4 w-4 accent-teal-700"
+                      aria-label={day.label}
+                      data-testid={`employee-work-day-${day.value}`}
+                    />
+                    <span>{day.label}</span>
+                  </label>
+                ))}
+              </div>
+              {form.work_days.length === 0 && (
+                <p className="text-xs font-medium text-red-600">اختر يوم دوام واحداً على الأقل.</p>
+              )}
+            </fieldset>
             <div className="space-y-2">
               <Label htmlFor="emp-cycle-start">بداية دورة الراتب (اختياري)</Label>
               <Input

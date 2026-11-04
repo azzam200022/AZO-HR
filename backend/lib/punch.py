@@ -10,6 +10,7 @@ from lib.notify import notify_late, notify_left_site
 from lib.shift import (
     EARLY_PUNCH_WINDOW_MINUTES,
     employee_shift,
+    is_working_day,
     late_minutes,
     minutes_since_start,
     shift_has_ended,
@@ -76,7 +77,13 @@ async def punch_in(employee: dict, lat: float | None, lng: float | None) -> Atte
     if await db.attendance.find_one({"employee_id": employee["id"], "date": date}):
         raise HTTPException(status_code=409, detail="تم تسجيل الحضور مسبقاً لهذا اليوم")
 
-    late = late_minutes(punched_at, shift_start, grace)
+    late = late_minutes(
+        punched_at,
+        shift_start,
+        grace,
+        work_date=date,
+        work_days=employee.get("work_days"),
+    )
     record = AttendanceRecord(
         employee_id=employee["id"],
         date=date,
@@ -147,7 +154,9 @@ async def record_presence(employee: dict, lat: float | None, lng: float | None) 
     distance = haversine_m(lat, lng, location_doc["latitude"], location_doc["longitude"])
     inside = distance <= location_doc.get("radius_m", 150)
     # Only time inside the scheduled window counts against the employee.
-    within_window = 0 <= minutes_since_start(now, shift_start) <= shift_minutes(shift_start, shift_end)
+    within_window = is_working_day(date, employee.get("work_days")) and (
+        0 <= minutes_since_start(now, shift_start) <= shift_minutes(shift_start, shift_end)
+    )
 
     updates: dict = {"last_seen": now}
     if inside:

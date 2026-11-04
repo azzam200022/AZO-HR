@@ -8,6 +8,8 @@ Late rule (as specified):
 The same rule applies to an evening shift (16:00 → 00:00) using its own start time.
 """
 
+from datetime import date
+
 DEFAULT_SHIFT_START = "08:00"
 DEFAULT_SHIFT_END = "16:00"
 DEFAULT_GRACE_MINUTES = 5
@@ -36,13 +38,31 @@ def shift_minutes(shift_start: str, shift_end: str) -> int:
     return end - start
 
 
-def late_minutes(check_in: str, shift_start: str, grace: int = DEFAULT_GRACE_MINUTES) -> int:
+def is_working_day(work_date: str, work_days: list[int] | tuple[int, ...] | None = None) -> bool:
+    """Whether an ISO date is scheduled; missing/invalid schedules preserve all-days behavior."""
+    if not work_days:
+        return True
+    try:
+        weekday = date.fromisoformat(work_date).weekday()
+    except (TypeError, ValueError):
+        return True
+    return weekday in work_days
+
+
+def late_minutes(
+    check_in: str,
+    shift_start: str,
+    grace: int = DEFAULT_GRACE_MINUTES,
+    *,
+    work_date: str | None = None,
+    work_days: list[int] | tuple[int, ...] | None = None,
+) -> int:
     """Minutes of lateness for this punch, per the rule documented above.
 
     Uses the SAME signed offset as the shift-window checks, so a punch accepted as an early
-    arrival can never be recorded as hours of lateness.
+    arrival can never be recorded as hours of lateness. An unscheduled day is not late.
     """
-    if not check_in:
+    if not check_in or (work_date and not is_working_day(work_date, work_days)):
         return 0
     offset = minutes_since_start(check_in, shift_start)
     if offset <= grace:

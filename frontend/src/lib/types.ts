@@ -18,6 +18,7 @@ export interface Employee {
   location_id: string; // "" = no geofence restriction
   shift_start: string; // HH:MM — this employee's own working hours
   shift_end: string; // HH:MM — may wrap past midnight (16:00 → 00:00)
+  work_days: number[]; // Python weekdays: Monday=0 through Sunday=6
   grace_minutes: number; // late grace window
   monthly_leave_quota: number; // leaves allowed per hire-date cycle
   payroll_cycle_start: string; // custom cycle anchor; "" = use hire_date

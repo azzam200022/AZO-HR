@@ -4,7 +4,7 @@ from lib.cycle import pay_cycle
 from lib.dates import today_iso
 from lib.db import db
 from lib.payroll_rules import cycle_attendance, late_summary
-from lib.shift import employee_shift, late_minutes
+from lib.shift import employee_shift, is_working_day, late_minutes
 from models.hr import DisciplineReport, DisciplineRow
 
 
@@ -30,8 +30,18 @@ async def build_discipline_report(month: str) -> DisciplineReport:
         shift_start, shift_end, grace = employee_shift(emp)
         cycle_start, cycle_end = pay_cycle(emp, reference)
         docs = await cycle_attendance(emp["id"], cycle_start, cycle_end)
+        docs = [d for d in docs if is_working_day(d.get("date", ""), emp.get("work_days"))]
         days = len(docs)
-        per_day_late = [late_minutes(d.get("check_in", ""), shift_start, grace) for d in docs]
+        per_day_late = [
+            late_minutes(
+                d.get("check_in", ""),
+                shift_start,
+                grace,
+                work_date=d.get("date"),
+                work_days=emp.get("work_days"),
+            )
+            for d in docs
+        ]
         late_days = sum(1 for m in per_day_late if m > 0)
         total_late = sum(per_day_late)
         _l, total_away, deduction = await late_summary(emp, reference)
