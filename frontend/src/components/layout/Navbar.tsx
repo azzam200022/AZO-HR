@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { Link, NavLink } from "react-router-dom";
 import { format } from "date-fns";
 import { arSA } from "date-fns/locale";
@@ -10,6 +11,7 @@ import {
   LogOut,
   MapPin,
   MessageSquare,
+  RefreshCw,
   Users,
   Wallet,
 } from "lucide-react";
@@ -34,6 +36,8 @@ const EMPLOYEE_NAV: { to: string; label: string; icon: typeof Users; testid: str
 
 export default function Navbar() {
   const { session, role, logout } = useAuth();
+  const queryClient = useQueryClient();
+  const isRefreshing = useIsFetching() > 0;
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -45,14 +49,14 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 shadow-xs backdrop-blur-md">
-      <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 md:gap-6 md:px-8">
+      <div className="mx-auto flex min-w-0 max-w-7xl items-center gap-2 px-2.5 py-2.5 sm:gap-3 sm:px-4 sm:py-3 md:gap-6 md:px-8 max-[360px]:gap-1 max-[360px]:px-2">
         <Link to={role === "manager" ? "/" : "/me"} data-testid="brand-link" className="flex shrink-0 items-center gap-2.5">
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500 to-teal-700 text-white shadow-sm">
             <Users className="h-5 w-5" />
           </span>
-          <span className="leading-tight">
+          <span className="min-w-0 leading-tight">
             <span className="block text-base font-extrabold tracking-tight text-slate-900">مواردي</span>
-            <span className="block text-[11px] font-medium text-slate-500">إدارة الموارد البشرية</span>
+            <span className="block text-[11px] font-medium text-slate-500 max-[500px]:hidden">إدارة الموارد البشرية</span>
           </span>
         </Link>
 
@@ -78,7 +82,7 @@ export default function Navbar() {
           ))}
         </nav>
 
-        <div className="ms-auto flex items-center gap-3 lg:ms-0">
+        <div className="ms-auto flex min-w-0 items-center gap-1.5 lg:ms-0 sm:gap-3 max-[360px]:gap-1">
           <span className="hidden text-xs font-medium text-slate-500 xl:block" data-testid="header-date">
             {format(now, "EEEE، d MMMM yyyy", { locale: arSA })}
           </span>
@@ -88,7 +92,7 @@ export default function Navbar() {
               title="الرسائل"
               className={({ isActive }) =>
                 cn(
-                  "flex h-9 w-9 items-center justify-center rounded-full transition-colors",
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors",
                   isActive ? "bg-teal-50 text-teal-700" : "text-slate-600 hover:bg-slate-100",
                 )
               }
@@ -97,11 +101,28 @@ export default function Navbar() {
               <MessageSquare className="h-4.5 w-4.5" />
             </NavLink>
           )}
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            onClick={() => void queryClient.invalidateQueries({ refetchType: "active" })}
+            disabled={isRefreshing}
+            aria-label={isRefreshing ? "جارٍ تحديث البيانات" : "تحديث البيانات"}
+            title={isRefreshing ? "جارٍ تحديث البيانات" : "تحديث البيانات"}
+            data-testid="refresh-data-btn"
+            className="shrink-0"
+          >
+            <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+          </Button>
           <NotificationBell audience={role === "manager" ? "manager" : "employee"} />
-          <div className="flex items-center gap-2 rounded-full bg-slate-100 py-1 ps-3 pe-1">
-            <span className="text-xs font-semibold text-slate-700" data-testid="current-user-label">
+          <div className="flex min-w-0 shrink-0 items-center gap-1 rounded-full bg-slate-100 py-1 ps-1.5 pe-1 sm:gap-2 sm:ps-3">
+            <span
+              className="min-w-0 max-w-24 truncate text-xs font-semibold text-slate-700 max-[500px]:max-w-14 max-[380px]:max-w-10"
+              data-testid="current-user-label"
+              title={session?.name || session?.email || "—"}
+            >
               {session?.name || session?.email || "—"}
-              <span className="ms-1.5 text-[10px] font-medium text-slate-500">
+              <span className="ms-1.5 text-[10px] font-medium text-slate-500 max-[500px]:hidden">
                 {role === "manager" ? "مدير النظام" : "موظف"}
               </span>
             </span>
