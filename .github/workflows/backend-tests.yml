@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install test dependencies
-        run: python -m pip install --disable-pip-version-check pydantic pytest pytest-xdist pytest-asyncio httpx
+        run: python -m pip install --disable-pip-version-check -r backend/requirements.txt
       - name: Run backend tests
         run: pytest
         working-directory: backend
