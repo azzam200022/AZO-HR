@@ -18,6 +18,7 @@ from lib.shift import (
     shift_has_ended,
     shift_minutes,
     shift_not_started,
+    to_minutes,
 )
 from models.hr import AttendanceRecord
 
@@ -118,20 +119,21 @@ async def punch_in(employee: dict, lat: float | None, lng: float | None) -> Atte
     return record
 
 
-def _close_away_interval(doc: dict, now: str) -> dict:
-    """Fold an open 'outside the site' interval into away_minutes."""
+def _close_away_interval(doc: dict, now: str, shift_start: str, shift_end: str) -> dict:
+    """Fold an open away interval into away_minutes, capped at the shift end."""
     outside_since = doc.get("outside_since") or ""
     if not outside_since:
         return {}
-    start = int(outside_since[:2]) * 60 + int(outside_since[3:5])
-    end = int(now[:2]) * 60 + int(now[3:5])
-    if end < start:
-        end += 24 * 60
+    day_minutes = 24 * 60
+    start = (to_minutes(outside_since) - to_minutes(shift_start)) % day_minutes
+    end = (to_minutes(now) - to_minutes(shift_start)) % day_minutes
+    scheduled = shift_minutes(shift_start, shift_end)
+    start = min(start, scheduled)
+    end = max(start, min(end, scheduled))
     return {
         "away_minutes": int(doc.get("away_minutes", 0)) + (end - start),
         "outside_since": "",
     }
-
 
 async def punch_out(employee_id: str) -> dict:
     work_date = today_iso()
@@ -190,10 +192,9 @@ async def record_presence(employee: dict, lat: float | None, lng: float | None) 
     updates: dict = {"last_seen": now}
     if inside:
         updates.update(_close_away_interval(doc, now, shift_start, shift_end))
-    elif after_shift:
-        # The clock alone never checks out an employee; an observed site exit does.
-        # Close any earlier absence at shift end, then record this departure as checkout.
-        updates.update(_close_away_interval(doc, now, shift_start, shift_end))
+    elif after_shift and not doc.get("outside_since"):
+        # Only a new departure observed after shift end is a checkout. If the employee
+        # left during the shift, keep tracking until return and cap that absence at shift end.
         updates.update({"check_out": now, "outside_since": ""})
     elif within_window and not doc.get("outside_since"):
         updates["outside_since"] = now

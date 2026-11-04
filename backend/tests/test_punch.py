@@ -142,7 +142,7 @@ async def test_staying_inside_after_shift_end_does_not_record_checkout(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_open_midshift_absence_is_capped_at_shift_end_on_checkout(monkeypatch):
+async def test_open_midshift_absence_after_shift_end_does_not_checkout(monkeypatch):
     clock = {"now": "16:05", "distance": 500}
     record = attendance_record(outside_since="15:55")
     staff = employee()
@@ -150,7 +150,21 @@ async def test_open_midshift_absence_is_capped_at_shift_end_on_checkout(monkeypa
 
     await punch.record_presence(staff, 0, 0)
     saved = database.attendance.documents[0]
-    assert saved["check_out"] == "16:05"
+    assert saved["check_out"] == ""
+    assert saved["away_minutes"] == 0
+    assert saved["outside_since"] == "15:55"
+
+
+@pytest.mark.asyncio
+async def test_midshift_absence_return_after_shift_end_counts_only_to_shift_end(monkeypatch):
+    clock = {"now": "16:05", "distance": 100}
+    record = attendance_record(outside_since="15:55")
+    staff = employee()
+    database = make_records(monkeypatch, record, staff, clock)
+
+    await punch.record_presence(staff, 0, 0)
+    saved = database.attendance.documents[0]
+    assert saved["check_out"] == ""
     assert saved["away_minutes"] == 5
     assert saved["outside_since"] == ""
 
