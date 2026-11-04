@@ -113,6 +113,7 @@ async def my_presence(payload: SelfPunch, principal: Principal = Depends(require
         late_minutes=late,
         total_late_minutes=late + away,
         tracking=bool(doc.get("_tracking", False)),
+        checked_out=bool(doc.get("check_out")),
     )
 
 
