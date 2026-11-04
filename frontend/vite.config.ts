@@ -37,6 +37,7 @@ if (!hotReloadDisabled) {
 export default defineConfig(async () => {
   const emergentOverlay = await loadEmergentOverlay();
   return {
+    base: process.env.VITE_BASE_PATH ?? "/",
     plugins: [
       react(),
       tailwindcss(),
