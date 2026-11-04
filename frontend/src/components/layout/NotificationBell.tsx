@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlarmClock, Bell, BellRing, CheckCheck, MapPinOff, MessageSquare } from "lucide-react";
+import { AlarmClock, Bell, BellRing, CheckCheck, CircleDollarSign, Gift, MapPinOff, MessageSquare } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { fmtDate, formatNumber } from "@/lib/format";
 import {
@@ -55,15 +55,31 @@ export default function NotificationBell({ audience }: Props) {
   // A rise in the unread counter raises a local/browser notification when allowed.
   useEffect(() => {
     if (lastUnread.current !== null && unread > lastUnread.current) {
-      void showPush("مواردي — تنبيه جديد", `لديك ${unread} تنبيهاً غير مقروء`);
+      const fallback = `لديك ${unread} تنبيهاً غير مقروء`;
+      void apiGet<AppNotification[]>(`${base}?limit=30`)
+        .then((items) => {
+          const latest = items.find((note) => !note.read);
+          const title =
+            latest?.kind === "bonus"
+              ? "حافز جديد"
+              : latest?.kind === "deduction"
+                ? "خصم جديد"
+                : "مواردي — تنبيه جديد";
+          return showPush(title, latest?.message ?? fallback);
+        })
+        .catch(() => showPush("مواردي — تنبيه جديد", fallback));
     }
     lastUnread.current = unread;
-  }, [unread]);
+  }, [unread, base]);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: scope });
 
   const readOne = useMutation({
-    mutationFn: (id: string) => apiPost<AppNotification>(`/notifications/${id}/read`, {}),
+    mutationFn: (id: string) =>
+      apiPost<AppNotification>(
+        audience === "manager" ? `/notifications/${id}/read` : `/me/notifications/${id}/read`,
+        {},
+      ),
     onSuccess: refresh,
   });
 
@@ -83,14 +99,24 @@ export default function NotificationBell({ audience }: Props) {
   const notifications = listQuery.data ?? [];
 
   const iconFor = (kind: AppNotification["kind"]) =>
-    kind === "late" ? AlarmClock : kind === "left_site" ? MapPinOff : MessageSquare;
+    kind === "late"
+      ? AlarmClock
+      : kind === "left_site"
+        ? MapPinOff
+        : kind === "bonus"
+          ? Gift
+          : kind === "deduction"
+            ? CircleDollarSign
+            : MessageSquare;
 
   const toneFor = (kind: AppNotification["kind"]) =>
     kind === "late"
       ? "bg-amber-100 text-amber-700"
-      : kind === "left_site"
+      : kind === "left_site" || kind === "deduction"
         ? "bg-rose-100 text-rose-700"
-        : "bg-teal-100 text-teal-700";
+        : kind === "bonus"
+          ? "bg-emerald-100 text-emerald-700"
+          : "bg-teal-100 text-teal-700";
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -168,7 +194,7 @@ export default function NotificationBell({ audience }: Props) {
                 <button
                   key={note.id}
                   type="button"
-                  onClick={() => !note.read && audience === "manager" && readOne.mutate(note.id)}
+                  onClick={() => !note.read && readOne.mutate(note.id)}
                   className={cn(
                     "flex w-full gap-2.5 border-b border-slate-50 px-3 py-2.5 text-start transition-colors hover:bg-slate-50",
                     !note.read && "bg-amber-50/60",

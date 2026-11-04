@@ -254,7 +254,7 @@ class GenerateResult(BaseModel):
 
 class Notification(BaseModel):
     id: str = Field(default_factory=_uuid)
-    kind: Literal["late", "left_site", "message"]
+    kind: Literal["late", "left_site", "message", "bonus", "deduction"]
     audience: Literal["manager", "employee"] = "manager"
     employee_id: str
     employee_name: str = ""
