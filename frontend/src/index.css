@@ -123,8 +123,18 @@
     }
   body {
     @apply bg-background text-foreground;
+    min-width: 0;
+    overflow-x: clip;
+    }
+  html,
+  body,
+  #root {
+    width: 100%;
+    min-height: 100%;
+    min-width: 0;
     }
   html {
     @apply font-sans;
-    }
+    overflow-x: clip;
+  }
 }

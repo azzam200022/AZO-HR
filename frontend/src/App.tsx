@@ -58,8 +58,8 @@ function Shell() {
       <main
         className={
           isEmployee
-            ? "mx-auto w-full max-w-2xl px-4 pt-6 pb-32 md:px-6"
-            : "mx-auto w-full max-w-7xl px-4 pt-6 pb-12 md:px-8"
+            ? "mx-auto min-w-0 w-full max-w-2xl px-3 pt-6 pb-32 sm:px-4 md:px-6"
+            : "mx-auto min-w-0 w-full max-w-7xl px-3 pt-6 pb-12 sm:px-4 md:px-8"
         }
       >
         <Routes>
