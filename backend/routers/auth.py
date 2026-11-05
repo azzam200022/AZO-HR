@@ -28,9 +28,14 @@ class PushTokenRequest(BaseModel):
 
 
 def _set_cookie(response: Response, token: str, origin: str | None) -> None:
-    # Capacitor uses https://localhost; only that fixed origin receives a
-    # cross-site cookie. Browser clients keep the existing SameSite=Lax policy.
-    same_site = "none" if origin == "https://localhost" else "lax"
+    # Capacitor and the GitHub Pages web app call the API cross-site, so those
+    # exact trusted origins need SameSite=None for credentialed browser requests.
+    # The cookie remains Secure and HttpOnly; all other browser clients keep Lax.
+    cross_site_origins = {
+        "https://localhost",
+        "https://azzam200022.github.io",
+    }
+    same_site = "none" if origin in cross_site_origins else "lax"
     response.set_cookie(
         key=SESSION_COOKIE,
         value=token,
