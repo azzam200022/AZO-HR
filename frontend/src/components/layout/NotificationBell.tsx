@@ -43,13 +43,14 @@ export default function NotificationBell({ audience }: Props) {
   const summaryQuery = useQuery({
     queryKey: [...scope, "summary"],
     queryFn: () => apiGet<NotificationSummary>(`${base}/summary`),
-    refetchInterval: 20_000,
+    refetchInterval: 5_000,
   });
 
   const listQuery = useQuery({
     queryKey: [...scope, "list"],
     queryFn: () => apiGet<AppNotification[]>(`${base}?limit=30`),
     enabled: open,
+    refetchInterval: open ? 5_000 : false,
   });
 
   const unread = summaryQuery.data?.unread ?? 0;
