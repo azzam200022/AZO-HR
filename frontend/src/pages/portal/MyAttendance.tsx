@@ -23,6 +23,7 @@ import {
   shiftLabel,
   todayStr,
 } from "@/lib/format";
+import { onsiteDurationSeconds } from "@/lib/attendance-duration";
 import {
   ATTENDANCE_STATUS_LABELS,
   PAYROLL_STATUS_LABELS,
@@ -119,21 +120,6 @@ export default function MyAttendance() {
     todayRecord?.status === "present" && Boolean(todayRecord.check_in) && !todayRecord.check_out;
   const canCheckIn =
     !todayRecord || (todayRecord.is_synthetic && todayRecord.status !== "absent");
-  const elapsedLabel = () => {
-    if (!todayRecord?.check_in || !live) return "0س 0د 00ث";
-    let seconds = 0;
-    const checkInEpoch = todayRecord.check_in_at ? Date.parse(todayRecord.check_in_at) : NaN;
-    if (serverNowEpoch !== null && Number.isFinite(checkInEpoch)) {
-      seconds = Math.max(0, Math.floor((serverNowEpoch - checkInEpoch) / 1000));
-    } else if (serverNowMinutes !== null) {
-      seconds = Math.max(0, Math.floor((serverNowMinutes - toMinutes(todayRecord.check_in)) * 60));
-    }
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const remainingSeconds = String(seconds % 60).padStart(2, "0");
-    return `${hours}س ${minutes}د ${remainingSeconds}ث`;
-  };
-
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["me"] });
 
   const liveNow = live;
@@ -143,6 +129,68 @@ export default function MyAttendance() {
     enabled: false,
   });
   const presence = presenceQuery.data ?? null;
+  const elapsedLabel = () => {
+    if (!todayRecord?.check_in) return "0س 0د 00ث";
+
+    const checkInEpoch = todayRecord.check_in_at
+      ? Date.parse(todayRecord.check_in_at)
+      : Number.NaN;
+    const checkOutEpoch = todayRecord.check_out_at
+      ? Date.parse(todayRecord.check_out_at)
+      : Number.NaN;
+    let startEpoch = checkInEpoch;
+    let endEpoch = live
+      ? (serverNowEpoch ?? now)
+      : Number.isFinite(checkOutEpoch)
+        ? checkOutEpoch
+        : Number.NaN;
+    let grossSeconds = 0;
+
+    if (Number.isFinite(startEpoch) && Number.isFinite(endEpoch)) {
+      grossSeconds = Math.max(0, Math.floor((endEpoch - startEpoch) / 1000));
+    } else if (live && serverNowMinutes !== null) {
+      let elapsedMinutes = serverNowMinutes - toMinutes(todayRecord.check_in);
+      if (elapsedMinutes < 0) elapsedMinutes += 24 * 60;
+      grossSeconds = Math.max(0, Math.floor(elapsedMinutes * 60));
+      endEpoch = serverNowEpoch ?? now;
+      startEpoch = endEpoch - grossSeconds * 1000;
+    } else if (todayRecord.check_out) {
+      let elapsedMinutes =
+        toMinutes(todayRecord.check_out) - toMinutes(todayRecord.check_in);
+      if (elapsedMinutes < 0) elapsedMinutes += 24 * 60;
+      grossSeconds = Math.max(0, elapsedMinutes * 60);
+      if (!Number.isFinite(endEpoch)) {
+        endEpoch = Number.isFinite(startEpoch)
+          ? startEpoch + grossSeconds * 1000
+          : now;
+      }
+      startEpoch = Number.isFinite(startEpoch)
+        ? startEpoch
+        : endEpoch - grossSeconds * 1000;
+    }
+
+    if (!Number.isFinite(startEpoch) || !Number.isFinite(endEpoch)) {
+      return "0س 0د 00ث";
+    }
+    const intervals = presence?.tracking
+      ? presence.away_intervals
+      : todayRecord.away_intervals;
+    const outsideSinceAt = presence?.tracking
+      ? presence.inside
+        ? ""
+        : presence.outside_since_at
+      : todayRecord.outside_since_at;
+    const seconds = onsiteDurationSeconds(
+      startEpoch,
+      endEpoch,
+      intervals ?? [],
+      outsideSinceAt ?? "",
+    );
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainingSeconds = String(seconds % 60).padStart(2, "0");
+    return `${hours}س ${minutes}د ${remainingSeconds}ث`;
+  };
   const [backgroundTrackingActive, setBackgroundTrackingActive] = useState(false);
   const [backgroundTrackingBusy, setBackgroundTrackingBusy] = useState(false);
   const [backgroundTrackingConsent, setBackgroundTrackingConsent] = useState(false);
@@ -291,9 +339,16 @@ export default function MyAttendance() {
               </button>
             ) : live ? (
               <>
-                <p className="text-2xl font-bold tabular-nums" data-testid="live-duration">
-                  {elapsedLabel()}
-                </p>
+                <div className="text-center">
+                  <p className="text-xs text-teal-100">
+                    {presence?.tracking && !presence.inside
+                      ? "المؤقت متوقف خارج موقع العمل"
+                      : "وقت العمل الفعلي"}
+                  </p>
+                  <p className="mt-1 text-2xl font-bold tabular-nums" data-testid="live-duration">
+                    {elapsedLabel()}
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={() => checkOutMutation.mutate()}
@@ -313,13 +368,23 @@ export default function MyAttendance() {
                 {todayRecord ? ATTENDANCE_STATUS_LABELS[todayRecord.status] : "—"}
               </span>
             ) : (
-              <span
-                className="inline-flex items-center gap-2 rounded-full bg-emerald-500/20 px-5 py-3 text-sm font-semibold text-emerald-300"
-                data-testid="day-complete-badge"
-              >
-                <CheckCircle2 className="h-5 w-5" />
-                تم إكمال يوم العمل
-              </span>
+              <>
+                {todayRecord?.check_out && (
+                  <div className="text-center">
+                    <p className="text-xs text-teal-100">إجمالي وقت العمل الفعلي</p>
+                    <p className="mt-1 text-2xl font-bold tabular-nums" data-testid="live-duration">
+                      {elapsedLabel()}
+                    </p>
+                  </div>
+                )}
+                <span
+                  className="inline-flex items-center gap-2 rounded-full bg-emerald-500/20 px-5 py-3 text-sm font-semibold text-emerald-300"
+                  data-testid="day-complete-badge"
+                >
+                  <CheckCircle2 className="h-5 w-5" />
+                  تم إكمال يوم العمل
+                </span>
+              </>
             )}
 
             {supportsBackgroundLocation() &&
@@ -448,7 +513,9 @@ export default function MyAttendance() {
                   {rec.status === "present" ? `حضور ${rec.check_in || "—"} • انصراف ${rec.check_out || "—"}` : "—"}
                 </span>
                 <span className="text-sm font-semibold tabular-nums text-teal-700">
-                  {rec.status === "present" ? durationLabel(rec.check_in, rec.check_out) : "—"}
+                  {rec.status === "present"
+                    ? durationLabel(rec.check_in, rec.check_out, rec.away_minutes)
+                    : "—"}
                 </span>
               </div>
             ))}

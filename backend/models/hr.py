@@ -154,6 +154,7 @@ class AttendanceRecord(BaseModel):
     late_minutes: int = 0  # minutes late against the employee's shift start
     away_minutes: int = 0  # minutes spent outside the work location during the shift
     outside_since: str = ""  # HH:MM when the employee was last seen outside ("" = inside)
+    outside_since_at: str = ""  # precise local instant of the current departure
     away_intervals: list[AwayInterval] = Field(default_factory=list)
     last_seen: str = ""  # HH:MM of the last location heartbeat
     created_at: datetime = Field(default_factory=utcnow)
@@ -502,6 +503,8 @@ class PresenceStatus(BaseModel):
     total_late_minutes: int = 0
     tracking: bool = False  # false when the employee has no assigned work location
     checked_out: bool = False  # true when an after-shift departure closed the attendance record
+    outside_since_at: str = ""
+    away_intervals: list[AwayInterval] = Field(default_factory=list)
 
 
 class DeleteResult(BaseModel):

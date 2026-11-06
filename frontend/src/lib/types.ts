@@ -120,6 +120,7 @@ export interface AttendanceRecord {
   late_minutes: number; // minutes late against the employee's shift start
   away_minutes: number; // minutes spent outside the work location during the shift
   outside_since: string; // HH:MM while currently away, "" when inside
+  outside_since_at: string; // exact instant of the current departure
   away_intervals: AwayInterval[];
   last_seen: string; // HH:MM of the last location heartbeat
   created_at: string;
@@ -133,6 +134,8 @@ export interface PresenceStatus {
   total_late_minutes: number;
   tracking: boolean;
   checked_out: boolean;
+  outside_since_at: string;
+  away_intervals: AwayInterval[];
 }
 
 export interface LeaveRequest {

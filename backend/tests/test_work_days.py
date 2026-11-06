@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from lib.shift import is_working_day, late_minutes
+from lib.shift import is_working_day, late_minutes, onsite_worked_minutes
 from models.hr import Employee, EmployeeCreate, EmployeeUpdate
 
 
@@ -34,6 +34,12 @@ def test_lateness_is_zero_on_a_scheduled_day_off():
         )
         == 60
     )
+
+
+def test_onsite_worked_minutes_subtracts_away_time_for_day_and_night_shifts():
+    assert onsite_worked_minutes("08:00", "16:00", 30) == 450
+    assert onsite_worked_minutes("22:00", "06:00", 90) == 390
+    assert onsite_worked_minutes("08:00", "08:15", 30) == 0
 
 
 def test_legacy_employees_default_to_all_seven_days():

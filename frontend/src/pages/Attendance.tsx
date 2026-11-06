@@ -214,7 +214,9 @@ export default function Attendance() {
                     {rec.status === "present" ? rec.check_out || "—" : "—"}
                   </TableCell>
                   <TableCell className="text-sm tabular-nums text-slate-600">
-                    {rec.status === "present" ? durationLabel(rec.check_in, rec.check_out) : "—"}
+                    {rec.status === "present"
+                      ? durationLabel(rec.check_in, rec.check_out, rec.away_minutes)
+                      : "—"}
                   </TableCell>
                   <TableCell data-testid={`attendance-late-${rec.id}`}>
                     {rec.status !== "present" ? (
