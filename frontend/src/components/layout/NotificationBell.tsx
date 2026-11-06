@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlarmClock, Bell, BellRing, CheckCheck, CircleDollarSign, Gift, MapPinOff, MessageSquare } from "lucide-react";
+import { AlarmClock, Bell, BellRing, CalendarDays, CheckCheck, CircleDollarSign, Gift, MapPinOff, MessageSquare } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { fmtDate, formatNumber } from "@/lib/format";
 import {
@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 
 type Props = { audience: "manager" | "employee" };
 
-/** Alert feed for both roles: lateness and site exits for the manager, messages for everyone. */
+/** Role-scoped feed for attendance, leave, payroll, adjustments, and messages. */
 export default function NotificationBell({ audience }: Props) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -66,12 +66,18 @@ export default function NotificationBell({ audience }: Props) {
       void apiGet<AppNotification[]>(`${base}?limit=30`)
         .then((items) => {
           const latest = items.find((note) => !note.read);
-          const title =
-            latest?.kind === "bonus"
-              ? "حافز جديد"
-              : latest?.kind === "deduction"
-                ? "خصم جديد"
-                : "مواردي — تنبيه جديد";
+          const titleByKind: Record<AppNotification["kind"], string> = {
+            late: "تأخر عن الدوام",
+            left_site: "مغادرة موقع العمل",
+            attendance: "الحضور والانصراف",
+            message: "رسالة جديدة",
+            bonus: "حافز جديد",
+            deduction: "خصم جديد",
+            payroll: "تسوية الراتب",
+            leave_request: "طلب إجازة جديد",
+            leave_status: "تحديث الإجازة",
+          };
+          const title = latest ? titleByKind[latest.kind] : "مواردي — تنبيه جديد";
           return showPush(title, latest?.message ?? fallback);
         })
         .catch(() => showPush("مواردي — تنبيه جديد", fallback));
@@ -106,22 +112,24 @@ export default function NotificationBell({ audience }: Props) {
   const notifications = listQuery.data ?? [];
 
   const iconFor = (kind: AppNotification["kind"]) =>
-    kind === "late"
+    kind === "late" || kind === "attendance"
       ? AlarmClock
       : kind === "left_site"
         ? MapPinOff
-        : kind === "bonus"
-          ? Gift
-          : kind === "deduction"
-            ? CircleDollarSign
-            : MessageSquare;
+        : kind === "leave_request" || kind === "leave_status"
+          ? CalendarDays
+          : kind === "bonus"
+            ? Gift
+            : kind === "deduction" || kind === "payroll"
+              ? CircleDollarSign
+              : MessageSquare;
 
   const toneFor = (kind: AppNotification["kind"]) =>
-    kind === "late"
+    kind === "late" || kind === "leave_request"
       ? "bg-amber-100 text-amber-700"
       : kind === "left_site" || kind === "deduction"
         ? "bg-rose-100 text-rose-700"
-        : kind === "bonus"
+        : kind === "bonus" || kind === "payroll"
           ? "bg-emerald-100 text-emerald-700"
           : "bg-teal-100 text-teal-700";
 

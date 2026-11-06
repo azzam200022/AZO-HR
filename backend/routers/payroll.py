@@ -4,6 +4,7 @@ from lib.auth import require_manager
 from lib.cycle import cycle_label, pay_cycle
 from lib.dates import aware, current_month, today_iso
 from lib.db import db
+from lib.notify import notify_employee_event
 from lib.payroll_rules import cycle_figures, net_of, settle_cycle
 from models.hr import GenerateResult, PayrollGenerate, PayrollItem, PayrollUpdate
 
@@ -110,6 +111,20 @@ async def update_payroll(item_id: str, payload: PayrollUpdate):
         await db.payroll.update_one({"id": item_id}, {"$set": updates})
 
     fresh = await db.payroll.find_one({"id": item_id})
+    if updates.get("status") == "paid" and doc.get("status") != "paid":
+        employee = await db.employees.find_one({"id": doc["employee_id"]})
+        if employee:
+            cycle_start = fresh.get("cycle_start") or fresh.get("month", "")
+            cycle_end = fresh.get("cycle_end") or cycle_start
+            await notify_employee_event(
+                kind="payroll",
+                employee=employee,
+                date=cycle_end or today_iso(),
+                message=(
+                    f"تمت تسوية راتبك للفترة {cycle_start} إلى {cycle_end} "
+                    f"بصافي {fresh.get('net', 0):,.0f} د.ع."
+                ),
+            )
     return _to_model(fresh)
 
 

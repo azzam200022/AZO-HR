@@ -7,6 +7,36 @@ from lib.db import db
 from lib.push import send_notification
 from models.hr import Notification
 
+logger = logging.getLogger(__name__)
+
+
+async def _create_notification(
+    *,
+    kind: str,
+    audience: str,
+    employee: dict,
+    message: str,
+    date: str | None = None,
+    minutes: int = 0,
+) -> Notification:
+    note = Notification(
+        kind=kind,
+        audience=audience,
+        employee_id=employee["id"],
+        employee_name=employee.get("name", ""),
+        date=date or today_iso(),
+        at_time=now_time(),
+        minutes=minutes,
+        message=message,
+    )
+    try:
+        await db.notifications.insert_one(note.model_dump())
+        await send_notification(note.model_dump())
+    except Exception:
+        # Notification delivery must never roll back the HR action that triggered it.
+        logger.exception("Could not create %s notification", kind)
+    return note
+
 
 async def notify_manager(
     *,
@@ -14,20 +44,49 @@ async def notify_manager(
     employee: dict,
     minutes: int,
     message: str,
+    date: str | None = None,
 ) -> Notification:
-    note = Notification(
-        kind=kind,  # "late" | "left_site"
+    return await _create_notification(
+        kind=kind,
         audience="manager",
-        employee_id=employee["id"],
-        employee_name=employee.get("name", ""),
-        date=today_iso(),
-        at_time=now_time(),
+        employee=employee,
         minutes=minutes,
         message=message,
+        date=date,
     )
-    await db.notifications.insert_one(note.model_dump())
-    await send_notification(note.model_dump())
-    return note
+
+
+async def notify_manager_event(
+    *,
+    kind: str,
+    employee: dict,
+    message: str,
+    date: str | None = None,
+    minutes: int = 0,
+) -> Notification:
+    return await notify_manager(
+        kind=kind,
+        employee=employee,
+        minutes=minutes,
+        message=message,
+        date=date,
+    )
+
+
+async def notify_employee_event(
+    *,
+    kind: str,
+    employee: dict,
+    message: str,
+    date: str | None = None,
+) -> Notification:
+    return await _create_notification(
+        kind=kind,
+        audience="employee",
+        employee=employee,
+        message=message,
+        date=date,
+    )
 
 
 async def notify_late(employee: dict, late: int, shift_start: str, punched_at: str) -> None:
@@ -55,30 +114,19 @@ async def notify_left_site(employee: dict, location_name: str, at_time: str, dis
 
 
 async def notify_employee_adjustment(employee: dict, adjustment: dict) -> None:
-    'Create a private in-app alert when a bonus or deduction is recorded.'
-    kind = adjustment.get('kind')
-    if kind not in {'bonus', 'deduction'}:
+    """Create a private alert when a bonus or deduction is recorded."""
+    kind = adjustment.get("kind")
+    if kind not in {"bonus", "deduction"}:
         return
 
-    label = 'حافز' if kind == 'bonus' else 'خصم'
-    amount = float(adjustment.get('amount', 0))
-    note = Notification(
+    label = "حافز" if kind == "bonus" else "خصم"
+    amount = float(adjustment.get("amount", 0))
+    await notify_employee_event(
         kind=kind,
-        audience='employee',
-        employee_id=employee['id'],
-        employee_name=employee.get('name', ''),
-        date=adjustment.get('date') or today_iso(),
-        at_time=now_time(),
+        employee=employee,
+        date=adjustment.get("date") or today_iso(),
         message=(
-            f'تم تسجيل {label} بقيمة {amount:,.0f} د.ع. '
-            f'السبب: {adjustment.get("reason", "")}'
+            f"تم تسجيل {label} بقيمة {amount:,.0f} د.ع. "
+            f"السبب: {adjustment.get('reason', '')}"
         ),
     )
-    try:
-        await db.notifications.insert_one(note.model_dump())
-        await send_notification(note.model_dump())
-    except Exception:
-        # Keep the saved adjustment successful if the separate notification insert fails.
-        logging.getLogger(__name__).exception(
-            'Could not create employee notification for adjustment %s', adjustment.get('id')
-        )

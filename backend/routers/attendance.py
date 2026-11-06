@@ -5,6 +5,7 @@ from lib.attendance_calendar import daily_attendance_records
 from lib.dates import aware, now_time, today_iso
 from lib.db import db
 from lib.geo import haversine_m
+from lib.notify import notify_employee_event
 from lib.punch import punch_in, punch_out
 from lib.shift import effective_away_minutes, employee_shift, is_working_day, late_minutes
 from models.hr import (
@@ -116,7 +117,7 @@ async def list_attendance(date: str | None = None, employee_id: str | None = Non
 @router.post("", response_model=AttendanceRecord, status_code=201)
 async def create_attendance(payload: AttendanceCreate):
     """Manual record entry by the manager."""
-    await _get_employee_or_404(payload.employee_id)
+    employee = await _get_employee_or_404(payload.employee_id)
     date = payload.date or today_iso()
     existing = await db.attendance.find_one({"employee_id": payload.employee_id, "date": date})
     if existing:
@@ -128,6 +129,15 @@ async def create_attendance(payload: AttendanceCreate):
         check_out=payload.check_out,
     )
     await db.attendance.insert_one(record.model_dump())
+    await notify_employee_event(
+        kind="attendance",
+        employee=employee,
+        date=date,
+        message=(
+            f"أضافت الإدارة سجل حضورك ليوم {date}: "
+            f"الحضور {record.check_in or '—'}، الانصراف {record.check_out or '—'}."
+        ),
+    )
     return record
 
 
@@ -135,12 +145,26 @@ async def create_attendance(payload: AttendanceCreate):
 async def check_in(payload: CheckPunch):
     """Manager punching a employee in on their behalf (same geofence rules)."""
     employee = await _get_employee_or_404(payload.employee_id)
-    return await punch_in(employee, payload.lat, payload.lng)
+    record = await punch_in(employee, payload.lat, payload.lng, notify_manager=False)
+    await notify_employee_event(
+        kind="attendance",
+        employee=employee,
+        date=record.date,
+        message=f"سجّلت الإدارة حضورك الساعة {record.check_in}.",
+    )
+    return record
 
 
 @router.post("/check-out", response_model=AttendanceRecord)
 async def check_out(payload: CheckPunch):
-    doc = await punch_out(payload.employee_id)
+    employee = await _get_employee_or_404(payload.employee_id)
+    doc = await punch_out(payload.employee_id, notify_manager=False)
+    await notify_employee_event(
+        kind="attendance",
+        employee=employee,
+        date=doc.get("date", today_iso()),
+        message=f"سجّلت الإدارة انصرافك الساعة {doc.get('check_out', '')}.",
+    )
     return _to_model(doc)
 
 
@@ -153,6 +177,21 @@ async def update_attendance(record_id: str, payload: AttendanceUpdate):
     if updates:
         await db.attendance.update_one({"id": record_id}, {"$set": updates})
     fresh = await db.attendance.find_one({"id": record_id})
+    if updates:
+        employee = await _get_employee_or_404(doc["employee_id"])
+        detail = "، ".join(
+            part
+            for field, label in (("check_in", "الحضور"), ("check_out", "الانصراف"))
+            if field in updates
+            for part in [f"{label} {fresh.get(field, '') or '—'}"]
+        )
+        suffix = f" ({detail})" if detail else ""
+        await notify_employee_event(
+            kind="attendance",
+            employee=employee,
+            date=fresh.get("date", today_iso()),
+            message=f"عدّلت الإدارة سجل حضورك ليوم {fresh.get('date', '')}{suffix}.",
+        )
     return _to_model(fresh)
 
 

@@ -22,6 +22,7 @@ async def _noop_notification(*_args, **_kwargs):
     return None
 notification_module.notify_late = _noop_notification
 notification_module.notify_left_site = _noop_notification
+notification_module.notify_manager_event = _noop_notification
 sys.modules["lib.notify"] = notification_module
 
 try:

@@ -13,6 +13,7 @@ from lib.dates import aware, current_month, now_time, today_iso
 from lib.db import db
 from lib.adjustments import to_model as adjustment_model
 from lib.messaging import GROUP_THREAD, mark_thread_read, send_message, to_model as message_model
+from lib.notify import notify_manager_event
 from lib.punch import punch_in, punch_out, record_presence
 from lib.reports import build_report, leave_balance
 from lib.shift import effective_away_minutes, employee_shift, is_working_day, late_minutes
@@ -207,6 +208,16 @@ async def request_leave(payload: SelfLeaveCreate, principal: Principal = Depends
         **{**payload.model_dump(), "employee_id": principal.employee_id},
     )
     await db.leaves.insert_one(leave.model_dump())
+    leave_type = {"annual": "سنوية", "sick": "مرضية", "unpaid": "بدون راتب"}[leave.leave_type]
+    reason = f" السبب: {leave.reason.strip()}" if leave.reason.strip() else ""
+    await notify_manager_event(
+        kind="leave_request",
+        employee=employee,
+        message=(
+            f"طلب {employee.get('name', '')} إجازة {leave_type} من "
+            f"{leave.start_date} إلى {leave.end_date}.{reason}"
+        ),
+    )
     return leave
 
 
