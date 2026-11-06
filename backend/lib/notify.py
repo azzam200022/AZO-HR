@@ -31,10 +31,14 @@ async def _create_notification(
     )
     try:
         await db.notifications.insert_one(note.model_dump())
+    except Exception as exc:
+        # Avoid exposing database or credential details in application logs.
+        logger.warning("Could not save %s notification (%s)", kind, type(exc).__name__)
+        return note
+    try:
         await send_notification(note.model_dump())
-    except Exception:
-        # Notification delivery must never roll back the HR action that triggered it.
-        logger.exception("Could not create %s notification", kind)
+    except Exception as exc:
+        logger.warning("Could not send %s notification (%s)", kind, type(exc).__name__)
     return note
 
 
