@@ -45,6 +45,12 @@ async function ensureNativeListeners() {
       await PushNotifications.addListener("registrationError", () => {
         console.warn("Firebase push registration failed.");
       });
+      await PushNotifications.addListener("pushNotificationReceived", (notification) => {
+        const body = notification.body?.trim();
+        if (body) {
+          void showPush(notification.title?.trim() || "مواردي", body);
+        }
+      });
     })().catch((error) => {
       nativeListeners = null;
       throw error;
@@ -113,7 +119,7 @@ export async function unregisterCurrentPushToken() {
   }
 }
 
-/** Shows a local confirmation notification after the user grants permission. */
+/** Shows a local notification on the current device. */
 export async function showPush(title: string, body: string) {
   if ((await currentPushPermission()) !== "granted") return;
 

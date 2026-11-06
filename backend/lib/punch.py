@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from lib.dates import now_local, now_time, today_iso
 from lib.db import db
 from lib.geo import haversine_m
-from lib.notify import notify_late, notify_left_site
+from lib.notify import notify_late, notify_left_site, notify_manager_event
 from lib.shift import (
     EARLY_PUNCH_WINDOW_MINUTES,
     employee_shift,
@@ -70,7 +70,9 @@ def _enforce_geofence(location_doc: dict | None, lat: float | None, lng: float |
     return distance
 
 
-async def punch_in(employee: dict, lat: float | None, lng: float | None) -> AttendanceRecord:
+async def punch_in(
+    employee: dict, lat: float | None, lng: float | None, *, notify_manager: bool = True
+) -> AttendanceRecord:
     shift_start, shift_end, grace = employee_shift(employee)
     punched_at_local = now_local()
     punched_at = punched_at_local.strftime("%H:%M")
@@ -122,8 +124,16 @@ async def punch_in(employee: dict, lat: float | None, lng: float | None) -> Atte
         last_seen=punched_at,
     )
     await db.attendance.insert_one(record.model_dump())
-    if late > 0:
-        await notify_late(employee, late, shift_start, punched_at)
+    if notify_manager:
+        if late > 0:
+            await notify_late(employee, late, shift_start, punched_at)
+        else:
+            await notify_manager_event(
+                kind="attendance",
+                employee=employee,
+                date=date,
+                message=f"سجّل {employee.get('name', '')} الحضور الساعة {punched_at}.",
+            )
     return record
 
 
@@ -136,11 +146,11 @@ def _close_away_interval(doc: dict, now: str, shift_start: str, shift_end: str) 
         "outside_since": "",
     }
 
-async def punch_out(employee_id: str) -> dict:
+async def punch_out(employee_id: str, *, notify_manager: bool = True) -> dict:
     work_date = today_iso()
-    employee = await db.employees.find_one({"id": employee_id}) or {}
-    shift_start, shift_end, _grace = employee_shift(employee)
-    doc, _attendance_date = await _attendance_for_shift(
+    employee = await db.employees.find_one({"id": employee_id})
+    shift_start, shift_end, _grace = employee_shift(employee or {})
+    doc, attendance_date = await _attendance_for_shift(
         employee_id, work_date, shift_start, shift_end
     )
     if not doc:
@@ -154,7 +164,15 @@ async def punch_out(employee_id: str) -> dict:
         **_close_away_interval(doc, now, shift_start, shift_end),
     }
     await db.attendance.update_one({"id": doc["id"]}, {"$set": updates})
-    return await db.attendance.find_one({"id": doc["id"]})
+    fresh = await db.attendance.find_one({"id": doc["id"]})
+    if notify_manager and employee:
+        await notify_manager_event(
+            kind="attendance",
+            employee=employee,
+            date=attendance_date,
+            message=f"سجّل {employee.get('name', '')} الانصراف الساعة {now}.",
+        )
+    return fresh
 
 async def record_presence(employee: dict, lat: float | None, lng: float | None) -> dict:
     """Heartbeat from the employee portal while punched in.
@@ -208,6 +226,13 @@ async def record_presence(employee: dict, lat: float | None, lng: float | None) 
 
     await db.attendance.update_one({"id": doc["id"]}, {"$set": updates})
     fresh = await db.attendance.find_one({"id": doc["id"]})
+    if updates.get("check_out") and not doc.get("check_out"):
+        await notify_manager_event(
+            kind="attendance",
+            employee=employee,
+            date=attendance_date,
+            message=f"سُجّل انصراف {employee.get('name', '')} تلقائياً الساعة {updates['check_out']}.",
+        )
     if fresh.get("outside_since"):
         fresh["away_minutes"] = effective_away_minutes(
             fresh, now, today_iso(), shift_start, shift_end

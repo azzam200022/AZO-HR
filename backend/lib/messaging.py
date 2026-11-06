@@ -53,7 +53,8 @@ async def send_message(
     )
     await db.messages.insert_one(msg.model_dump())
 
-    preview = body.strip()[:60]
+    content = body.strip()
+    preview = content[:200] + ("…" if len(content) > 200 else "")
     if sender == "manager":
         if thread == "direct":
             employee = await db.employees.find_one({"id": employee_id})

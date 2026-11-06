@@ -93,15 +93,26 @@ async def send_notification(note: dict[str, Any]) -> None:
             return
 
     audience = str(note.get("audience") or "")
-    title = "مواردي"
-    body = (
-        "لديك تحديث جديد في لوحة الإدارة."
-        if audience == "manager"
-        else "لديك إشعار جديد. افتح التطبيق للاطلاع."
-    )
+    kind = str(note.get("kind") or "message")
+    title_by_kind = {
+        "late": "تأخر عن الدوام",
+        "left_site": "مغادرة موقع العمل",
+        "attendance": "الحضور والانصراف",
+        "message": "رسالة جديدة",
+        "bonus": "حافز جديد",
+        "deduction": "خصم جديد",
+        "payroll": "تسوية الراتب",
+        "leave_request": "طلب إجازة جديد",
+        "leave_status": "تحديث الإجازة",
+    }
+    title = title_by_kind.get(kind, "مواردي")
+    fallback = "لديك تحديث جديد في لوحة الإدارة." if audience == "manager" else "لديك إشعار جديد."
+    body = str(note.get("message") or fallback).strip()
+    if len(body) > 240:
+        body = body[:237].rstrip() + "…"
     data = {
         "notification_id": str(note.get("id") or ""),
-        "kind": str(note.get("kind") or "message"),
+        "kind": kind,
         "audience": audience,
     }
 
