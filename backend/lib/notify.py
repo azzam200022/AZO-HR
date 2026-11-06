@@ -181,3 +181,39 @@ async def notify_employee_shift_reminder(
     except Exception as exc:
         logger.warning("Could not send shift reminder (%s)", type(exc).__name__)
     return True
+
+
+async def notify_employee_shift_end_reminder(
+    employee: dict,
+    *,
+    work_date: str,
+    shift_end: str,
+) -> bool:
+    """Persist and push a single end-of-shift reminder."""
+    note = Notification(
+        id=f"shift-end-reminder:{employee['id']}:{work_date}",
+        kind="shift_reminder",
+        audience="employee",
+        employee_id=employee["id"],
+        employee_name=employee.get("name", ""),
+        date=work_date,
+        at_time=now_time(),
+        message=f"ينتهي دوامك الساعة {shift_end} — لا تنسَ تسجيل الانصراف.",
+    )
+    try:
+        result = await db.notifications.update_one(
+            {"id": note.id},
+            {"$setOnInsert": note.model_dump()},
+            upsert=True,
+        )
+    except Exception as exc:
+        logger.warning("Could not save shift-end reminder (%s)", type(exc).__name__)
+        return False
+
+    if result.upserted_id is None:
+        return False
+    try:
+        await send_notification(note.model_dump())
+    except Exception as exc:
+        logger.warning("Could not send shift-end reminder (%s)", type(exc).__name__)
+    return True

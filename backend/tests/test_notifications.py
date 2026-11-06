@@ -77,3 +77,31 @@ async def test_shift_reminder_is_persisted_and_pushed_once(monkeypatch):
     assert saved["audience"] == "employee"
     assert saved["message"] == "يبدأ دوامك الساعة 08:00 — تبقّى ساعة."
     send.assert_awaited_once_with(saved)
+
+
+@pytest.mark.asyncio
+async def test_shift_end_reminder_is_persisted_and_pushed_once(monkeypatch):
+    monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
+    monkeypatch.setenv("DB_NAME", "notifications_test")
+    from lib import notify
+
+    notifications = _Notifications()
+    send = AsyncMock()
+    monkeypatch.setattr(notify, "db", SimpleNamespace(notifications=notifications))
+    monkeypatch.setattr(notify, "send_notification", send)
+
+    reminder = {
+        "employee": {"id": "employee-1", "name": "موظف تجريبي"},
+        "work_date": "2026-11-09",
+        "shift_end": "16:00",
+    }
+    await notify.notify_employee_shift_end_reminder(**reminder)
+    await notify.notify_employee_shift_end_reminder(**reminder)
+
+    assert len(notifications.documents) == 1
+    saved = notifications.documents[0]
+    assert saved["id"] == "shift-end-reminder:employee-1:2026-11-09"
+    assert saved["kind"] == "shift_reminder"
+    assert saved["audience"] == "employee"
+    assert saved["message"] == "ينتهي دوامك الساعة 16:00 — لا تنسَ تسجيل الانصراف."
+    send.assert_awaited_once_with(saved)
