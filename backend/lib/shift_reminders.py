@@ -1,11 +1,11 @@
-"""Background delivery for reminders before each employee's scheduled shift."""
+"""Background delivery for reminders around each employee's scheduled shift."""
 
 import asyncio
 import logging
 from datetime import datetime, time, timedelta
 
 from lib.dates import now_local
-from lib.shift import employee_shift, is_working_day
+from lib.shift import employee_shift, is_working_day, shift_minutes
 
 logger = logging.getLogger(__name__)
 
@@ -41,19 +41,58 @@ def due_shift_reminders(employee: dict, now: datetime) -> list[tuple[str, str, i
     return due
 
 
+def due_shift_end_reminders(employee: dict, now: datetime) -> list[tuple[str, str]]:
+    """Return due (work date, shift end) reminders for a local instant."""
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=now_local().tzinfo)
+
+    shift_start, shift_end, _grace = employee_shift(employee)
+    try:
+        start_clock = time.fromisoformat(shift_start)
+        time.fromisoformat(shift_end)
+        duration = shift_minutes(shift_start, shift_end)
+    except (TypeError, ValueError):
+        return []
+
+    due: list[tuple[str, str]] = []
+    # An overnight shift scheduled yesterday may finish just after midnight today.
+    for days_ago in (1, 0):
+        shift_date = now.date() - timedelta(days=days_ago)
+        work_date = shift_date.isoformat()
+        if not is_working_day(work_date, employee.get("work_days")):
+            continue
+
+        shift_at = datetime.combine(shift_date, start_clock, tzinfo=now.tzinfo)
+        shift_end_at = shift_at + timedelta(minutes=duration)
+        if shift_end_at <= now < shift_end_at + REMINDER_GRACE:
+            due.append((work_date, shift_end))
+    return due
+
+
 async def run_shift_reminder_cycle(
     now: datetime | None = None,
     *,
     database=None,
     reminder_sender=None,
+    end_reminder_sender=None,
 ) -> int:
-    """Find due reminders and skip employees who checked in or have approved leave."""
+    """Send start/end reminders, skipping irrelevant attendance and approved leave."""
     if database is None:
         from lib.db import db as database
     if reminder_sender is None:
-        from lib.notify import notify_employee_shift_reminder
+        async def send_start_reminder(**kwargs):
+            from lib.notify import notify_employee_shift_reminder
 
-        reminder_sender = notify_employee_shift_reminder
+            return await notify_employee_shift_reminder(**kwargs)
+
+        reminder_sender = send_start_reminder
+    if end_reminder_sender is None:
+        async def send_end_reminder(**kwargs):
+            from lib.notify import notify_employee_shift_end_reminder
+
+            return await notify_employee_shift_end_reminder(**kwargs)
+
+        end_reminder_sender = send_end_reminder
 
     current = now or now_local()
     cursor = database.employees.find(
@@ -97,6 +136,31 @@ async def run_shift_reminder_cycle(
                 work_date=work_date,
                 shift_start=shift_start,
                 minutes_before=lead_minutes,
+            )
+            attempted += 1
+
+        for work_date, shift_end in due_shift_end_reminders(employee, current):
+            attendance = await database.attendance.find_one(
+                {"employee_id": employee_id, "date": work_date}
+            )
+            if not attendance or not attendance.get("check_in") or attendance.get("check_out"):
+                continue
+
+            approved_leave = await database.leaves.find_one(
+                {
+                    "employee_id": employee_id,
+                    "status": "approved",
+                    "start_date": {"$lte": work_date},
+                    "end_date": {"$gte": work_date},
+                }
+            )
+            if approved_leave:
+                continue
+
+            await end_reminder_sender(
+                employee=employee,
+                work_date=work_date,
+                shift_end=shift_end,
             )
             attempted += 1
     return attempted
