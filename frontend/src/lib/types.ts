@@ -143,6 +143,8 @@ export interface PayrollItem {
   late_minutes: number;
   away_minutes: number;
   late_deduction: number; // auto deduction for lateness + time away
+  absence_days: number;
+  absence_deduction: number; // one base-salary day per absent workday
   bonus_total: number; // manual bonuses inside the cycle
   adjustment_deductions: number; // manual deductions inside the cycle
   cycle_start: string;

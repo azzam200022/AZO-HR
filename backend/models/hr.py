@@ -223,6 +223,8 @@ class PayrollItem(BaseModel):
     late_minutes: int = 0  # lateness billed this cycle
     away_minutes: int = 0  # minutes spent outside the work site during shifts
     late_deduction: float = Field(default=0, ge=0)  # auto deduction for the two above
+    absence_days: int = 0  # completed scheduled workdays with no attendance or approved leave
+    absence_deduction: float = Field(default=0, ge=0)
     bonus_total: float = Field(default=0, ge=0)  # manual bonuses in this cycle
     adjustment_deductions: float = Field(default=0, ge=0)  # manual deductions in this cycle
     cycle_start: str = ""  # hire-date anchored cycle this payslip covers
