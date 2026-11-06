@@ -77,6 +77,7 @@ export default function NotificationBell({ audience }: Props) {
             payroll: "تسوية الراتب",
             leave_request: "طلب إجازة جديد",
             leave_status: "تحديث الإجازة",
+            shift_reminder: "تذكير بموعد الدوام",
           };
           const title = latest ? titleByKind[latest.kind] : "مواردي — تنبيه جديد";
           return showPush(title, latest?.message ?? fallback);
@@ -113,7 +114,7 @@ export default function NotificationBell({ audience }: Props) {
   const notifications = listQuery.data ?? [];
 
   const iconFor = (kind: AppNotification["kind"]) =>
-    kind === "late" || kind === "attendance"
+    kind === "late" || kind === "attendance" || kind === "shift_reminder"
       ? AlarmClock
       : kind === "left_site"
         ? MapPinOff
@@ -126,7 +127,7 @@ export default function NotificationBell({ audience }: Props) {
               : MessageSquare;
 
   const toneFor = (kind: AppNotification["kind"]) =>
-    kind === "late" || kind === "leave_request"
+    kind === "late" || kind === "leave_request" || kind === "shift_reminder"
       ? "bg-amber-100 text-amber-700"
       : kind === "left_site" || kind === "deduction"
         ? "bg-rose-100 text-rose-700"

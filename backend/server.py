@@ -18,6 +18,7 @@ load_dotenv(ROOT_DIR / '.env')
 # MongoDB connection
 from lib.db import client, db, ensure_indexes
 from lib.auth import ensure_manager_account
+from lib.shift_reminders import run_shift_reminder_scheduler
 
 
 # Startup runs before the yield, shutdown after it. Add your own setup/teardown here.
@@ -25,7 +26,17 @@ from lib.auth import ensure_manager_account
 async def lifespan(app: FastAPI):
     app.state.index_task = asyncio.create_task(ensure_indexes())  # background: a big index build must not block boot
     await ensure_manager_account()
+    app.state.shift_reminder_task = asyncio.create_task(
+        run_shift_reminder_scheduler(app.state.index_task)
+    )
     yield
+    app.state.shift_reminder_task.cancel()
+    app.state.index_task.cancel()
+    await asyncio.gather(
+        app.state.shift_reminder_task,
+        app.state.index_task,
+        return_exceptions=True,
+    )
     client.close()
 
 

@@ -54,6 +54,9 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("token", ASCENDING)], name="token", unique=True),
         IndexModel([("role", ASCENDING), ("employee_id", ASCENDING)], name="recipient"),
     ],
+    "notifications": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
+    ],
 }
 
 
