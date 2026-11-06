@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import Navbar from "@/components/layout/Navbar";
 import BottomNav from "@/components/layout/BottomNav";
+import ManagerBottomNav from "@/components/layout/ManagerBottomNav";
 import PresenceTracker from "@/components/layout/PresenceTracker";
 import Dashboard from "@/pages/Dashboard";
 import Employees from "@/pages/Employees";
@@ -59,7 +60,7 @@ function Shell() {
         className={
           isEmployee
             ? "mx-auto min-w-0 w-full max-w-2xl px-3 pt-6 pb-32 sm:px-4 md:px-6"
-            : "mx-auto min-w-0 w-full max-w-7xl px-3 pt-6 pb-12 sm:px-4 md:px-8"
+            : "mx-auto min-w-0 w-full max-w-7xl px-3 pt-6 pb-32 sm:px-4 md:px-8"
         }
       >
         <Routes>
@@ -157,6 +158,7 @@ function Shell() {
         </Routes>
       </main>
       {isEmployee && <BottomNav />}
+      {!isEmployee && <ManagerBottomNav />}
     </div>
   );
 }
