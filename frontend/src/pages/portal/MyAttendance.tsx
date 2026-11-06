@@ -477,7 +477,7 @@ export default function MyAttendance() {
             description="سيظهر المسير هنا بعد اعتماده من الإدارة."
           />
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-6" data-testid="payslip-breakdown">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7" data-testid="payslip-breakdown">
             <div className="rounded-xl bg-slate-50 p-3 text-center">
               <p className="text-[11px] text-slate-500">الأساسي</p>
               <p className="mt-1 text-xs font-bold tabular-nums text-slate-900">{formatIQD(payslip.base_salary)}</p>
@@ -496,6 +496,15 @@ export default function MyAttendance() {
               </p>
               <p className="mt-0.5 text-[10px] text-rose-600">
                 {lateLabel(payslip.late_minutes + payslip.away_minutes)}
+              </p>
+            </div>
+            <div className="rounded-xl bg-rose-50 p-3 text-center" data-testid="payslip-absence-deduction">
+              <p className="text-[11px] text-rose-700">خصم الغياب</p>
+              <p className="mt-1 text-xs font-bold tabular-nums text-rose-800">
+                {formatIQD(payslip.absence_deduction)}
+              </p>
+              <p className="mt-0.5 text-[10px] text-rose-600">
+                {formatNumber(payslip.absence_days)} يوم
               </p>
             </div>
             <div className="rounded-xl bg-teal-50 p-3 text-center">

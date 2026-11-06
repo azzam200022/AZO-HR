@@ -79,8 +79,8 @@ export default function Payroll() {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       toast.success(
         result.created > 0
-          ? `تم توليد المسير — ${formatNumber(result.created)} بند جديد، وتحديث خصم التأخير لـ ${formatNumber(result.updated)} بند`
-          : `تم تحديث خصم التأخير لـ ${formatNumber(result.updated)} بند في المسير`,
+          ? `تم توليد المسير — ${formatNumber(result.created)} بند جديد، وتحديث خصومات الغياب والتأخير لـ ${formatNumber(result.updated)} بند`
+          : `تم تحديث خصومات الغياب والتأخير لـ ${formatNumber(result.updated)} بند في المسير`,
       );
     },
     onError: (error) => toast.error(errorText(error)),
@@ -179,7 +179,7 @@ export default function Payroll() {
     <FadeIn>
       <PageHeader
         title="مسير الرواتب"
-        description={`توليد واعتماد رواتب شهر ${monthLabel(month)} — خصم التأخير ومغادرة الموقع يُحتسب تلقائياً.`}
+        description={`توليد واعتماد رواتب شهر ${monthLabel(month)} — خصم الغياب والتأخير ومغادرة الموقع يُحتسب تلقائياً.`}
         testid="payroll-title"
         action={
           <div className="flex flex-wrap items-center gap-2">
@@ -243,6 +243,7 @@ export default function Payroll() {
                 <TableHead>حوافز / خصومات</TableHead>
                 <TableHead>دقائق التأخير</TableHead>
                 <TableHead>خصم التأخير</TableHead>
+                <TableHead>خصم الغياب</TableHead>
                 <TableHead>الصافي</TableHead>
                 <TableHead>الحالة</TableHead>
                 <TableHead className="text-end">إجراءات</TableHead>
@@ -303,6 +304,21 @@ export default function Payroll() {
                     data-testid={`payroll-late-deduction-${item.id}`}
                   >
                     {item.late_deduction > 0 ? formatIQD(item.late_deduction) : <span className="text-slate-400">—</span>}
+                  </TableCell>
+                  <TableCell
+                    className="text-sm tabular-nums text-rose-700"
+                    data-testid={`payroll-absence-deduction-${item.id}`}
+                  >
+                    {item.absence_deduction > 0 ? (
+                      <span className="inline-flex flex-col">
+                        <span>{formatIQD(item.absence_deduction)}</span>
+                        <span className="text-[10px] text-rose-500">
+                          {formatNumber(item.absence_days)} يوم غياب
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-sm font-bold tabular-nums text-slate-900">
                     {formatIQD(item.net)}
@@ -513,7 +529,7 @@ export default function Payroll() {
           <DialogHeader>
             <DialogTitle>تعديل بند: {editing ? employeeName(editing.employee_id) : ""}</DialogTitle>
             <DialogDescription>
-              يُعاد حساب الصافي تلقائياً بعد الحفظ. خصم التأخير محسوب من سجل الحضور ولا يُعدَّل يدوياً.
+              يُعاد حساب الصافي تلقائياً بعد الحفظ. خصما الغياب والتأخير يُحتسبان من سجل الحضور ولا يُعدّلان يدوياً.
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

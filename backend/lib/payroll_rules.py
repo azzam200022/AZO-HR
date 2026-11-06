@@ -5,6 +5,7 @@ calendar month — so a new cycle's lateness can never be charged to a settled o
 """
 
 from lib.adjustments import adjustment_totals
+from lib.attendance_calendar import daily_attendance_records
 from lib.cycle import pay_cycle
 from lib.dates import now_time, today_iso
 from lib.db import db
@@ -27,6 +28,34 @@ def minute_rate(base_salary: float, shift_start: str, shift_end: str) -> float:
     return per_day / minutes
 
 
+def absence_days_for_cycle(
+    employee: dict,
+    start: str,
+    end: str,
+    attendance_docs: list[dict],
+    leave_docs: list[dict],
+    *,
+    today: str,
+    now: str,
+) -> int:
+    """Count completed, scheduled workdays with no punch or approved leave."""
+    records = daily_attendance_records(
+        employee,
+        start,
+        end,
+        attendance_docs,
+        leave_docs,
+        today=today,
+        now=now,
+    )
+    return sum(record.status == "absent" for record in records)
+
+
+def absence_deduction(base_salary: float, absent_days: int) -> float:
+    """Deduct one thirtieth of the base salary for each absent workday."""
+    return round((float(base_salary) / PAID_DAYS_PER_MONTH) * absent_days, 2)
+
+
 async def cycle_attendance(employee_id: str, start: str, end: str) -> list[dict]:
     """Attendance of one cycle; archived cycles are read back from the archive."""
     live = await db.attendance.find(
@@ -39,11 +68,22 @@ async def cycle_attendance(employee_id: str, start: str, end: str) -> list[dict]
     ).to_list(500)
 
 
-async def late_summary(employee: dict, on: str | None = None) -> tuple[int, int, float]:
+async def late_summary(
+    employee: dict,
+    on: str | None = None,
+    *,
+    attendance_docs: list[dict] | None = None,
+    today: str | None = None,
+    now: str | None = None,
+) -> tuple[int, int, float]:
     """(late_minutes, away_minutes, deduction) over the cycle containing `on`."""
     shift_start, shift_end, grace = employee_shift(employee)
     start, end = pay_cycle(employee, on)
-    docs = await cycle_attendance(employee["id"], start, end)
+    docs = (
+        attendance_docs
+        if attendance_docs is not None
+        else await cycle_attendance(employee["id"], start, end)
+    )
 
     work_days = employee.get("work_days")
     total_late = sum(
@@ -56,8 +96,8 @@ async def late_summary(employee: dict, on: str | None = None) -> tuple[int, int,
         )
         for d in docs
     )
-    now = now_time()
-    today = today_iso()
+    now = now or now_time()
+    today = today or today_iso()
     total_away = sum(
         effective_away_minutes(d, now, today, shift_start, shift_end)
         for d in docs
@@ -70,10 +110,63 @@ async def late_summary(employee: dict, on: str | None = None) -> tuple[int, int,
     return total_late, total_away, deduction
 
 
+async def absence_summary(
+    employee: dict,
+    on: str | None = None,
+    *,
+    attendance_docs: list[dict] | None = None,
+    today: str | None = None,
+    now: str | None = None,
+) -> tuple[int, float]:
+    """(absent_workdays, deduction) for the employee's cycle containing `on`."""
+    start, end = pay_cycle(employee, on)
+    docs = (
+        attendance_docs
+        if attendance_docs is not None
+        else await cycle_attendance(employee["id"], start, end)
+    )
+    leave_docs = await db.leaves.find(
+        {
+            "employee_id": employee["id"],
+            "status": "approved",
+            "start_date": {"$lte": end},
+            "end_date": {"$gte": start},
+        }
+    ).to_list(500)
+    absent_days = absence_days_for_cycle(
+        employee,
+        start,
+        end,
+        docs,
+        leave_docs,
+        today=today or today_iso(),
+        now=now or now_time(),
+    )
+    return absent_days, absence_deduction(
+        float(employee.get("base_salary", 0)),
+        absent_days,
+    )
+
+
 async def cycle_figures(employee: dict, on: str | None = None) -> dict:
     """Everything the payroll item needs for the cycle containing `on`."""
     start, end = pay_cycle(employee, on)
-    late, away, late_deduction = await late_summary(employee, on)
+    docs = await cycle_attendance(employee["id"], start, end)
+    today, now = today_iso(), now_time()
+    late, away, late_deduction = await late_summary(
+        employee,
+        on,
+        attendance_docs=docs,
+        today=today,
+        now=now,
+    )
+    absent_days, absence_amount = await absence_summary(
+        employee,
+        on,
+        attendance_docs=docs,
+        today=today,
+        now=now,
+    )
     bonus, manual_deduction = await adjustment_totals(employee, start, end)
     return {
         "cycle_start": start,
@@ -81,6 +174,8 @@ async def cycle_figures(employee: dict, on: str | None = None) -> dict:
         "late_minutes": late,
         "away_minutes": away,
         "late_deduction": late_deduction,
+        "absence_days": absent_days,
+        "absence_deduction": absence_amount,
         "bonus_total": bonus,
         "adjustment_deductions": manual_deduction,
     }
@@ -95,7 +190,8 @@ def net_of(item: dict) -> float:
         + float(item.get("bonus_total", 0))
         - float(item.get("deductions", 0))
         - float(item.get("adjustment_deductions", 0))
-        - float(item.get("late_deduction", 0)),
+        - float(item.get("late_deduction", 0))
+        - float(item.get("absence_deduction", 0)),
     )
 
 
