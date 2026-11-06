@@ -1,7 +1,9 @@
 from copy import deepcopy
+from datetime import datetime
 from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock
 import sys
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -115,6 +117,56 @@ async def test_presence_counts_minutes_between_midshift_departure_and_return(mon
     assert saved["away_minutes"] == 25
     assert saved["outside_since"] == ""
     assert saved["check_out"] == ""
+
+
+@pytest.mark.asyncio
+async def test_offline_location_replay_keeps_departure_return_and_ignores_retries(monkeypatch):
+    clock = {"now": "10:00", "distance": 500}
+    record = attendance_record()
+    staff = employee()
+    database = make_records(monkeypatch, record, staff, clock)
+    zone = ZoneInfo("Asia/Baghdad")
+    left_at = datetime(2026, 11, 4, 10, 0, tzinfo=zone)
+    returned_at = datetime(2026, 11, 4, 10, 25, tzinfo=zone)
+
+    await punch.record_presence(
+        staff,
+        33.3152,
+        44.3661,
+        observed_at=left_at,
+        event_id="left-1",
+        accuracy_m=7.5,
+    )
+    clock.update(now="10:25", distance=100)
+    result = await punch.record_presence(
+        staff,
+        33.3150,
+        44.3660,
+        observed_at=returned_at,
+        event_id="return-1",
+        accuracy_m=6.0,
+    )
+
+    saved = database.attendance.documents[0]
+    assert result["away_minutes"] == 25
+    assert saved["away_minutes"] == 25
+    assert saved["outside_since"] == ""
+    assert saved["_presence_cursor_ms"] == int(returned_at.timestamp() * 1000)
+    assert saved["away_intervals"][0]["left_at"] == "2026-11-04T10:00:00+03:00"
+    assert saved["away_intervals"][0]["returned_at"] == "2026-11-04T10:25:00+03:00"
+    assert saved["away_intervals"][0]["left_lat"] == 33.3152
+    assert saved["away_intervals"][0]["return_lng"] == 44.366
+    assert saved["away_intervals"][0]["left_accuracy_m"] == 7.5
+
+    duplicate = await punch.record_presence(
+        staff,
+        33.3152,
+        44.3661,
+        observed_at=left_at,
+        event_id="left-1",
+    )
+    assert duplicate["_duplicate"] is True
+    assert database.attendance.documents[0]["away_minutes"] == 25
 
 
 @pytest.mark.asyncio

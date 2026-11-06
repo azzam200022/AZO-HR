@@ -70,6 +70,22 @@ export interface SessionInfo {
   employee_id: string;
 }
 
+export interface AwayInterval {
+  left_at: string;
+  left_lat: number | null;
+  left_lng: number | null;
+  left_distance_m: number | null;
+  left_accuracy_m: number | null;
+  returned_at: string;
+  return_lat: number | null;
+  return_lng: number | null;
+  return_distance_m: number | null;
+  return_accuracy_m: number | null;
+  closed_at: string;
+  ended_by: "return" | "shift_end" | "check_out" | "";
+  minutes: number;
+}
+
 export interface AccessCodeResult {
   employee_id: string;
   access_code: string;
@@ -98,11 +114,13 @@ export interface AttendanceRecord {
   check_in: string; // HH:MM — "" when unknown
   check_in_at: string | null; // precise UTC instant for live elapsed time
   check_out: string; // HH:MM
+  check_out_at: string | null; // precise local-zone instant for offline event replay
   location_id: string; // "" when punch had no geofence
   distance_m: number | null;
   late_minutes: number; // minutes late against the employee's shift start
   away_minutes: number; // minutes spent outside the work location during the shift
   outside_since: string; // HH:MM while currently away, "" when inside
+  away_intervals: AwayInterval[];
   last_seen: string; // HH:MM of the last location heartbeat
   created_at: string;
 }

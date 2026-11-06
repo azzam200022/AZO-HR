@@ -4,7 +4,7 @@ import { LocalNotifications } from "@capacitor/local-notifications";
 import { API_ORIGIN } from "@/lib/api";
 
 interface BackgroundTrackingPlugin {
-  start(options: { apiBaseUrl: string }): Promise<{ active: boolean }>;
+  start(options: { apiBaseUrl: string; employeeId: string }): Promise<{ active: boolean }>;
   stop(): Promise<{ active: boolean }>;
   getStatus(): Promise<{ active: boolean; manuallyStopped: boolean }>;
 }
@@ -53,9 +53,15 @@ export async function isBackgroundLocationManuallyStopped() {
   }
 }
 
-export async function startBackgroundLocationTracking(requestMissingPermissions = false) {
+export async function startBackgroundLocationTracking(
+  employeeId: string,
+  requestMissingPermissions = false,
+) {
   if (!supportsBackgroundLocation()) {
     throw new Error("التتبع عند إغلاق التطبيق متاح في نسخة Android فقط.");
+  }
+  if (!employeeId) {
+    throw new Error("تعذر تحديد حساب الموظف لحفظ مواقع الانقطاع بأمان.");
   }
   if (!API_ORIGIN) {
     throw new Error("تعذر إعداد عنوان الخادم للموقع الخلفي في نسخة التطبيق.");
@@ -83,7 +89,7 @@ export async function startBackgroundLocationTracking(requestMissingPermissions 
       throw new Error("يلزم السماح بالإشعارات ليظهر تنبيه التتبع المستمر.");
     }
 
-    return BackgroundTracking.start({ apiBaseUrl: API_ORIGIN });
+    return BackgroundTracking.start({ apiBaseUrl: API_ORIGIN, employeeId });
   })();
   startInFlight = request;
   try {

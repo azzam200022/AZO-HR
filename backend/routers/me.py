@@ -5,6 +5,8 @@ that is what makes cross-employee access (IDOR/BOLA) structurally impossible rat
 merely checked.
 """
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from lib.auth import Principal, require_employee
@@ -29,6 +31,8 @@ from models.hr import (
     MessageSend,
     Notification,
     NotificationSummary,
+    PresenceLocationBatch,
+    PresenceLocationBatchResult,
     PayrollItem,
     PresenceStatus,
     SelfLeaveCreate,
@@ -151,6 +155,66 @@ async def my_presence(payload: SelfPunch, principal: Principal = Depends(require
         total_late_minutes=late + away,
         tracking=bool(doc.get("_tracking", False)),
         checked_out=bool(doc.get("check_out")),
+    )
+
+
+@router.post("/presence/batch", response_model=PresenceLocationBatchResult)
+async def my_presence_batch(
+    payload: PresenceLocationBatch,
+    principal: Principal = Depends(require_employee),
+):
+    """Replay locally queued Android fixes in timestamp order after connectivity returns."""
+    if any(sample.employee_id != principal.employee_id for sample in payload.samples):
+        raise HTTPException(status_code=403, detail="لا يمكن مزامنة مواقع حساب موظف آخر")
+
+    employee = await _my_employee(principal)
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    ordered = sorted(payload.samples, key=lambda sample: sample.observed_at_ms)
+    acknowledged_ids: list[str] = []
+    processed = 0
+    ignored = 0
+    checked_out = False
+
+    for sample in ordered:
+        too_far_ahead = sample.observed_at_ms > now_ms + 60_000
+        too_old = sample.observed_at_ms < now_ms - 30 * 24 * 60 * 60 * 1000
+        if too_far_ahead or too_old:
+            acknowledged_ids.append(sample.event_id)
+            ignored += 1
+            continue
+
+        observed_at = datetime.fromtimestamp(
+            sample.observed_at_ms / 1000,
+            tz=timezone.utc,
+        )
+        try:
+            result = await record_presence(
+                employee,
+                sample.lat,
+                sample.lng,
+                observed_at=observed_at,
+                event_id=sample.event_id,
+                accuracy_m=sample.accuracy_m,
+            )
+        except HTTPException as exc:
+            if exc.status_code not in {404, 409}:
+                raise
+            ignored += 1
+            acknowledged_ids.append(sample.event_id)
+            continue
+
+        if result.get("_duplicate") or result.get("_ignored"):
+            ignored += 1
+        else:
+            processed += 1
+        checked_out = checked_out or bool(result.get("check_out"))
+        acknowledged_ids.append(sample.event_id)
+
+    return PresenceLocationBatchResult(
+        acknowledged_ids=acknowledged_ids,
+        processed=processed,
+        ignored=ignored,
+        checked_out=checked_out,
     )
 
 

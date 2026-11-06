@@ -179,7 +179,7 @@ export default function MyAttendance() {
 
     setBackgroundTrackingBusy(true);
     try {
-      await startBackgroundLocationTracking(true);
+      await startBackgroundLocationTracking(me.id, true);
       setBackgroundLocationConsent(me.id, true);
       setBackgroundTrackingConsent(true);
       setBackgroundTrackingActive(true);
@@ -331,10 +331,10 @@ export default function MyAttendance() {
                   <p className="text-sm font-semibold text-white">تتبع الموقع أثناء الدوام</p>
                   <p className="mt-1 text-xs leading-relaxed text-teal-100">
                     {backgroundTrackingActive
-                      ? "التتبع نشط. بعد نهاية الوردية يستمر حتى رصد مغادرتك لموقع العمل، ثم يتوقف تلقائياً. يبقى إشعار Android ظاهراً ويمكنك إيقافه يدوياً."
+                      ? "التتبع نشط أثناء الدوام وحتى رصد المغادرة بعد الوردية. عند انقطاع الإنترنت تُحفظ النقاط مؤقتاً على الجهاز ثم تُرسل عند عودة الاتصال. يحتفظ النظام بوقت وإحداثيات الخروج والعودة ومدتهما، ولا يحفظ مسار الحركة كاملاً."
                       : backgroundTrackingConsent
-                        ? "موافقتك محفوظة لهذا الجهاز؛ سيبدأ التتبع تلقائياً مع بصمة الحضور، ويستمر بعد نهاية الوردية حتى رصد المغادرة."
-                        : "موافقة لمرة واحدة: بعد السماح للموقع والإشعارات سيبدأ التتبع تلقائياً مع الحضور. يستمر بعد نهاية الوردية حتى رصد المغادرة، مع إشعار دائم، ولا يُحفظ مسار الحركة."}
+                        ? "موافقتك محفوظة لهذا الجهاز؛ سيبدأ التتبع تلقائياً مع الحضور. عند انقطاع الإنترنت تُحفظ النقاط مؤقتاً ثم تُرسل عند عودة الاتصال. يحتفظ النظام بوقت وإحداثيات الخروج والعودة ومدتهما، ولا يحفظ مسار الحركة كاملاً."
+                        : "موافقة لمرة واحدة: يبدأ التتبع مع الحضور ويستمر حتى رصد المغادرة. عند انقطاع الإنترنت تُحفظ النقاط مؤقتاً على الجهاز ثم تُرسل عند عودة الاتصال. يحتفظ النظام بوقت وإحداثيات الخروج والعودة ومدة الغياب، ولا يحفظ مسار الحركة كاملاً."}
                   </p>
                   {backgroundTrackingActive ? (
                     <Button

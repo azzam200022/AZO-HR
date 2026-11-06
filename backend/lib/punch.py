@@ -1,7 +1,9 @@
 """Shared punch logic so the manager console and the employee portal enforce the same
 rules — geofence, shift window, lateness, and time spent away from the site."""
 
-from datetime import date as date_type, timedelta, timezone
+import os
+from datetime import date as date_type, datetime, time as time_type, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 
@@ -141,10 +143,91 @@ def _close_away_interval(doc: dict, now: str, shift_start: str, shift_end: str) 
     """Fold an open away interval into away_minutes, capped at the shift end."""
     if not (doc.get("outside_since") or ""):
         return {}
-    return {
+    updates = {
         "away_minutes": away_minutes_at(doc, now, shift_start, shift_end),
         "outside_since": "",
+        "outside_since_at": "",
     }
+    intervals = list(doc.get("away_intervals") or [])
+    open_interval = next((item for item in reversed(intervals) if not item.get("closed_at")), None)
+    if open_interval:
+        total = updates["away_minutes"]
+        open_interval["minutes"] = max(0, total - int(doc.get("away_minutes", 0)))
+        open_interval["closed_at"] = _wall_time_iso(doc.get("date", today_iso()), now, shift_start, shift_end)
+        open_interval["ended_by"] = "check_out"
+        updates["away_intervals"] = intervals
+    return updates
+
+
+def _app_timezone() -> ZoneInfo:
+    return ZoneInfo(os.environ.get("APP_TZ") or "Asia/Baghdad")
+
+
+def _wall_time_iso(work_date: str, hhmm: str, shift_start: str, shift_end: str) -> str:
+    day = date_type.fromisoformat(work_date)
+    clock = time_type.fromisoformat(hhmm)
+    if to_minutes(shift_end) <= to_minutes(shift_start) and to_minutes(hhmm) < to_minutes(shift_start):
+        day += timedelta(days=1)
+    return datetime.combine(day, clock, tzinfo=_app_timezone()).isoformat(timespec="seconds")
+
+
+def _parse_local_instant(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=_app_timezone())
+    return parsed.astimezone(_app_timezone())
+
+
+def _shift_end_local(work_date: str, shift_start: str, shift_end: str) -> datetime:
+    day = date_type.fromisoformat(work_date)
+    if to_minutes(shift_end) <= to_minutes(shift_start):
+        day += timedelta(days=1)
+    return datetime.combine(
+        day,
+        time_type.fromisoformat(shift_end),
+        tzinfo=_app_timezone(),
+    )
+
+
+def _open_interval(
+    doc: dict,
+    intervals: list[dict],
+    attendance_date: str,
+    shift_start: str,
+    shift_end: str,
+) -> dict | None:
+    interval = next((item for item in reversed(intervals) if not item.get("closed_at")), None)
+    if interval or not (doc.get("outside_since") or ""):
+        return interval
+
+    # Older attendance documents only have the HH:MM state. Reconstruct its local instant
+    # so the first synced batch can close that interval without losing its earlier minutes.
+    left_at = doc.get("outside_since_at") or _wall_time_iso(
+        attendance_date, doc["outside_since"], shift_start, shift_end
+    )
+    interval = {
+        "left_at": left_at,
+        "left_lat": None,
+        "left_lng": None,
+        "left_distance_m": None,
+        "left_accuracy_m": None,
+        "returned_at": "",
+        "return_lat": None,
+        "return_lng": None,
+        "return_distance_m": None,
+        "return_accuracy_m": None,
+        "closed_at": "",
+        "ended_by": "",
+        "minutes": 0,
+    }
+    intervals.append(interval)
+    return interval
+
 
 async def punch_out(employee_id: str, *, notify_manager: bool = True) -> dict:
     work_date = today_iso()
@@ -157,9 +240,11 @@ async def punch_out(employee_id: str, *, notify_manager: bool = True) -> dict:
         raise HTTPException(status_code=404, detail="لا يوجد تسجيل حضور لهذا اليوم")
     if doc.get("check_out"):
         raise HTTPException(status_code=409, detail="تم تسجيل الانصراف مسبقاً")
-    now = now_time()
+    checkout_local = now_local()
+    now = checkout_local.strftime("%H:%M")
     updates = {
         "check_out": now,
+        "check_out_at": checkout_local.isoformat(timespec="seconds"),
         "last_seen": now,
         **_close_away_interval(doc, now, shift_start, shift_end),
     }
@@ -174,32 +259,71 @@ async def punch_out(employee_id: str, *, notify_manager: bool = True) -> dict:
         )
     return fresh
 
-async def record_presence(employee: dict, lat: float | None, lng: float | None) -> dict:
+async def record_presence(
+    employee: dict,
+    lat: float | None,
+    lng: float | None,
+    *,
+    observed_at: datetime | None = None,
+    event_id: str | None = None,
+    accuracy_m: float | None = None,
+) -> dict:
     """Heartbeat from the employee portal while punched in.
 
     Leaving the work location during a scheduled shift accrues away_minutes. A departure
     first observed after the shift ends closes the attendance record as a checkout instead.
+    Historical timestamps are used only by the authenticated offline-sync route.
     """
-    work_date = today_iso()
     shift_start, shift_end, _grace = employee_shift(employee)
+    if observed_at is None:
+        calendar_date = today_iso()
+        now = now_time()
+        observed_local = datetime.combine(
+            date_type.fromisoformat(calendar_date),
+            time_type.fromisoformat(now),
+            tzinfo=_app_timezone(),
+        )
+        event_timestamp_ms = None
+    else:
+        if observed_at.tzinfo is None:
+            observed_at = observed_at.replace(tzinfo=timezone.utc)
+        observed_local = observed_at.astimezone(_app_timezone())
+        calendar_date = observed_local.date().isoformat()
+        now = observed_local.strftime("%H:%M")
+        event_timestamp_ms = int(observed_at.timestamp() * 1000)
+    work_date = calendar_date
     doc, attendance_date = await _attendance_for_shift(
         employee["id"], work_date, shift_start, shift_end
     )
     if not doc:
         raise HTTPException(status_code=404, detail="لا يوجد تسجيل حضور لهذا اليوم")
     if doc.get("check_out"):
-        raise HTTPException(status_code=409, detail="تم تسجيل الانصراف — لا حاجة لتتبع الموقع")
+        if observed_at is None:
+            raise HTTPException(status_code=409, detail="تم تسجيل الانصراف — لا حاجة لتتبع الموقع")
+        checkout_at = _parse_local_instant(doc.get("check_out_at")) or datetime.fromisoformat(
+            _wall_time_iso(attendance_date, doc["check_out"], shift_start, shift_end)
+        )
+        if observed_local > checkout_at:
+            return {**doc, "_inside": True, "_distance": None, "_tracking": False, "_ignored": True}
+
+    if event_id and event_timestamp_ms is not None:
+        cursor_ms = int(doc.get("_presence_cursor_ms", 0))
+        if event_timestamp_ms <= cursor_ms:
+            return {**doc, "_inside": True, "_distance": None, "_tracking": True, "_duplicate": True}
 
     location_doc = await _employee_location(employee)
-    now = now_time()
 
     if not location_doc:
-        await db.attendance.update_one({"id": doc["id"]}, {"$set": {"last_seen": now}})
+        updates = {"last_seen": now}
+        if event_id and event_timestamp_ms is not None:
+            updates["_presence_cursor_ms"] = event_timestamp_ms
+        await db.attendance.update_one({"id": doc["id"]}, {"$set": updates})
         return {**doc, "last_seen": now, "_inside": True, "_distance": None, "_tracking": False}
 
     if lat is None or lng is None:
         raise HTTPException(status_code=400, detail="تعذر تحديد موقعك الجغرافي")
 
+    now = observed_local.strftime("%H:%M")
     distance = haversine_m(lat, lng, location_doc["latitude"], location_doc["longitude"])
     inside = distance <= location_doc.get("radius_m", 150)
     scheduled_day = is_working_day(attendance_date, employee.get("work_days"))
@@ -209,20 +333,106 @@ async def record_presence(employee: dict, lat: float | None, lng: float | None) 
     after_shift = scheduled_day and elapsed > duration
 
     updates: dict = {"last_seen": now}
+    if event_id and event_timestamp_ms is not None:
+        updates["_presence_cursor_ms"] = event_timestamp_ms
+    intervals = list(doc.get("away_intervals") or [])
+    open_interval = _open_interval(doc, intervals, attendance_date, shift_start, shift_end)
+    interval_start = _parse_local_instant(
+        doc.get("outside_since_at") or (open_interval or {}).get("left_at")
+    )
+
     if inside:
-        updates.update(_close_away_interval(doc, now, shift_start, shift_end))
+        if doc.get("outside_since") and open_interval:
+            shift_end_at = _shift_end_local(attendance_date, shift_start, shift_end)
+            billable_end = min(observed_local, shift_end_at)
+            started_at = interval_start or observed_local
+            minutes_away = max(0, int((billable_end - started_at).total_seconds() // 60))
+            open_interval.update(
+                {
+                    "returned_at": observed_local.isoformat(timespec="seconds"),
+                    "return_lat": lat,
+                    "return_lng": lng,
+                    "return_distance_m": round(distance, 1),
+                    "return_accuracy_m": accuracy_m,
+                    "closed_at": observed_local.isoformat(timespec="seconds"),
+                    "ended_by": "return",
+                    "minutes": minutes_away,
+                }
+            )
+            updates.update(
+                {
+                    "away_minutes": int(doc.get("away_minutes", 0)) + minutes_away,
+                    "outside_since": "",
+                    "outside_since_at": "",
+                    "away_intervals": intervals,
+                }
+            )
+        elif doc.get("outside_since"):
+            updates.update(_close_away_interval(doc, now, shift_start, shift_end))
     elif after_shift and doc.get("outside_since"):
         # A departure that began during the shift is charged only through shift end. If the
         # employee is still outside then, close the day at the scheduled end and stop tracking.
-        updates.update(_close_away_interval(doc, shift_end, shift_start, shift_end))
+        if open_interval:
+            shift_end_at = _shift_end_local(attendance_date, shift_start, shift_end)
+            started_at = interval_start or shift_end_at
+            minutes_away = max(0, int((shift_end_at - started_at).total_seconds() // 60))
+            open_interval.update(
+                {
+                    "closed_at": shift_end_at.isoformat(timespec="seconds"),
+                    "ended_by": "shift_end",
+                    "minutes": minutes_away,
+                }
+            )
+            updates.update(
+                {
+                    "away_minutes": int(doc.get("away_minutes", 0)) + minutes_away,
+                    "outside_since": "",
+                    "outside_since_at": "",
+                    "away_intervals": intervals,
+                }
+            )
+        else:
+            updates.update(_close_away_interval(doc, shift_end, shift_start, shift_end))
         updates["check_out"] = shift_end
+        updates["check_out_at"] = _shift_end_local(
+            attendance_date, shift_start, shift_end
+        ).isoformat(timespec="seconds")
     elif after_shift:
         # A new departure first observed after shift end is recorded at the location heartbeat.
-        updates.update({"check_out": now, "outside_since": ""})
+        updates.update(
+            {
+                "check_out": now,
+                "check_out_at": observed_local.isoformat(timespec="seconds"),
+                "outside_since": "",
+            }
+        )
     elif within_window and not doc.get("outside_since"):
         updates["outside_since"] = now
+        left_at = observed_local.isoformat(timespec="seconds")
+        updates["outside_since_at"] = left_at
+        intervals.append(
+            {
+                "left_at": left_at,
+                "left_lat": lat,
+                "left_lng": lng,
+                "left_distance_m": round(distance, 1),
+                "left_accuracy_m": accuracy_m,
+                "returned_at": "",
+                "return_lat": None,
+                "return_lng": None,
+                "return_distance_m": None,
+                "return_accuracy_m": None,
+                "closed_at": "",
+                "ended_by": "",
+                "minutes": 0,
+            }
+        )
+        updates["away_intervals"] = intervals
         # One alert per departure — re-entering and leaving again raises a fresh one.
         await notify_left_site(employee, location_doc["name"], now, distance)
+    elif event_id and event_timestamp_ms is not None:
+        # Persist cursor progress even when the sample is outside the scheduled window.
+        pass
 
     await db.attendance.update_one({"id": doc["id"]}, {"$set": updates})
     fresh = await db.attendance.find_one({"id": doc["id"]})
@@ -234,7 +444,14 @@ async def record_presence(employee: dict, lat: float | None, lng: float | None) 
             message=f"سُجّل انصراف {employee.get('name', '')} تلقائياً الساعة {updates['check_out']}.",
         )
     if fresh.get("outside_since"):
-        fresh["away_minutes"] = effective_away_minutes(
-            fresh, now, today_iso(), shift_start, shift_end
-        )
+        if event_id and interval_start:
+            shift_end_at = _shift_end_local(attendance_date, shift_start, shift_end)
+            billable_end = min(observed_local, shift_end_at)
+            fresh["away_minutes"] = int(fresh.get("away_minutes", 0)) + max(
+                0, int((billable_end - interval_start).total_seconds() // 60)
+            )
+        else:
+            fresh["away_minutes"] = effective_away_minutes(
+                fresh, now, calendar_date, shift_start, shift_end
+            )
     return {**fresh, "_inside": inside, "_distance": distance, "_tracking": True}
