@@ -41,8 +41,8 @@ public class BackgroundLocationService extends Service implements LocationListen
     private static final String CHANNEL_ID = "azo-work-location";
     private static final int NOTIFICATION_ID = 8214;
     private static final String PREFS = "azo_background_location";
-    private static final long UPDATE_INTERVAL_MS = 30_000L;
-    private static final long MIN_SEND_INTERVAL_MS = 25_000L;
+    private static final long UPDATE_INTERVAL_MS = 5_000L;
+    private static final long MIN_SEND_INTERVAL_MS = 5_000L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService network = Executors.newSingleThreadExecutor();

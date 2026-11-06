@@ -76,8 +76,8 @@ export default function PresenceTracker() {
         const position = await new Promise<GeolocationPosition>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(resolve, reject, {
             enableHighAccuracy: true,
-            timeout: 12_000,
-            maximumAge: 30_000,
+            timeout: 8_000,
+            maximumAge: 0,
           });
         });
         if (cancelled) return;
@@ -101,7 +101,7 @@ export default function PresenceTracker() {
       if (document.visibilityState === "visible") ping();
     };
     ping();
-    const timer = window.setInterval(ping, 30_000);
+    const timer = window.setInterval(ping, 5_000);
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       cancelled = true;

@@ -118,6 +118,27 @@ async def test_presence_counts_minutes_between_midshift_departure_and_return(mon
 
 
 @pytest.mark.asyncio
+async def test_departure_notification_fires_once_until_employee_returns(monkeypatch):
+    clock = {"now": "10:00", "distance": 500}
+    record = attendance_record()
+    staff = employee()
+    make_records(monkeypatch, record, staff, clock)
+    notify = AsyncMock()
+    monkeypatch.setattr(punch, "notify_left_site", notify)
+
+    await punch.record_presence(staff, 0, 0)
+    clock.update(now="10:00", distance=520)
+    await punch.record_presence(staff, 0, 0)
+    assert notify.await_count == 1
+
+    clock.update(now="10:01", distance=100)
+    await punch.record_presence(staff, 0, 0)
+    clock.update(now="10:02", distance=500)
+    await punch.record_presence(staff, 0, 0)
+    assert notify.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_departure_after_shift_end_records_checkout(monkeypatch):
     clock = {"now": "16:05", "distance": 500}
     record = attendance_record()
