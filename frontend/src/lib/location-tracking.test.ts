@@ -44,6 +44,7 @@ function attendance(overrides: Partial<AttendanceRecord> = {}): AttendanceRecord
     late_minutes: 0,
     away_minutes: 0,
     outside_since: "",
+    outside_since_at: "",
     away_intervals: [],
     last_seen: "23:59",
     created_at: "2026-11-06T19:00:00Z",

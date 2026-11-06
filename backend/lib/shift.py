@@ -80,6 +80,11 @@ def worked_minutes(check_in: str, check_out: str) -> int:
     return end - start
 
 
+def onsite_worked_minutes(check_in: str, check_out: str, away_minutes: int = 0) -> int:
+    """Punch duration minus time away from the assigned work location."""
+    return max(0, worked_minutes(check_in, check_out) - max(0, away_minutes))
+
+
 def minutes_since_start(now: str, shift_start: str) -> int:
     """Signed minutes from the shift start to `now`, normalised to (-720, +720].
 

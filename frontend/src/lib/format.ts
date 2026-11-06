@@ -38,12 +38,13 @@ export const todayStr = () => {
 
 export const currentMonthStr = () => todayStr().slice(0, 7);
 
-export const durationLabel = (checkIn: string, checkOut: string) => {
+export const durationLabel = (checkIn: string, checkOut: string, awayMinutes = 0) => {
   if (!checkIn || !checkOut) return "—";
   const [inH, inM] = checkIn.split(":").map(Number);
   const [outH, outM] = checkOut.split(":").map(Number);
   let minutes = outH * 60 + outM - (inH * 60 + inM);
   if (minutes < 0) minutes += 24 * 60; // night shift crossing midnight
+  minutes = Math.max(0, minutes - Math.max(0, awayMinutes));
   return `${Math.floor(minutes / 60)}س ${minutes % 60}د`;
 };
 

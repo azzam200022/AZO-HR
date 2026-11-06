@@ -342,7 +342,9 @@ export default function EmployeeReportPanel({
                         {rec.status === "present" ? rec.check_out || "—" : "—"}
                       </td>
                       <td className="px-2 py-1.5 text-center tabular-nums text-teal-700">
-                        {rec.status === "present" ? durationLabel(rec.check_in, rec.check_out) : "—"}
+                        {rec.status === "present"
+                          ? durationLabel(rec.check_in, rec.check_out, rec.away_minutes)
+                          : "—"}
                       </td>
                       <td
                         className={cn(

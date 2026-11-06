@@ -7,7 +7,7 @@ from lib.dates import aware, current_month, now_time, today_iso
 from lib.db import db
 from lib.leave_cycle import cycle_bounds, overlaps_cycle
 from lib.payroll_rules import cycle_attendance
-from lib.shift import employee_shift, is_working_day, late_minutes, worked_minutes
+from lib.shift import employee_shift, is_working_day, late_minutes, onsite_worked_minutes
 from models.hr import (
     AttendanceRecord,
     Employee,
@@ -18,9 +18,9 @@ from models.hr import (
 )
 
 
-def _minutes(check_in: str, check_out: str) -> int:
-    """Night-shift aware worked minutes."""
-    return worked_minutes(check_in, check_out)
+def _minutes(check_in: str, check_out: str, away_minutes: int = 0) -> int:
+    """Net on-site minutes, wrapping past midnight for night shifts."""
+    return onsite_worked_minutes(check_in, check_out, away_minutes)
 
 
 async def leave_balance(employee: dict) -> LeaveBalance:
@@ -67,7 +67,9 @@ async def build_report(employee: dict, month: str | None = None) -> EmployeeRepo
     )
     present_records = [r for r in records if r.status == "present"]
     complete = [r for r in present_records if r.check_in and r.check_out]
-    total_minutes = sum(_minutes(r.check_in, r.check_out) for r in present_records)
+    total_minutes = sum(
+        _minutes(r.check_in, r.check_out, r.away_minutes) for r in present_records
+    )
     scheduled_records = [
         r
         for r in present_records

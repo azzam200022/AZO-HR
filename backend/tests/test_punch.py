@@ -120,6 +120,36 @@ async def test_presence_counts_minutes_between_midshift_departure_and_return(mon
 
 
 @pytest.mark.asyncio
+async def test_manual_checkout_closes_open_away_interval_at_exact_second(monkeypatch):
+    left_at = "2026-11-04T10:00:00+03:00"
+    record = attendance_record(
+        outside_since="10:00",
+        outside_since_at=left_at,
+        away_intervals=[
+            {
+                "left_at": left_at,
+                "closed_at": "",
+                "returned_at": "",
+                "minutes": 0,
+            }
+        ],
+    )
+    staff = employee()
+    database = make_records(monkeypatch, record, staff, {"now": "10:20", "distance": 500})
+    database.employees = MemoryCollection(staff)
+    monkeypatch.setattr(
+        punch,
+        "now_local",
+        lambda: datetime.fromisoformat("2026-11-04T10:20:37+03:00"),
+    )
+
+    saved = await punch.punch_out(staff["id"], notify_manager=False)
+
+    assert saved["check_out_at"] == "2026-11-04T10:20:37+03:00"
+    assert saved["away_intervals"][0]["closed_at"] == "2026-11-04T10:20:37+03:00"
+
+
+@pytest.mark.asyncio
 async def test_offline_location_replay_keeps_departure_return_and_ignores_retries(monkeypatch):
     clock = {"now": "10:00", "distance": 500}
     record = attendance_record()

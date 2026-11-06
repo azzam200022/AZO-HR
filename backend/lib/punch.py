@@ -139,7 +139,14 @@ async def punch_in(
     return record
 
 
-def _close_away_interval(doc: dict, now: str, shift_start: str, shift_end: str) -> dict:
+def _close_away_interval(
+    doc: dict,
+    now: str,
+    shift_start: str,
+    shift_end: str,
+    *,
+    closed_at: datetime | None = None,
+) -> dict:
     """Fold an open away interval into away_minutes, capped at the shift end."""
     if not (doc.get("outside_since") or ""):
         return {}
@@ -153,7 +160,11 @@ def _close_away_interval(doc: dict, now: str, shift_start: str, shift_end: str) 
     if open_interval:
         total = updates["away_minutes"]
         open_interval["minutes"] = max(0, total - int(doc.get("away_minutes", 0)))
-        open_interval["closed_at"] = _wall_time_iso(doc.get("date", today_iso()), now, shift_start, shift_end)
+        open_interval["closed_at"] = (
+            closed_at.isoformat(timespec="seconds")
+            if closed_at
+            else _wall_time_iso(doc.get("date", today_iso()), now, shift_start, shift_end)
+        )
         open_interval["ended_by"] = "check_out"
         updates["away_intervals"] = intervals
     return updates
@@ -246,7 +257,9 @@ async def punch_out(employee_id: str, *, notify_manager: bool = True) -> dict:
         "check_out": now,
         "check_out_at": checkout_local.isoformat(timespec="seconds"),
         "last_seen": now,
-        **_close_away_interval(doc, now, shift_start, shift_end),
+        **_close_away_interval(
+            doc, now, shift_start, shift_end, closed_at=checkout_local
+        ),
     }
     await db.attendance.update_one({"id": doc["id"]}, {"$set": updates})
     fresh = await db.attendance.find_one({"id": doc["id"]})
@@ -368,7 +381,11 @@ async def record_presence(
                 }
             )
         elif doc.get("outside_since"):
-            updates.update(_close_away_interval(doc, now, shift_start, shift_end))
+            updates.update(
+                _close_away_interval(
+                    doc, now, shift_start, shift_end, closed_at=observed_local
+                )
+            )
     elif after_shift and doc.get("outside_since"):
         # A departure that began during the shift is charged only through shift end. If the
         # employee is still outside then, close the day at the scheduled end and stop tracking.
@@ -392,7 +409,17 @@ async def record_presence(
                 }
             )
         else:
-            updates.update(_close_away_interval(doc, shift_end, shift_start, shift_end))
+            updates.update(
+                _close_away_interval(
+                    doc,
+                    shift_end,
+                    shift_start,
+                    shift_end,
+                    closed_at=_shift_end_local(
+                        attendance_date, shift_start, shift_end
+                    ),
+                )
+            )
         updates["check_out"] = shift_end
         updates["check_out_at"] = _shift_end_local(
             attendance_date, shift_start, shift_end
