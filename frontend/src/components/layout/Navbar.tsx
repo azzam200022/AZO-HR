@@ -14,6 +14,7 @@ import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import NotificationBell from "@/components/layout/NotificationBell";
+import EmployeeLocationStatus from "@/components/layout/EmployeeLocationStatus";
 import {
   Sheet,
   SheetContent,
@@ -196,6 +197,7 @@ export default function Navbar() {
                   )}
                 </NavLink>
               ))}
+              <EmployeeLocationStatus open={drawerOpen} />
             </nav>
             <div className="border-t border-slate-100 px-5 py-4 text-[11px] text-slate-400">
               اسحب من حافة الشاشة اليمنى لفتح القائمة، واسحب يميناً لإغلاقها.
