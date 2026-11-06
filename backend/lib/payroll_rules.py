@@ -4,11 +4,9 @@ Everything is computed over the employee's OWN cycle (hire-date anchored), never
 calendar month — so a new cycle's lateness can never be charged to a settled one.
 """
 
-from lib.adjustments import adjustment_totals
 from lib.attendance_calendar import daily_attendance_records
 from lib.cycle import pay_cycle
 from lib.dates import now_time, today_iso
-from lib.db import db
 from lib.shift import (
     effective_away_minutes,
     employee_shift,
@@ -58,6 +56,8 @@ def absence_deduction(base_salary: float, absent_days: int) -> float:
 
 async def cycle_attendance(employee_id: str, start: str, end: str) -> list[dict]:
     """Attendance of one cycle; archived cycles are read back from the archive."""
+    from lib.db import db
+
     live = await db.attendance.find(
         {"employee_id": employee_id, "date": {"$gte": start, "$lte": end}}
     ).to_list(500)
@@ -119,6 +119,8 @@ async def absence_summary(
     now: str | None = None,
 ) -> tuple[int, float]:
     """(absent_workdays, deduction) for the employee's cycle containing `on`."""
+    from lib.db import db
+
     start, end = pay_cycle(employee, on)
     docs = (
         attendance_docs
@@ -150,6 +152,8 @@ async def absence_summary(
 
 async def cycle_figures(employee: dict, on: str | None = None) -> dict:
     """Everything the payroll item needs for the cycle containing `on`."""
+    from lib.adjustments import adjustment_totals
+
     start, end = pay_cycle(employee, on)
     docs = await cycle_attendance(employee["id"], start, end)
     today, now = today_iso(), now_time()
@@ -201,6 +205,8 @@ async def settle_cycle(item: dict) -> int:
     Archiving (not deleting) keeps the payslip auditable while clearing the running record,
     so the next cycle starts from zero.
     """
+    from lib.db import db
+
     employee_id = item["employee_id"]
     start, end = item.get("cycle_start", ""), item.get("cycle_end", "")
     if not start or not end:
