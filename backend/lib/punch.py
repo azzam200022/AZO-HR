@@ -1,11 +1,11 @@
 """Shared punch logic so the manager console and the employee portal enforce the same
 rules — geofence, shift window, lateness, and time spent away from the site."""
 
-from datetime import date as date_type, timedelta
+from datetime import date as date_type, timedelta, timezone
 
 from fastapi import HTTPException
 
-from lib.dates import now_time, today_iso
+from lib.dates import now_local, now_time, today_iso
 from lib.db import db
 from lib.geo import haversine_m
 from lib.notify import notify_late, notify_left_site
@@ -18,6 +18,8 @@ from lib.shift import (
     shift_has_ended,
     shift_minutes,
     shift_not_started,
+    away_minutes_at,
+    effective_away_minutes,
     to_minutes,
 )
 from models.hr import AttendanceRecord
@@ -70,7 +72,13 @@ def _enforce_geofence(location_doc: dict | None, lat: float | None, lng: float |
 
 async def punch_in(employee: dict, lat: float | None, lng: float | None) -> AttendanceRecord:
     shift_start, shift_end, grace = employee_shift(employee)
-    punched_at = now_time()
+    punched_at_local = now_local()
+    punched_at = punched_at_local.strftime("%H:%M")
+    punched_at_utc = punched_at_local.astimezone(timezone.utc)
+    work_date = punched_at_local.date()
+    if to_minutes(shift_end) <= to_minutes(shift_start) and to_minutes(punched_at) <= to_minutes(shift_end):
+        work_date -= timedelta(days=1)
+    date = work_date.isoformat()
 
     # The shift window closes the door: no check-in after the employee's own shift ended.
     if shift_has_ended(punched_at, shift_start, shift_end):
@@ -93,7 +101,6 @@ async def punch_in(employee: dict, lat: float | None, lng: float | None) -> Atte
     location_doc = await _employee_location(employee)
     distance = _enforce_geofence(location_doc, lat, lng)
 
-    date = today_iso()
     if await db.attendance.find_one({"employee_id": employee["id"], "date": date}):
         raise HTTPException(status_code=409, detail="تم تسجيل الحضور مسبقاً لهذا اليوم")
 
@@ -108,6 +115,7 @@ async def punch_in(employee: dict, lat: float | None, lng: float | None) -> Atte
         employee_id=employee["id"],
         date=date,
         check_in=punched_at,
+        check_in_at=punched_at_utc,
         location_id=location_doc["id"] if location_doc else "",
         distance_m=round(distance, 1) if distance is not None else None,
         late_minutes=late,
@@ -121,17 +129,10 @@ async def punch_in(employee: dict, lat: float | None, lng: float | None) -> Atte
 
 def _close_away_interval(doc: dict, now: str, shift_start: str, shift_end: str) -> dict:
     """Fold an open away interval into away_minutes, capped at the shift end."""
-    outside_since = doc.get("outside_since") or ""
-    if not outside_since:
+    if not (doc.get("outside_since") or ""):
         return {}
-    day_minutes = 24 * 60
-    start = (to_minutes(outside_since) - to_minutes(shift_start)) % day_minutes
-    end = (to_minutes(now) - to_minutes(shift_start)) % day_minutes
-    scheduled = shift_minutes(shift_start, shift_end)
-    start = min(start, scheduled)
-    end = max(start, min(end, scheduled))
     return {
-        "away_minutes": int(doc.get("away_minutes", 0)) + (end - start),
+        "away_minutes": away_minutes_at(doc, now, shift_start, shift_end),
         "outside_since": "",
     }
 
@@ -192,9 +193,13 @@ async def record_presence(employee: dict, lat: float | None, lng: float | None) 
     updates: dict = {"last_seen": now}
     if inside:
         updates.update(_close_away_interval(doc, now, shift_start, shift_end))
-    elif after_shift and not doc.get("outside_since"):
-        # Only a new departure observed after shift end is a checkout. If the employee
-        # left during the shift, keep tracking until return and cap that absence at shift end.
+    elif after_shift and doc.get("outside_since"):
+        # A departure that began during the shift is charged only through shift end. If the
+        # employee is still outside then, close the day at the scheduled end and stop tracking.
+        updates.update(_close_away_interval(doc, shift_end, shift_start, shift_end))
+        updates["check_out"] = shift_end
+    elif after_shift:
+        # A new departure first observed after shift end is recorded at the location heartbeat.
         updates.update({"check_out": now, "outside_since": ""})
     elif within_window and not doc.get("outside_since"):
         updates["outside_since"] = now
@@ -203,4 +208,8 @@ async def record_presence(employee: dict, lat: float | None, lng: float | None) 
 
     await db.attendance.update_one({"id": doc["id"]}, {"$set": updates})
     fresh = await db.attendance.find_one({"id": doc["id"]})
+    if fresh.get("outside_since"):
+        fresh["away_minutes"] = effective_away_minutes(
+            fresh, now, today_iso(), shift_start, shift_end
+        )
     return {**fresh, "_inside": inside, "_distance": distance, "_tracking": True}

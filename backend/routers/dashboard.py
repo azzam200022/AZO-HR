@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from lib.auth import require_manager
-from lib.dates import aware, current_month, now_time, past_days, today_iso
+from lib.dates import aware, current_month, now_time, now_utc, past_days, today_iso
 from lib.db import db
 from models.hr import DashboardStats, LeaveWithEmployee, TodayResponse, TrendPoint
 
@@ -58,4 +58,4 @@ async def dashboard():
 
 @router.get("/today", response_model=TodayResponse)
 async def today():
-    return TodayResponse(today=today_iso(), now_hhmm=now_time())
+    return TodayResponse(today=today_iso(), now_hhmm=now_time(), now_utc=now_utc())

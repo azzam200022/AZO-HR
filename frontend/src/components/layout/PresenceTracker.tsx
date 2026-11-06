@@ -2,8 +2,14 @@ import { Capacitor } from "@capacitor/core";
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost } from "@/lib/api";
-import { isBackgroundLocationActive } from "@/lib/background-location";
-import type { AttendanceRecord, PresenceStatus, TodayResponse, WorkLocation } from "@/lib/types";
+import {
+  hasBackgroundLocationConsent,
+  isBackgroundLocationActive,
+  isBackgroundLocationManuallyStopped,
+  startBackgroundLocationTracking,
+  supportsBackgroundLocation,
+} from "@/lib/background-location";
+import type { AttendanceRecord, Employee, PresenceStatus, TodayResponse, WorkLocation } from "@/lib/types";
 
 /** Keep geofence heartbeats alive across every employee-portal tab while the app is open. */
 export default function PresenceTracker() {
@@ -21,11 +27,38 @@ export default function PresenceTracker() {
     queryKey: ["me", "location"],
     queryFn: () => apiGet<WorkLocation | null>("/me/location"),
   });
+  const profileQuery = useQuery({
+    queryKey: ["me", "profile"],
+    queryFn: () => apiGet<Employee>("/me/profile"),
+  });
 
   const today = todayQuery.data?.today;
-  const todayRecord = attendanceQuery.data?.find((record) => record.date === today);
-  const live = !!todayRecord && !todayRecord.check_out;
+  const employee = profileQuery.data;
+  const previousDate = today ? new Date(`${today}T00:00:00Z`) : null;
+  if (previousDate) previousDate.setUTCDate(previousDate.getUTCDate() - 1);
+  const shiftMinutes = (value?: string) => {
+    if (!value) return null;
+    const [hours, minutes] = value.split(":").map(Number);
+    return hours * 60 + minutes;
+  };
+  const shiftStartMinutes = shiftMinutes(employee?.shift_start);
+  const shiftEndMinutes = shiftMinutes(employee?.shift_end);
+  const overnightShift =
+    shiftStartMinutes !== null &&
+    shiftEndMinutes !== null &&
+    shiftEndMinutes <= shiftStartMinutes;
+  const todayRecord =
+    attendanceQuery.data?.find((record) => record.date === today) ??
+    (overnightShift && previousDate
+      ? attendanceQuery.data?.find(
+          (record) =>
+            record.date === previousDate.toISOString().slice(0, 10) && !record.check_out,
+        )
+      : undefined);
+  const live =
+    todayRecord?.status === "present" && Boolean(todayRecord.check_in) && !todayRecord.check_out;
   const location = locationQuery.data ?? null;
+  const employeeId = profileQuery.data?.id;
 
   useEffect(() => {
     if (!live || !location || !navigator.geolocation) {
@@ -68,7 +101,7 @@ export default function PresenceTracker() {
       if (document.visibilityState === "visible") ping();
     };
     ping();
-    const timer = window.setInterval(ping, 60_000);
+    const timer = window.setInterval(ping, 30_000);
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       cancelled = true;
@@ -76,6 +109,34 @@ export default function PresenceTracker() {
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [live, location?.id, queryClient]);
+
+  useEffect(() => {
+    if (
+      !supportsBackgroundLocation() ||
+      !live ||
+      !location ||
+      !employeeId ||
+      !hasBackgroundLocationConsent(employeeId)
+    ) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      if (
+        (await isBackgroundLocationActive()) ||
+        (await isBackgroundLocationManuallyStopped()) ||
+        cancelled
+      ) return;
+      try {
+        await startBackgroundLocationTracking(false);
+      } catch {
+        // Do not show repeated OS prompts; the employee can retry from the attendance screen.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [employeeId, live, location?.id]);
 
   return null;
 }

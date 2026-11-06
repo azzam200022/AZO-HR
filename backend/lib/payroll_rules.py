@@ -6,8 +6,15 @@ calendar month — so a new cycle's lateness can never be charged to a settled o
 
 from lib.adjustments import adjustment_totals
 from lib.cycle import pay_cycle
+from lib.dates import now_time, today_iso
 from lib.db import db
-from lib.shift import employee_shift, is_working_day, late_minutes, shift_minutes
+from lib.shift import (
+    effective_away_minutes,
+    employee_shift,
+    is_working_day,
+    late_minutes,
+    shift_minutes,
+)
 
 #: payroll month is treated as 30 paid days
 PAID_DAYS_PER_MONTH = 30
@@ -49,8 +56,10 @@ async def late_summary(employee: dict, on: str | None = None) -> tuple[int, int,
         )
         for d in docs
     )
+    now = now_time()
+    today = today_iso()
     total_away = sum(
-        int(d.get("away_minutes", 0))
+        effective_away_minutes(d, now, today, shift_start, shift_end)
         for d in docs
         if is_working_day(d.get("date", ""), work_days)
     )

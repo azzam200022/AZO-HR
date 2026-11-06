@@ -22,15 +22,23 @@ INDEXES: dict[str, list[IndexModel]] = {
     "employees": [
         IndexModel([("id", ASCENDING)], name="id", unique=True),
         IndexModel([("status", ASCENDING), ("created_at", DESCENDING)], name="status_created"),
+        IndexModel([("status", ASCENDING), ("hire_date", ASCENDING)], name="status_hire_date"),
         IndexModel([("access_code", ASCENDING)], name="access_code"),
     ],
     "attendance": [
         IndexModel([("id", ASCENDING)], name="id", unique=True),
         IndexModel([("date", DESCENDING), ("employee_id", ASCENDING)], name="date_employee"),
+        IndexModel([("employee_id", ASCENDING), ("date", DESCENDING)], name="employee_date"),
+    ],
+    "attendance_archive": [
+        IndexModel([("id", ASCENDING)], name="id"),
+        IndexModel([("date", DESCENDING), ("employee_id", ASCENDING)], name="date_employee"),
+        IndexModel([("employee_id", ASCENDING), ("date", DESCENDING)], name="employee_date"),
     ],
     "leaves": [
         IndexModel([("id", ASCENDING)], name="id", unique=True),
         IndexModel([("status", ASCENDING), ("created_at", DESCENDING)], name="status_created"),
+        IndexModel([("employee_id", ASCENDING), ("status", ASCENDING), ("start_date", ASCENDING), ("end_date", ASCENDING)], name="employee_status_dates"),
     ],
     "payroll": [
         IndexModel([("id", ASCENDING)], name="id", unique=True),

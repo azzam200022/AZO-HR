@@ -31,14 +31,23 @@ const weekdayName = (iso: string) => {
   return AR_WEEKDAYS[(d.getDay() + 6) % 7];
 };
 import {
+  ATTENDANCE_STATUS_LABELS,
   LEAVE_STATUS_LABELS,
   LEAVE_TYPE_LABELS,
+  type AttendanceStatus,
   type Adjustment,
   type EmployeeReport,
   type LeaveStatus,
 } from "@/lib/types";
 import { EmptyState, LoadingBlock, StatusBadge } from "@/components/shared";
 import { Input } from "@/components/ui/input";
+
+const ATTENDANCE_TONE: Record<AttendanceStatus, string> = {
+  present: "bg-emerald-50 text-emerald-700",
+  absent: "bg-rose-50 text-rose-700",
+  leave: "bg-sky-50 text-sky-700",
+  holiday: "bg-slate-100 text-slate-600",
+};
 
 const TONE: Record<LeaveStatus, "amber" | "green" | "red"> = {
   pending: "amber",
@@ -293,7 +302,7 @@ export default function EmployeeReportPanel({
           </p>
         ) : (
           <div
-            className="mt-2 overflow-hidden rounded-xl border border-slate-100"
+            className="mt-2 overflow-x-auto rounded-xl border border-slate-100"
             data-testid={`${testidPrefix}-attendance-list`}
           >
             <table className="w-full text-[11px]">
@@ -301,6 +310,7 @@ export default function EmployeeReportPanel({
                 <tr>
                   <th className="px-2.5 py-1.5 text-start font-semibold">اليوم</th>
                   <th className="px-2 py-1.5 text-start font-semibold">التاريخ</th>
+                  <th className="px-2 py-1.5 text-center font-semibold">الحالة</th>
                   <th className="px-2 py-1.5 text-center font-semibold">الحضور</th>
                   <th className="px-2 py-1.5 text-center font-semibold">الانصراف</th>
                   <th className="px-2 py-1.5 text-center font-semibold">المدة</th>
@@ -320,22 +330,29 @@ export default function EmployeeReportPanel({
                       <td className="px-2 py-1.5 font-semibold tabular-nums text-slate-700">
                         {fmtDate(rec.date)}
                       </td>
+                      <td className="px-2 py-1.5 text-center">
+                        <span className={cn("rounded-full px-2 py-0.5 font-semibold", ATTENDANCE_TONE[rec.status])}>
+                          {ATTENDANCE_STATUS_LABELS[rec.status]}
+                        </span>
+                      </td>
                       <td className="px-2 py-1.5 text-center font-bold tabular-nums text-emerald-700">
-                        {rec.check_in || "—"}
+                        {rec.status === "present" ? rec.check_in || "—" : "—"}
                       </td>
                       <td className="px-2 py-1.5 text-center font-bold tabular-nums text-slate-600">
-                        {rec.check_out || "—"}
+                        {rec.status === "present" ? rec.check_out || "—" : "—"}
                       </td>
                       <td className="px-2 py-1.5 text-center tabular-nums text-teal-700">
-                        {durationLabel(rec.check_in, rec.check_out)}
+                        {rec.status === "present" ? durationLabel(rec.check_in, rec.check_out) : "—"}
                       </td>
                       <td
                         className={cn(
                           "px-2 py-1.5 text-center font-semibold tabular-nums",
-                          rec.late_minutes + rec.away_minutes > 0 ? "text-red-700" : "text-slate-400",
+                          rec.status === "present" && rec.late_minutes + rec.away_minutes > 0
+                            ? "text-red-700"
+                            : "text-slate-400",
                         )}
                       >
-                        {lateLabel(rec.late_minutes + rec.away_minutes)}
+                        {rec.status === "present" ? lateLabel(rec.late_minutes + rec.away_minutes) : "—"}
                         {rec.away_minutes > 0 && (
                           <span className="block text-[10px] font-normal text-amber-700">
                             منها {lateLabel(rec.away_minutes)} خارج الموقع

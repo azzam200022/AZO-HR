@@ -16,16 +16,14 @@ public class BackgroundTrackingPlugin extends Plugin {
     @PluginMethod
     public void start(PluginCall call) {
         String apiBaseUrl = call.getData().optString("apiBaseUrl", "").trim();
-        long stopAt = call.getData().optLong("stopAt", 0L);
-        if (apiBaseUrl.isEmpty() || stopAt <= System.currentTimeMillis()) {
-            call.reject("رابط الخادم أو وقت نهاية الوردية غير صالح.");
+        if (apiBaseUrl.isEmpty()) {
+            call.reject("رابط الخادم غير صالح.");
             return;
         }
 
         Intent intent = new Intent(getContext(), BackgroundLocationService.class);
         intent.setAction(BackgroundLocationService.ACTION_START);
         intent.putExtra(BackgroundLocationService.EXTRA_API_BASE_URL, apiBaseUrl);
-        intent.putExtra(BackgroundLocationService.EXTRA_STOP_AT, stopAt);
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 ContextCompat.startForegroundService(getContext(), intent);
@@ -54,6 +52,7 @@ public class BackgroundTrackingPlugin extends Plugin {
     public void getStatus(PluginCall call) {
         JSObject result = new JSObject();
         result.put("active", BackgroundLocationService.isRunning(getContext()));
+        result.put("manuallyStopped", BackgroundLocationService.wasManuallyStopped(getContext()));
         call.resolve(result);
     }
 }

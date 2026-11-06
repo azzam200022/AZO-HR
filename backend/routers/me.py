@@ -8,13 +8,14 @@ merely checked.
 from fastapi import APIRouter, Depends, HTTPException
 
 from lib.auth import Principal, require_employee
-from lib.dates import aware, current_month
+from lib.attendance_calendar import daily_attendance_records
+from lib.dates import aware, current_month, now_time, today_iso
 from lib.db import db
 from lib.adjustments import to_model as adjustment_model
 from lib.messaging import GROUP_THREAD, mark_thread_read, send_message, to_model as message_model
 from lib.punch import punch_in, punch_out, record_presence
 from lib.reports import build_report, leave_balance
-from lib.shift import employee_shift, is_working_day, late_minutes
+from lib.shift import effective_away_minutes, employee_shift, is_working_day, late_minutes
 from models.hr import (
     Adjustment,
     AttendanceRecord,
@@ -66,24 +67,59 @@ async def my_location(principal: Principal = Depends(require_employee)):
 @router.get("/attendance", response_model=list[AttendanceRecord])
 async def my_attendance(principal: Principal = Depends(require_employee)):
     employee = await _my_employee(principal)
-    shift_start, _shift_end, grace = employee_shift(employee)
-    docs = (
-        await db.attendance.find({"employee_id": principal.employee_id})
-        .sort("date", -1)
-        .to_list(500)
+    today = today_iso()
+    month_start = f"{today[:7]}-01"
+    live_docs = await db.attendance.find({"employee_id": principal.employee_id}).to_list(500)
+    archive_docs = await db.attendance_archive.find(
+        {"employee_id": principal.employee_id}
+    ).to_list(500)
+    for doc in archive_docs:
+        doc["is_archived"] = True
+    by_id = {doc["id"]: doc for doc in archive_docs}
+    by_id.update({doc["id"]: doc for doc in live_docs})
+    docs = list(by_id.values())
+    month_docs = [doc for doc in docs if month_start <= doc.get("date", "") <= today]
+    leaves = await db.leaves.find(
+        {
+            "employee_id": principal.employee_id,
+            "status": "approved",
+            "start_date": {"$lte": today},
+            "end_date": {"$gte": month_start},
+        }
+    ).to_list(500)
+    current_records = daily_attendance_records(
+        employee,
+        month_start,
+        today,
+        month_docs,
+        leaves,
+        today=today,
+        now=now_time(),
     )
-    for d in docs:
-        d["created_at"] = aware(d.get("created_at"))
-        d["late_minutes"] = late_minutes(
-            d.get("check_in", ""),
+
+    shift_start, shift_end, grace = employee_shift(employee)
+    older_records = []
+    for doc in docs:
+        if doc.get("date", "") >= month_start:
+            continue
+        record = dict(doc)
+        record["status"] = record.get("status") or "present"
+        record["created_at"] = aware(record.get("created_at"))
+        record["late_minutes"] = late_minutes(
+            record.get("check_in", ""),
             shift_start,
             grace,
-            work_date=d.get("date"),
+            work_date=record.get("date"),
             work_days=employee.get("work_days"),
         )
-        if not is_working_day(d.get("date", ""), employee.get("work_days")):
-            d["away_minutes"] = 0
-    return [AttendanceRecord(**d) for d in docs]
+        if not is_working_day(record.get("date", ""), employee.get("work_days")):
+            record["away_minutes"] = 0
+        else:
+            record["away_minutes"] = effective_away_minutes(
+                record, now_time(), today, shift_start, shift_end
+            )
+        older_records.append(AttendanceRecord(**record))
+    return sorted(current_records + older_records, key=lambda record: record.date, reverse=True)
 
 
 @router.post("/check-in", response_model=AttendanceRecord)

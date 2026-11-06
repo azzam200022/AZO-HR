@@ -4,7 +4,9 @@ import { toast } from "sonner";
 import { CheckCircle2, Clock3, Fingerprint, LogOut, MapPin } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import {
+  hasBackgroundLocationConsent,
   isBackgroundLocationActive,
+  setBackgroundLocationConsent,
   startBackgroundLocationTracking,
   stopBackgroundLocationTracking,
   supportsBackgroundLocation,
@@ -21,6 +23,7 @@ import {
   todayStr,
 } from "@/lib/format";
 import {
+  ATTENDANCE_STATUS_LABELS,
   PAYROLL_STATUS_LABELS,
   type AttendanceRecord,
   type EmployeeReport,
@@ -65,7 +68,20 @@ export default function MyAttendance() {
   const myLocation = locationQuery.data ?? null;
   const today = todayQuery.data?.today ?? todayStr();
   const records = attendanceQuery.data ?? [];
-  const todayRecord = records.find((r) => r.date === today);
+  const todayDate = new Date(`${today}T00:00:00Z`);
+  todayDate.setUTCDate(todayDate.getUTCDate() - 1);
+  const previousDate = todayDate.toISOString().slice(0, 10);
+  const clockMinutes = (value: string) => {
+    const [hours, minutes] = value.split(":").map(Number);
+    return hours * 60 + minutes;
+  };
+  const overnightShift = Boolean(
+    shift && clockMinutes(shift.shift_end) <= clockMinutes(shift.shift_start),
+  );
+  const openOvernightRecord = overnightShift
+    ? records.find((record) => record.date === previousDate && !record.check_out)
+    : undefined;
+  const todayRecord = records.find((record) => record.date === today) ?? openOvernightRecord;
   const monthRecords = records.filter((r) => r.date.startsWith(currentMonthStr()));
   const payslip = (payrollQuery.data ?? [])[0];
 
@@ -87,6 +103,9 @@ export default function MyAttendance() {
     return h * 60 + m;
   };
   const serverNowMinutes = serverNow ? toMinutes(serverNow.now_hhmm) + (now - fetchedAt) / 60_000 : null;
+  const serverNowEpoch = serverNow?.now_utc
+    ? Date.parse(serverNow.now_utc) + (now - fetchedAt)
+    : null;
   const clockLabel = (() => {
     if (serverNowMinutes === null) return "…";
     const totalSec = Math.floor(serverNowMinutes * 60);
@@ -95,16 +114,28 @@ export default function MyAttendance() {
     const ss = String(totalSec % 60).padStart(2, "0");
     return `${hh}:${mm}:${ss}`;
   })();
-  const live = !!todayRecord && !todayRecord.check_out;
+  const live =
+    todayRecord?.status === "present" && Boolean(todayRecord.check_in) && !todayRecord.check_out;
+  const canCheckIn =
+    !todayRecord || (todayRecord.is_synthetic && todayRecord.status !== "absent");
   const elapsedLabel = () => {
-    if (!todayRecord?.check_in || serverNowMinutes === null) return "0س 0د";
-    const minutes = Math.max(0, Math.floor(serverNowMinutes - toMinutes(todayRecord.check_in)));
-    return `${Math.floor(minutes / 60)}س ${minutes % 60}د`;
+    if (!todayRecord?.check_in || !live) return "0س 0د 00ث";
+    let seconds = 0;
+    const checkInEpoch = todayRecord.check_in_at ? Date.parse(todayRecord.check_in_at) : NaN;
+    if (serverNowEpoch !== null && Number.isFinite(checkInEpoch)) {
+      seconds = Math.max(0, Math.floor((serverNowEpoch - checkInEpoch) / 1000));
+    } else if (serverNowMinutes !== null) {
+      seconds = Math.max(0, Math.floor((serverNowMinutes - toMinutes(todayRecord.check_in)) * 60));
+    }
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainingSeconds = String(seconds % 60).padStart(2, "0");
+    return `${hours}س ${minutes}د ${remainingSeconds}ث`;
   };
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["me"] });
 
-  const liveNow = !!todayRecord && !todayRecord.check_out;
+  const liveNow = live;
   const presenceQuery = useQuery<PresenceStatus | null>({
     queryKey: ["me", "presence"],
     queryFn: async () => null,
@@ -113,6 +144,11 @@ export default function MyAttendance() {
   const presence = presenceQuery.data ?? null;
   const [backgroundTrackingActive, setBackgroundTrackingActive] = useState(false);
   const [backgroundTrackingBusy, setBackgroundTrackingBusy] = useState(false);
+  const [backgroundTrackingConsent, setBackgroundTrackingConsent] = useState(false);
+
+  useEffect(() => {
+    if (me?.id) setBackgroundTrackingConsent(hasBackgroundLocationConsent(me.id));
+  }, [me?.id]);
 
   useEffect(() => {
     if (!supportsBackgroundLocation()) return;
@@ -135,27 +171,18 @@ export default function MyAttendance() {
   }, []);
 
   const enableBackgroundTracking = async () => {
-    if (!todayRecord || !shift || serverNowMinutes === null) {
-      toast.error("تعذر التحقق من دوامك الحالي؛ أعد المحاولة بعد تحديث الصفحة.");
-      return;
-    }
-    const currentMinutes = Math.floor(((serverNowMinutes % 1440) + 1440) % 1440);
-    const startMinutes = toMinutes(shift.shift_start);
-    const endMinutes = toMinutes(shift.shift_end);
-    let remainingMinutes = endMinutes - currentMinutes;
-    if (endMinutes <= startMinutes && todayRecord.date === today) {
-      remainingMinutes += 1440;
-    }
-    if (remainingMinutes <= 0) {
-      toast.error("انتهى وقت الوردية المسجل؛ لا يمكن بدء تتبع الموقع الآن.");
+    if (!me?.id || !live || !myLocation) {
+      toast.error("سجّل حضورك وتأكد من وجود موقع عمل مرتبط بحسابك أولاً.");
       return;
     }
 
     setBackgroundTrackingBusy(true);
     try {
-      await startBackgroundLocationTracking(Date.now() + remainingMinutes * 60_000);
+      await startBackgroundLocationTracking(true);
+      setBackgroundLocationConsent(me.id, true);
+      setBackgroundTrackingConsent(true);
       setBackgroundTrackingActive(true);
-      toast.success("بدأ تتبع الموقع أثناء دوامك المسجل.");
+      toast.success("تم حفظ الموافقة؛ سيبدأ التتبع تلقائياً مع حضورك في الأيام القادمة.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "تعذر بدء تتبع الموقع بالخلفية.");
     } finally {
@@ -166,9 +193,11 @@ export default function MyAttendance() {
   const disableBackgroundTracking = async () => {
     setBackgroundTrackingBusy(true);
     await stopBackgroundLocationTracking();
+    if (me?.id) setBackgroundLocationConsent(me.id, false);
+    setBackgroundTrackingConsent(false);
     setBackgroundTrackingActive(false);
     setBackgroundTrackingBusy(false);
-    toast.success("تم إيقاف تتبع الموقع بالخلفية.");
+    toast.success("تم إيقاف التتبع وإلغاء الموافقة التلقائية.");
   };
 
   const checkInMutation = useMutation({
@@ -248,7 +277,7 @@ export default function MyAttendance() {
 
           {/* Big fingerprint punch control */}
           <div className="mt-7 flex flex-col items-center gap-4">
-            {!todayRecord ? (
+            {canCheckIn ? (
               <button
                 type="button"
                 onClick={() => checkInMutation.mutate()}
@@ -275,6 +304,13 @@ export default function MyAttendance() {
                   <span className="text-xs font-bold">بصمة الانصراف</span>
                 </button>
               </>
+            ) : todayRecord?.status !== "present" ? (
+              <span
+                className="inline-flex items-center gap-2 rounded-full bg-amber-500/20 px-5 py-3 text-sm font-semibold text-amber-200"
+                data-testid="day-status-badge"
+              >
+                {todayRecord ? ATTENDANCE_STATUS_LABELS[todayRecord.status] : "—"}
+              </span>
             ) : (
               <span
                 className="inline-flex items-center gap-2 rounded-full bg-emerald-500/20 px-5 py-3 text-sm font-semibold text-emerald-300"
@@ -294,8 +330,10 @@ export default function MyAttendance() {
                   <p className="text-sm font-semibold text-white">تتبع الموقع أثناء الدوام</p>
                   <p className="mt-1 text-xs leading-relaxed text-teal-100">
                     {backgroundTrackingActive
-                      ? "التتبع نشط حتى الانصراف أو نهاية الوردية. سيبقى إشعار Android ظاهرًا عند إغلاق التطبيق."
-                      : "اختياري: يرسل موقعك أثناء دوام مسجل فقط، مع إشعار Android دائم. يتوقف عند الانصراف أو نهاية الوردية، ولا يحفظ التطبيق سجل مسار تحركاتك."}
+                      ? "التتبع نشط. بعد نهاية الوردية يستمر حتى رصد مغادرتك لموقع العمل، ثم يتوقف تلقائياً. يبقى إشعار Android ظاهراً ويمكنك إيقافه يدوياً."
+                      : backgroundTrackingConsent
+                        ? "موافقتك محفوظة لهذا الجهاز؛ سيبدأ التتبع تلقائياً مع بصمة الحضور، ويستمر بعد نهاية الوردية حتى رصد المغادرة."
+                        : "موافقة لمرة واحدة: بعد السماح للموقع والإشعارات سيبدأ التتبع تلقائياً مع الحضور. يستمر بعد نهاية الوردية حتى رصد المغادرة، مع إشعار دائم، ولا يُحفظ مسار الحركة."}
                   </p>
                   {backgroundTrackingActive ? (
                     <Button
@@ -306,7 +344,7 @@ export default function MyAttendance() {
                       disabled={backgroundTrackingBusy}
                       data-testid="stop-background-location-btn"
                     >
-                      إيقاف التتبع
+                      إيقاف التتبع وإلغاء الموافقة
                     </Button>
                   ) : (
                     <Button
@@ -317,7 +355,11 @@ export default function MyAttendance() {
                       disabled={backgroundTrackingBusy || !live || !myLocation}
                       data-testid="start-background-location-btn"
                     >
-                      {backgroundTrackingBusy ? "جارٍ تفعيل التتبع…" : "تفعيل التتبع عند إغلاق التطبيق"}
+                      {backgroundTrackingBusy
+                        ? "جارٍ تفعيل التتبع…"
+                        : backgroundTrackingConsent
+                          ? "إعادة محاولة التتبع"
+                          : "موافقة وتفعيل لمرة واحدة"}
                     </Button>
                   )}
                 </div>
@@ -389,11 +431,23 @@ export default function MyAttendance() {
                 className="flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50/60 px-4 py-2.5"
               >
                 <span className="text-sm font-semibold tabular-nums text-slate-700">{fmtDate(rec.date)}</span>
+                <span
+                  className={
+                    rec.status === "present"
+                      ? "rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-700"
+                      : rec.status === "absent"
+                        ? "rounded-full bg-rose-100 px-2 py-1 text-[11px] font-semibold text-rose-700"
+                        : "rounded-full bg-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600"
+                  }
+                  data-testid={`attendance-status-${rec.id}`}
+                >
+                  {ATTENDANCE_STATUS_LABELS[rec.status]}
+                </span>
                 <span className="text-xs tabular-nums text-slate-500">
-                  حضور {rec.check_in || "—"} • انصراف {rec.check_out || "—"}
+                  {rec.status === "present" ? `حضور ${rec.check_in || "—"} • انصراف ${rec.check_out || "—"}` : "—"}
                 </span>
                 <span className="text-sm font-semibold tabular-nums text-teal-700">
-                  {durationLabel(rec.check_in, rec.check_out)}
+                  {rec.status === "present" ? durationLabel(rec.check_in, rec.check_out) : "—"}
                 </span>
               </div>
             ))}

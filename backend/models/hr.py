@@ -124,7 +124,11 @@ class AttendanceRecord(BaseModel):
     id: str = Field(default_factory=_uuid)
     employee_id: str
     date: str  # YYYY-MM-DD
+    status: Literal["present", "absent", "leave", "holiday"] = "present"
+    is_synthetic: bool = False  # derived daily status; never persisted as an attendance punch
+    is_archived: bool = False  # response-only marker for settled attendance records
     check_in: str = ""  # HH:MM — empty when unknown
+    check_in_at: datetime | None = None  # precise UTC instant for the live timer
     check_out: str = ""  # HH:MM
     location_id: str = ""  # work location the punch was verified against ("" = none)
     distance_m: float | None = None  # metres from the location at check-in
@@ -453,6 +457,7 @@ class DeleteResult(BaseModel):
 class TodayResponse(BaseModel):
     today: str
     now_hhmm: str
+    now_utc: datetime
 
 
 class TrendPoint(BaseModel):

@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from lib.auth import require_manager
+from lib.attendance_calendar import daily_attendance_records
 from lib.dates import aware, now_time, today_iso
 from lib.db import db
 from lib.geo import haversine_m
 from lib.punch import punch_in, punch_out
-from lib.shift import employee_shift, is_working_day, late_minutes
+from lib.shift import effective_away_minutes, employee_shift, is_working_day, late_minutes
 from models.hr import (
     AttendanceCreate,
     AttendanceRecord,
@@ -19,9 +20,25 @@ router = APIRouter(
 )
 
 
-def _to_model(doc: dict) -> AttendanceRecord:
-    doc["created_at"] = aware(doc.get("created_at"))
-    return AttendanceRecord(**doc)
+def _to_model(
+    doc: dict, employee: dict | None = None, *, today: str | None = None, now: str | None = None
+) -> AttendanceRecord:
+    record = dict(doc)
+    record["created_at"] = aware(record.get("created_at"))
+    if employee and (record.get("status") or "present") == "present":
+        start, end, grace = employee_shift(employee)
+        work_days = employee.get("work_days")
+        record["late_minutes"] = late_minutes(
+            record.get("check_in", ""), start, grace,
+            work_date=record.get("date"), work_days=work_days,
+        )
+        if not is_working_day(record.get("date", ""), work_days):
+            record["away_minutes"] = 0
+        else:
+            record["away_minutes"] = effective_away_minutes(
+                record, now or now_time(), today or today_iso(), start, end
+            )
+    return AttendanceRecord(**record)
 
 
 async def _get_employee_or_404(employee_id: str) -> dict:
@@ -38,27 +55,62 @@ async def list_attendance(date: str | None = None, employee_id: str | None = Non
         query["date"] = date
     if employee_id:
         query["employee_id"] = employee_id
-    docs = await db.attendance.find(query).sort([("date", -1), ("check_in", -1)]).to_list(1000)
+    live_docs = await db.attendance.find(query).to_list(1000)
+    archive_docs = await db.attendance_archive.find(query).to_list(1000)
+    for doc in archive_docs:
+        doc["is_archived"] = True
+    by_id = {doc["id"]: doc for doc in archive_docs}
+    by_id.update({doc["id"]: doc for doc in live_docs})
+    docs = list(by_id.values())
 
-    # Derive lateness from each employee's current shift (same rule as the reports).
-    employees = await db.employees.find(
-        {}, {"id": 1, "shift_start": 1, "grace_minutes": 1, "work_days": 1}
-    ).to_list(1000)
-    shifts = {e["id"]: e for e in employees}
-    for doc in docs:
-        emp = shifts.get(doc["employee_id"], {})
-        start, _end, grace = employee_shift(emp)
-        work_days = emp.get("work_days")
-        doc["late_minutes"] = late_minutes(
-            doc.get("check_in", ""),
-            start,
-            grace,
-            work_date=doc.get("date"),
-            work_days=work_days,
-        )
-        if not is_working_day(doc.get("date", ""), work_days):
-            doc["away_minutes"] = 0
-    return [_to_model(d) for d in docs]
+    employees = await db.employees.find().to_list(1000)
+    employee_by_id = {employee["id"]: employee for employee in employees}
+    today = today_iso()
+    now = now_time()
+    records = [
+        _to_model(doc, employee_by_id.get(doc.get("employee_id")), today=today, now=now)
+        for doc in docs
+    ]
+
+    if date:
+        scheduled_employees = [
+            employee
+            for employee in employees
+            if employee.get("status", "active") == "active"
+            and (not employee_id or employee.get("id") == employee_id)
+        ]
+        scheduled_ids = [employee["id"] for employee in scheduled_employees]
+        leave_docs = []
+        if scheduled_ids:
+            leave_docs = await db.leaves.find(
+                {
+                    "employee_id": {"$in": scheduled_ids},
+                    "status": "approved",
+                    "start_date": {"$lte": date},
+                    "end_date": {"$gte": date},
+                }
+            ).to_list(1000)
+        leaves_by_employee: dict[str, list[dict]] = {}
+        for leave in leave_docs:
+            leaves_by_employee.setdefault(leave["employee_id"], []).append(leave)
+        actual_by_employee: dict[str, list[dict]] = {}
+        for doc in docs:
+            actual_by_employee.setdefault(doc.get("employee_id", ""), []).append(doc)
+        for employee in scheduled_employees:
+            if actual_by_employee.get(employee["id"]):
+                continue
+            records.extend(
+                daily_attendance_records(
+                    employee,
+                    date,
+                    date,
+                    [],
+                    leaves_by_employee.get(employee["id"], []),
+                    today=today,
+                    now=now,
+                )
+            )
+    return sorted(records, key=lambda record: (record.date, record.check_in), reverse=True)
 
 
 @router.post("", response_model=AttendanceRecord, status_code=201)
