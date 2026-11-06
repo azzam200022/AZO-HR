@@ -80,13 +80,19 @@ async def run_shift_reminder_cycle(
     if database is None:
         from lib.db import db as database
     if reminder_sender is None:
-        from lib.notify import notify_employee_shift_reminder
+        async def send_start_reminder(**kwargs):
+            from lib.notify import notify_employee_shift_reminder
 
-        reminder_sender = notify_employee_shift_reminder
+            return await notify_employee_shift_reminder(**kwargs)
+
+        reminder_sender = send_start_reminder
     if end_reminder_sender is None:
-        from lib.notify import notify_employee_shift_end_reminder
+        async def send_end_reminder(**kwargs):
+            from lib.notify import notify_employee_shift_end_reminder
 
-        end_reminder_sender = notify_employee_shift_end_reminder
+            return await notify_employee_shift_end_reminder(**kwargs)
+
+        end_reminder_sender = send_end_reminder
 
     current = now or now_local()
     cursor = database.employees.find(
