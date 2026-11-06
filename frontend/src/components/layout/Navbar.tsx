@@ -1,51 +1,71 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { Link, NavLink } from "react-router-dom";
 import { format } from "date-fns";
 import { arSA } from "date-fns/locale";
 import {
-  CalendarDays,
-  Clock,
-  Gauge,
-  LayoutDashboard,
   LogOut,
-  MapPin,
+  Menu,
   MessageSquare,
   RefreshCw,
   Users,
-  Wallet,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import NotificationBell from "@/components/layout/NotificationBell";
-
-const MANAGER_NAV = [
-  { to: "/", label: "لوحة التحكم", icon: LayoutDashboard, testid: "nav-dashboard" },
-  { to: "/employees", label: "الموظفون", icon: Users, testid: "nav-employees" },
-  { to: "/attendance", label: "الحضور", icon: Clock, testid: "nav-attendance" },
-  { to: "/leaves", label: "الإجازات", icon: CalendarDays, testid: "nav-leaves" },
-  { to: "/payroll", label: "الرواتب", icon: Wallet, testid: "nav-payroll" },
-  { to: "/discipline", label: "الانضباط", icon: Gauge, testid: "nav-discipline" },
-  { to: "/messages", label: "الرسائل", icon: MessageSquare, testid: "nav-messages" },
-  { to: "/locations", label: "المواقع", icon: MapPin, testid: "nav-locations" },
-];
-
-// Employees navigate through the bottom bar, so the top bar carries no links for them.
-const EMPLOYEE_NAV: { to: string; label: string; icon: typeof Users; testid: string }[] = [];
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { MANAGER_NAV } from "@/components/layout/manager-navigation";
 
 export default function Navbar() {
   const { session, role, logout } = useAuth();
   const queryClient = useQueryClient();
   const isRefreshing = useIsFetching() > 0;
   const [now, setNow] = useState(() => new Date());
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(timer);
   }, []);
 
-  const items = role === "manager" ? MANAGER_NAV : EMPLOYEE_NAV;
+  useEffect(() => {
+    if (role !== "manager") return;
+
+    const onTouchStart = (event: TouchEvent) => {
+      const touch = event.changedTouches[0];
+      if (touch) touchStart.current = { x: touch.clientX, y: touch.clientY };
+    };
+    const onTouchEnd = (event: TouchEvent) => {
+      const start = touchStart.current;
+      const touch = event.changedTouches[0];
+      touchStart.current = null;
+      if (!start || !touch) return;
+
+      const deltaX = touch.clientX - start.x;
+      const deltaY = touch.clientY - start.y;
+      if (Math.abs(deltaX) < 70 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) return;
+      if (drawerOpen && deltaX > 70) {
+        setDrawerOpen(false);
+      } else if (!drawerOpen && start.x >= window.innerWidth - 28 && deltaX < -70) {
+        setDrawerOpen(true);
+      }
+    };
+
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [drawerOpen, role]);
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 shadow-xs backdrop-blur-md">
@@ -60,29 +80,22 @@ export default function Navbar() {
           </span>
         </Link>
 
-        <nav className="hidden flex-1 items-center gap-1 lg:flex">
-          {items.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === "/"}
-              data-testid={item.testid}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium transition-colors",
-                  isActive
-                    ? "bg-teal-50 text-teal-700"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-                )
-              }
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
+        {role === "manager" && (
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            onClick={() => setDrawerOpen(true)}
+            aria-label="فتح قائمة التنقل"
+            aria-expanded={drawerOpen}
+            data-testid="manager-menu-btn"
+            className="h-10 w-10 shrink-0 rounded-xl border-slate-200 text-slate-700 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+        )}
 
-        <div className="ms-auto flex min-w-0 items-center gap-1.5 lg:ms-0 sm:gap-3 max-[360px]:gap-1">
+        <div className="ms-auto flex min-w-0 items-center gap-1.5 sm:gap-3 max-[360px]:gap-1">
           <span className="hidden text-xs font-medium text-slate-500 xl:block" data-testid="header-date">
             {format(now, "EEEE، d MMMM yyyy", { locale: arSA })}
           </span>
@@ -139,25 +152,57 @@ export default function Navbar() {
         </div>
       </div>
 
-      <nav className="flex gap-1 overflow-x-auto border-t border-slate-100 px-4 py-2 lg:hidden">
-        {items.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === "/"}
-            data-testid={`${item.testid}-mobile`}
-            className={({ isActive }) =>
-              cn(
-                "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
-                isActive ? "bg-teal-50 text-teal-700" : "text-slate-600",
-              )
-            }
+      {role === "manager" && (
+        <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+          <SheetContent
+            side="right"
+            showCloseButton
+            className="w-[min(22rem,88vw)] border-slate-200 bg-white p-0"
+            data-testid="manager-navigation-drawer"
           >
-            <item.icon className="h-3.5 w-3.5" />
-            {item.label}
-          </NavLink>
-        ))}
-      </nav>
+            <SheetHeader className="border-b border-slate-100 px-5 pb-5 pt-10">
+              <SheetTitle className="text-lg font-extrabold text-slate-900">قائمة التنقل</SheetTitle>
+              <SheetDescription>جميع أقسام لوحة الإدارة في مكان واحد.</SheetDescription>
+            </SheetHeader>
+            <nav className="flex-1 space-y-1 overflow-y-auto p-3" aria-label="أقسام الإدارة">
+              {MANAGER_NAV.map(({ to, label, icon: Icon, testid }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={to === "/"}
+                  data-testid={testid}
+                  onClick={() => setDrawerOpen(false)}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-semibold transition-colors",
+                      isActive
+                        ? "bg-teal-50 text-teal-800"
+                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                    )
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <span
+                        className={cn(
+                          "flex h-9 w-9 items-center justify-center rounded-lg",
+                          isActive ? "bg-teal-100 text-teal-700" : "bg-slate-100 text-slate-500",
+                        )}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      {label}
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </nav>
+            <div className="border-t border-slate-100 px-5 py-4 text-[11px] text-slate-400">
+              اسحب من حافة الشاشة اليمنى لفتح القائمة، واسحب يميناً لإغلاقها.
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
     </header>
   );
 }
