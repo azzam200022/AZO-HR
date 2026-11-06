@@ -41,7 +41,7 @@ def test_current_workday_is_not_absent_before_shift_end():
 
 
 def test_weekly_rest_day_is_recorded_as_holiday():
-    result = records("2026-11-07", now="12:00")
+    result = records("2026-11-07", today="2026-11-07", now="12:00")
     assert len(result) == 1
     assert result[0].status == "holiday"
 
