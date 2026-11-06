@@ -134,7 +134,7 @@ class AwayInterval(BaseModel):
     return_distance_m: float | None = None
     return_accuracy_m: float | None = None
     closed_at: str = ""
-    ended_by: Literal["return", "shift_end", "check_out"] | "" = ""
+    ended_by: Literal["return", "shift_end", "check_out", ""] = ""
     minutes: int = 0
 
 
