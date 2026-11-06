@@ -104,6 +104,7 @@ async def send_notification(note: dict[str, Any]) -> None:
         "payroll": "تسوية الراتب",
         "leave_request": "طلب إجازة جديد",
         "leave_status": "تحديث الإجازة",
+        "shift_reminder": "تذكير بموعد الدوام",
     }
     title = title_by_kind.get(kind, "مواردي")
     fallback = "لديك تحديث جديد في لوحة الإدارة." if audience == "manager" else "لديك إشعار جديد."

@@ -134,3 +134,50 @@ async def notify_employee_adjustment(employee: dict, adjustment: dict) -> None:
             f"السبب: {adjustment.get('reason', '')}"
         ),
     )
+
+
+async def notify_employee_shift_reminder(
+    employee: dict,
+    *,
+    work_date: str,
+    shift_start: str,
+    minutes_before: int,
+) -> bool:
+    """Persist and push one shift reminder, deduplicated across scheduler restarts."""
+    labels = {
+        60: "ساعة",
+        30: "نصف ساعة",
+        15: "15 دقيقة",
+    }
+    label = labels.get(minutes_before)
+    if not label:
+        return False
+
+    note = Notification(
+        id=f"shift-reminder:{employee['id']}:{work_date}:{minutes_before}",
+        kind="shift_reminder",
+        audience="employee",
+        employee_id=employee["id"],
+        employee_name=employee.get("name", ""),
+        date=work_date,
+        at_time=now_time(),
+        minutes=minutes_before,
+        message=f"يبدأ دوامك الساعة {shift_start} — تبقّى {label}.",
+    )
+    try:
+        result = await db.notifications.update_one(
+            {"id": note.id},
+            {"$setOnInsert": note.model_dump()},
+            upsert=True,
+        )
+    except Exception as exc:
+        logger.warning("Could not save shift reminder (%s)", type(exc).__name__)
+        return False
+
+    if result.upserted_id is None:
+        return False
+    try:
+        await send_notification(note.model_dump())
+    except Exception as exc:
+        logger.warning("Could not send shift reminder (%s)", type(exc).__name__)
+    return True
