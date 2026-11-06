@@ -16,14 +16,16 @@ public class BackgroundTrackingPlugin extends Plugin {
     @PluginMethod
     public void start(PluginCall call) {
         String apiBaseUrl = call.getData().optString("apiBaseUrl", "").trim();
-        if (apiBaseUrl.isEmpty()) {
-            call.reject("رابط الخادم غير صالح.");
+        String employeeId = call.getData().optString("employeeId", "").trim();
+        if (apiBaseUrl.isEmpty() || employeeId.isEmpty()) {
+            call.reject("تعذر إعداد رابط الخادم أو حساب الموظف.");
             return;
         }
 
         Intent intent = new Intent(getContext(), BackgroundLocationService.class);
         intent.setAction(BackgroundLocationService.ACTION_START);
         intent.putExtra(BackgroundLocationService.EXTRA_API_BASE_URL, apiBaseUrl);
+        intent.putExtra(BackgroundLocationService.EXTRA_EMPLOYEE_ID, employeeId);
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 ContextCompat.startForegroundService(getContext(), intent);

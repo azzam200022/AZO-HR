@@ -128,7 +128,7 @@ export default function PresenceTracker() {
         cancelled
       ) return;
       try {
-        await startBackgroundLocationTracking(false);
+        await startBackgroundLocationTracking(employeeId, false);
       } catch {
         // Do not show repeated OS prompts; the employee can retry from the attendance screen.
       }

@@ -219,15 +219,52 @@ export default function Attendance() {
                   <TableCell data-testid={`attendance-late-${rec.id}`}>
                     {rec.status !== "present" ? (
                       <span className="text-xs text-slate-400">—</span>
-                    ) : rec.late_minutes + rec.away_minutes > 0 ? (
-                      <span className="text-sm font-semibold tabular-nums text-red-700">
+                    ) : rec.late_minutes + rec.away_minutes > 0 || !!rec.away_intervals?.length ? (
+                      <div className="text-sm font-semibold tabular-nums text-red-700">
                         {lateLabel(rec.late_minutes + rec.away_minutes)}
                         {rec.away_minutes > 0 && (
                           <span className="block text-[10px] font-normal text-amber-700">
                             منها {lateLabel(rec.away_minutes)} خارج الموقع
                           </span>
                         )}
-                      </span>
+                        {!!rec.away_intervals?.length && (
+                          <details className="mt-1 text-start text-[10px] font-normal text-slate-500">
+                            <summary className="cursor-pointer">
+                              تفاصيل الخروج ({formatNumber(rec.away_intervals.length)})
+                            </summary>
+                            <div className="mt-1 space-y-2">
+                              {rec.away_intervals.map((interval, index) => (
+                                <div
+                                  key={`${rec.id}-away-${index}`}
+                                  className="rounded-md bg-slate-50 p-2"
+                                >
+                                  <p>
+                                    مغادرة {interval.left_at.slice(11, 16)}
+                                    {interval.returned_at
+                                      ? ` · عودة ${interval.returned_at.slice(11, 16)}`
+                                      : interval.ended_by === "shift_end"
+                                        ? " · أُغلقت عند نهاية الوردية"
+                                        : interval.ended_by === "check_out"
+                                          ? " · أُغلقت عند الانصراف"
+                                          : " · لم تسجل العودة بعد"}
+                                    {` · ${lateLabel(interval.minutes)}`}
+                                  </p>
+                                  {interval.left_lat != null && interval.left_lng != null && (
+                                    <p dir="ltr" className="mt-1 text-left">
+                                      خروج: {interval.left_lat.toFixed(6)}, {interval.left_lng.toFixed(6)}
+                                    </p>
+                                  )}
+                                  {interval.return_lat != null && interval.return_lng != null && (
+                                    <p dir="ltr" className="text-left">
+                                      عودة: {interval.return_lat.toFixed(6)}, {interval.return_lng.toFixed(6)}
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-xs text-emerald-700">في الوقت</span>
                     )}

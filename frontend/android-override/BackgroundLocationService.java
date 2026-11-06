@@ -23,6 +23,7 @@ import android.os.Looper;
 import android.webkit.CookieManager;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -33,11 +34,13 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class BackgroundLocationService extends Service implements LocationListener {
     public static final String ACTION_START = "com.azzam200022.azo.START_BACKGROUND_TRACKING";
     public static final String ACTION_STOP = "com.azzam200022.azo.STOP_BACKGROUND_TRACKING";
     public static final String EXTRA_API_BASE_URL = "apiBaseUrl";
+    public static final String EXTRA_EMPLOYEE_ID = "employeeId";
     private static final String CHANNEL_ID = "azo-work-location";
     private static final int NOTIFICATION_ID = 8214;
     private static final String PREFS = "azo_background_location";
@@ -46,9 +49,19 @@ public class BackgroundLocationService extends Service implements LocationListen
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService network = Executors.newSingleThreadExecutor();
+    private final AtomicBoolean flushInFlight = new AtomicBoolean(false);
+    private final Runnable syncRetry = new Runnable() {
+        @Override
+        public void run() {
+            scheduleFlush();
+            handler.postDelayed(this, 30_000L);
+        }
+    };
 
     private LocationManager locationManager;
+    private LocationQueueDatabase locationQueue;
     private String apiBaseUrl = "";
+    private String employeeId = "";
     private long lastSentAt;
     private boolean updatesRequested;
 
@@ -56,6 +69,7 @@ public class BackgroundLocationService extends Service implements LocationListen
     public void onCreate() {
         super.onCreate();
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+        locationQueue = new LocationQueueDatabase(this);
     }
 
     @Override
@@ -72,8 +86,11 @@ public class BackgroundLocationService extends Service implements LocationListen
         SharedPreferences preferences = getSharedPreferences(PREFS, MODE_PRIVATE);
         if (intent != null && ACTION_START.equals(intent.getAction())) {
             apiBaseUrl = normalizeOrigin(intent.getStringExtra(EXTRA_API_BASE_URL));
+            employeeId = intent.getStringExtra(EXTRA_EMPLOYEE_ID);
+            if (employeeId == null) employeeId = "";
             preferences.edit()
                 .putString(EXTRA_API_BASE_URL, apiBaseUrl)
+                .putString(EXTRA_EMPLOYEE_ID, employeeId)
                 .putBoolean("active", true)
                 .putBoolean("manual_stopped", false)
                 .apply();
@@ -83,9 +100,10 @@ public class BackgroundLocationService extends Service implements LocationListen
                 return START_NOT_STICKY;
             }
             apiBaseUrl = normalizeOrigin(preferences.getString(EXTRA_API_BASE_URL, ""));
+            employeeId = preferences.getString(EXTRA_EMPLOYEE_ID, "");
         }
 
-        if (apiBaseUrl.isEmpty()) {
+        if (apiBaseUrl.isEmpty() || employeeId.isEmpty()) {
             stopTracking();
             return START_NOT_STICKY;
         }
@@ -113,6 +131,9 @@ public class BackgroundLocationService extends Service implements LocationListen
             return START_NOT_STICKY;
         }
 
+        scheduleFlush();
+        handler.removeCallbacks(syncRetry);
+        handler.postDelayed(syncRetry, 30_000L);
         return START_STICKY;
     }
 
@@ -172,33 +193,52 @@ public class BackgroundLocationService extends Service implements LocationListen
             .edit()
             .putLong("lastSentAt", now)
             .apply();
-        sendLocation(location);
+        try {
+            locationQueue.enqueue(employeeId, location);
+        } catch (Exception exception) {
+            android.util.Log.w("AzoBackgroundLocation", "Could not save a location fix");
+            return;
+        }
+        scheduleFlush();
     }
 
-    private void sendLocation(Location location) {
-        final double latitude = location.getLatitude();
-        final double longitude = location.getLongitude();
+    private void scheduleFlush() {
+        if (!flushInFlight.compareAndSet(false, true)) return;
         network.execute(() -> {
+            try {
+                flushPending();
+            } finally {
+                flushInFlight.set(false);
+            }
+        });
+    }
+
+    private void flushPending() {
+        if (locationQueue == null || apiBaseUrl.isEmpty() || employeeId.isEmpty()) return;
+        boolean checkedOut = false;
+        while (true) {
             HttpURLConnection connection = null;
             try {
+                JSONArray samples = locationQueue.readBatch(employeeId, 100);
+                if (samples.length() == 0) break;
+
                 String cookie = CookieManager.getInstance().getCookie(apiBaseUrl + "/");
                 if (cookie == null || cookie.isEmpty()) {
                     requestStop();
                     return;
                 }
 
-                URL endpoint = new URL(apiBaseUrl + "/api/me/presence");
+                URL endpoint = new URL(apiBaseUrl + "/api/me/presence/batch");
                 connection = (HttpURLConnection) endpoint.openConnection();
                 connection.setRequestMethod("POST");
-                connection.setConnectTimeout(10_000);
-                connection.setReadTimeout(10_000);
+                connection.setConnectTimeout(15_000);
+                connection.setReadTimeout(15_000);
                 connection.setDoOutput(true);
                 connection.setRequestProperty("Cookie", cookie);
                 connection.setRequestProperty("Content-Type", "application/json");
 
                 JSONObject body = new JSONObject();
-                body.put("lat", latitude);
-                body.put("lng", longitude);
+                body.put("samples", samples);
                 byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
                 try (OutputStream output = connection.getOutputStream()) {
                     output.write(bytes);
@@ -213,27 +253,35 @@ public class BackgroundLocationService extends Service implements LocationListen
                     return;
                 }
 
-                if (status >= 200 && status < 300) {
-                    try (InputStream input = connection.getInputStream()) {
-                        ByteArrayOutputStream responseBytes = new ByteArrayOutputStream();
-                        byte[] buffer = new byte[1024];
-                        int count;
-                        while ((count = input.read(buffer)) != -1) {
-                            responseBytes.write(buffer, 0, count);
-                        }
-                        JSONObject result = new JSONObject(
-                            new String(responseBytes.toByteArray(), StandardCharsets.UTF_8)
-                        );
-                        if (result.optBoolean("checked_out", false)) requestStop();
+                if (status < 200 || status >= 300) {
+                    android.util.Log.w("AzoBackgroundLocation", "Location batch sync failed");
+                    return;
+                }
+
+                try (InputStream input = connection.getInputStream()) {
+                    ByteArrayOutputStream responseBytes = new ByteArrayOutputStream();
+                    byte[] buffer = new byte[1024];
+                    int count;
+                    while ((count = input.read(buffer)) != -1) {
+                        responseBytes.write(buffer, 0, count);
                     }
+                    JSONObject result = new JSONObject(
+                        new String(responseBytes.toByteArray(), StandardCharsets.UTF_8)
+                    );
+                    JSONArray acknowledged = result.optJSONArray("acknowledged_ids");
+                    if (acknowledged == null || acknowledged.length() == 0) return;
+                    locationQueue.deleteAcknowledged(employeeId, acknowledged);
+                    checkedOut = checkedOut || result.optBoolean("checked_out", false);
                 }
             } catch (Exception exception) {
                 // Never log coordinates, cookies, or the request URL.
-                android.util.Log.w("AzoBackgroundLocation", "Location heartbeat failed");
+                android.util.Log.w("AzoBackgroundLocation", "Location batch sync failed");
+                return;
             } finally {
                 if (connection != null) connection.disconnect();
             }
-        });
+        }
+        if (checkedOut) requestStop();
     }
 
     private void requestStop() {
@@ -255,7 +303,7 @@ public class BackgroundLocationService extends Service implements LocationListen
             : new Notification.Builder(this);
         builder.setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentTitle("مواردي — تتبع موقع الدوام")
-            .setContentText("يستمر التتبع بعد نهاية الوردية حتى رصد مغادرة موقع العمل.")
+            .setContentText("تُحفظ النقاط عند انقطاع الإنترنت وتُرسل عند عودته.")
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .addAction(
@@ -281,6 +329,7 @@ public class BackgroundLocationService extends Service implements LocationListen
     }
 
     private void stopTracking() {
+        handler.removeCallbacks(syncRetry);
         if (locationManager != null) {
             try {
                 locationManager.removeUpdates(this);
@@ -292,6 +341,7 @@ public class BackgroundLocationService extends Service implements LocationListen
             .edit()
             .putBoolean("active", false)
             .remove(EXTRA_API_BASE_URL)
+            .remove(EXTRA_EMPLOYEE_ID)
             .apply();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE);
@@ -322,6 +372,7 @@ public class BackgroundLocationService extends Service implements LocationListen
 
     @Override
     public void onDestroy() {
+        handler.removeCallbacks(syncRetry);
         if (locationManager != null) {
             try {
                 locationManager.removeUpdates(this);
@@ -329,6 +380,7 @@ public class BackgroundLocationService extends Service implements LocationListen
                 // Ignore cleanup failures during process shutdown.
             }
         }
+        if (locationQueue != null) locationQueue.close();
         network.shutdownNow();
         super.onDestroy();
     }

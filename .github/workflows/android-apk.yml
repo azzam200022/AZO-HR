@@ -49,6 +49,7 @@ jobs:
           cp frontend/android-override/MainActivity.java frontend/android/app/src/main/java/com/azzam200022/azo/MainActivity.java
           cp frontend/android-override/BackgroundTrackingPlugin.java frontend/android/app/src/main/java/com/azzam200022/azo/BackgroundTrackingPlugin.java
           cp frontend/android-override/BackgroundLocationService.java frontend/android/app/src/main/java/com/azzam200022/azo/BackgroundLocationService.java
+          cp frontend/android-override/LocationQueueDatabase.java frontend/android/app/src/main/java/com/azzam200022/azo/LocationQueueDatabase.java
       - name: Configure Firebase Android app
         working-directory: frontend
         env:

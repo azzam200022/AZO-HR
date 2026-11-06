@@ -120,6 +120,24 @@ class EmployeeUpdate(BaseModel):
         return _validate_work_days(value)
 
 
+class AwayInterval(BaseModel):
+    """A geofence departure and return, not a full movement path."""
+
+    left_at: str
+    left_lat: float | None = None
+    left_lng: float | None = None
+    left_distance_m: float | None = None
+    left_accuracy_m: float | None = None
+    returned_at: str = ""
+    return_lat: float | None = None
+    return_lng: float | None = None
+    return_distance_m: float | None = None
+    return_accuracy_m: float | None = None
+    closed_at: str = ""
+    ended_by: Literal["return", "shift_end", "check_out", ""] = ""
+    minutes: int = 0
+
+
 class AttendanceRecord(BaseModel):
     id: str = Field(default_factory=_uuid)
     employee_id: str
@@ -130,11 +148,13 @@ class AttendanceRecord(BaseModel):
     check_in: str = ""  # HH:MM — empty when unknown
     check_in_at: datetime | None = None  # precise UTC instant for the live timer
     check_out: str = ""  # HH:MM
+    check_out_at: datetime | None = None  # precise local-zone instant for historical replay
     location_id: str = ""  # work location the punch was verified against ("" = none)
     distance_m: float | None = None  # metres from the location at check-in
     late_minutes: int = 0  # minutes late against the employee's shift start
     away_minutes: int = 0  # minutes spent outside the work location during the shift
     outside_since: str = ""  # HH:MM when the employee was last seen outside ("" = inside)
+    away_intervals: list[AwayInterval] = Field(default_factory=list)
     last_seen: str = ""  # HH:MM of the last location heartbeat
     created_at: datetime = Field(default_factory=utcnow)
 
@@ -163,6 +183,28 @@ class SelfPunch(BaseModel):
 
     lat: float | None = None
     lng: float | None = None
+
+
+class PresenceLocationSample(BaseModel):
+    """One locally queued Android location fix; identity is checked against the session."""
+
+    event_id: str = Field(min_length=1, max_length=80)
+    employee_id: str = Field(min_length=1, max_length=80)
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+    observed_at_ms: int = Field(gt=0)
+    accuracy_m: float | None = Field(default=None, ge=0, le=10000)
+
+
+class PresenceLocationBatch(BaseModel):
+    samples: list[PresenceLocationSample] = Field(min_length=1, max_length=100)
+
+
+class PresenceLocationBatchResult(BaseModel):
+    acknowledged_ids: list[str]
+    processed: int
+    ignored: int
+    checked_out: bool = False
 
 
 class LeaveRequest(BaseModel):
