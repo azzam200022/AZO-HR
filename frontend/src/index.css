@@ -138,3 +138,134 @@
     overflow-x: clip;
   }
 }
+
+/* Keep legacy neutral utility classes aligned with the selected theme. */
+html.dark [class~="bg-white"] {
+  background-color: var(--card);
+}
+
+html.dark [class~="bg-white/85"] {
+  background-color: color-mix(in srgb, var(--card) 85%, transparent);
+}
+
+html.dark [class~="bg-white/95"] {
+  background-color: color-mix(in srgb, var(--card) 95%, transparent);
+}
+
+html.dark [class~="bg-slate-50"] {
+  background-color: var(--background);
+}
+
+html.dark [class~="bg-slate-50/50"] {
+  background-color: color-mix(in srgb, var(--background) 50%, transparent);
+}
+
+html.dark [class~="bg-slate-50/60"] {
+  background-color: color-mix(in srgb, var(--background) 60%, transparent);
+}
+
+html.dark [class~="bg-slate-50/70"] {
+  background-color: color-mix(in srgb, var(--background) 70%, transparent);
+}
+
+html.dark [class~="bg-slate-100"] {
+  background-color: var(--secondary);
+}
+
+html.dark [class~="bg-slate-200"],
+html.dark [class~="bg-slate-300"] {
+  background-color: var(--border);
+}
+
+html.dark [class~="bg-teal-50"],
+html.dark [class~="bg-teal-100"] {
+  background-color: var(--accent);
+}
+
+html.dark [class~="bg-teal-50/70"] {
+  background-color: color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+html.dark [class~="bg-emerald-50"],
+html.dark [class~="bg-emerald-100"],
+html.dark [class~="bg-indigo-100"] {
+  background-color: color-mix(in srgb, #10b981 18%, var(--card));
+}
+
+html.dark [class~="bg-amber-50"],
+html.dark [class~="bg-amber-100"],
+html.dark [class~="bg-amber-50/60"] {
+  background-color: color-mix(in srgb, #f59e0b 18%, var(--card));
+}
+
+html.dark [class~="bg-rose-50"],
+html.dark [class~="bg-rose-100"],
+html.dark [class~="bg-red-100"] {
+  background-color: color-mix(in srgb, #f43f5e 18%, var(--card));
+}
+
+html.dark [class~="bg-orange-100"] {
+  background-color: color-mix(in srgb, #f97316 18%, var(--card));
+}
+
+html.dark [class~="text-slate-900"],
+html.dark [class~="text-slate-800"],
+html.dark [class~="text-slate-700"] {
+  color: var(--foreground);
+}
+
+html.dark [class~="text-slate-600"],
+html.dark [class~="text-slate-500"],
+html.dark [class~="text-slate-400"],
+html.dark [class~="text-slate-300"] {
+  color: var(--muted-foreground);
+}
+
+html.dark [class~="text-teal-900"],
+html.dark [class~="text-teal-800"],
+html.dark [class~="text-teal-800/80"],
+html.dark [class~="text-teal-700"],
+html.dark [class~="text-teal-600"] {
+  color: #5eead4;
+}
+
+html.dark [class~="text-emerald-800"],
+html.dark [class~="text-emerald-700"] {
+  color: #6ee7b7;
+}
+
+html.dark [class~="text-rose-800"],
+html.dark [class~="text-rose-700"],
+html.dark [class~="text-rose-600"],
+html.dark [class~="text-rose-500"],
+html.dark [class~="text-red-800"],
+html.dark [class~="text-red-700"],
+html.dark [class~="text-red-600"] {
+  color: #fda4af;
+}
+
+html.dark [class~="text-amber-800"],
+html.dark [class~="text-amber-700"],
+html.dark [class~="text-amber-600"],
+html.dark [class~="text-orange-800"] {
+  color: #fcd34d;
+}
+
+html.dark [class~="text-indigo-800"],
+html.dark [class~="text-indigo-700"] {
+  color: #c7d2fe;
+}
+
+html.dark [class~="border-slate-50"],
+html.dark [class~="border-slate-100"],
+html.dark [class~="border-slate-200"],
+html.dark [class~="border-slate-200/80"],
+html.dark [class~="border-slate-300"] {
+  border-color: var(--border);
+}
+
+html.dark [class~="border-teal-100"],
+html.dark [class~="border-teal-200"],
+html.dark [class~="border-teal-300"] {
+  border-color: color-mix(in srgb, #14b8a6 35%, var(--border));
+}
