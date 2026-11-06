@@ -3,8 +3,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from lib import notify
-
 
 class _Notifications:
     def __init__(self):
@@ -16,6 +14,10 @@ class _Notifications:
 
 @pytest.mark.asyncio
 async def test_employee_event_is_saved_and_pushed_with_specific_content(monkeypatch):
+    monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
+    monkeypatch.setenv("DB_NAME", "notifications_test")
+    from lib import notify
+
     notifications = _Notifications()
     send = AsyncMock()
     monkeypatch.setattr(notify, "db", SimpleNamespace(notifications=notifications))
