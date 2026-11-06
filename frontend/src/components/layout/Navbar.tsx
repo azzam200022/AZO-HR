@@ -7,7 +7,9 @@ import {
   LogOut,
   Menu,
   MessageSquare,
+  Moon,
   RefreshCw,
+  Sun,
   Users,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
@@ -25,7 +27,7 @@ import {
 import { MANAGER_NAV } from "@/components/layout/manager-navigation";
 
 export default function Navbar() {
-  const { session, role, logout } = useAuth();
+  const { session, role, logout, theme, setTheme } = useAuth();
   const queryClient = useQueryClient();
   const isRefreshing = useIsFetching() > 0;
   const [now, setNow] = useState(() => new Date());
@@ -127,6 +129,19 @@ export default function Navbar() {
             className="shrink-0"
           >
             <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            aria-label={theme === "dark" ? "تفعيل الوضع النهاري" : "تفعيل الوضع الليلي"}
+            aria-pressed={theme === "dark"}
+            title={theme === "dark" ? "تفعيل الوضع النهاري" : "تفعيل الوضع الليلي"}
+            data-testid="theme-toggle-btn"
+            className="shrink-0"
+          >
+            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
           <NotificationBell audience={role === "manager" ? "manager" : "employee"} />
           <div className="flex min-w-0 shrink-0 items-center gap-1 rounded-full bg-slate-100 py-1 ps-1.5 pe-1 sm:gap-2 sm:ps-3">
