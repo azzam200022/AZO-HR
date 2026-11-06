@@ -3,6 +3,7 @@
 export type EmployeeStatus = "active" | "inactive";
 export type LeaveStatus = "pending" | "approved" | "rejected";
 export type LeaveType = "annual" | "sick" | "unpaid";
+export type AttendanceStatus = "present" | "absent" | "leave" | "holiday";
 export type PayrollStatus = "draft" | "paid";
 
 export interface Employee {
@@ -91,7 +92,11 @@ export interface AttendanceRecord {
   id: string;
   employee_id: string;
   date: string; // YYYY-MM-DD
+  status: AttendanceStatus;
+  is_synthetic: boolean;
+  is_archived: boolean;
   check_in: string; // HH:MM — "" when unknown
+  check_in_at: string | null; // precise UTC instant for live elapsed time
   check_out: string; // HH:MM
   location_id: string; // "" when punch had no geofence
   distance_m: number | null;
@@ -271,9 +276,17 @@ export interface DeleteResult {
 export interface TodayResponse {
   today: string;
   now_hhmm: string;
+  now_utc: string;
 }
 
 // Arabic label maps
+export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatus, string> = {
+  present: "حضور",
+  absent: "غياب",
+  leave: "إجازة",
+  holiday: "عطلة",
+};
+
 export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
   annual: "سنوية",
   sick: "مرضية",

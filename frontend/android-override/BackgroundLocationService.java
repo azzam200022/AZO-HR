@@ -38,30 +38,17 @@ public class BackgroundLocationService extends Service implements LocationListen
     public static final String ACTION_START = "com.azzam200022.azo.START_BACKGROUND_TRACKING";
     public static final String ACTION_STOP = "com.azzam200022.azo.STOP_BACKGROUND_TRACKING";
     public static final String EXTRA_API_BASE_URL = "apiBaseUrl";
-    public static final String EXTRA_STOP_AT = "stopAt";
-
     private static final String CHANNEL_ID = "azo-work-location";
     private static final int NOTIFICATION_ID = 8214;
     private static final String PREFS = "azo_background_location";
-    private static final long UPDATE_INTERVAL_MS = 60_000L;
-    private static final long MIN_SEND_INTERVAL_MS = 55_000L;
+    private static final long UPDATE_INTERVAL_MS = 30_000L;
+    private static final long MIN_SEND_INTERVAL_MS = 25_000L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService network = Executors.newSingleThreadExecutor();
-    private final Runnable endOfShift = new Runnable() {
-        @Override
-        public void run() {
-            if (stopAt > 0 && System.currentTimeMillis() >= stopAt) {
-                stopTracking();
-                return;
-            }
-            handler.postDelayed(this, 30_000L);
-        }
-    };
 
     private LocationManager locationManager;
     private String apiBaseUrl = "";
-    private long stopAt;
     private long lastSentAt;
     private boolean updatesRequested;
 
@@ -74,6 +61,10 @@ public class BackgroundLocationService extends Service implements LocationListen
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && ACTION_STOP.equals(intent.getAction())) {
+            getSharedPreferences(PREFS, MODE_PRIVATE)
+                .edit()
+                .putBoolean("manual_stopped", true)
+                .apply();
             stopTracking();
             return START_NOT_STICKY;
         }
@@ -81,11 +72,10 @@ public class BackgroundLocationService extends Service implements LocationListen
         SharedPreferences preferences = getSharedPreferences(PREFS, MODE_PRIVATE);
         if (intent != null && ACTION_START.equals(intent.getAction())) {
             apiBaseUrl = normalizeOrigin(intent.getStringExtra(EXTRA_API_BASE_URL));
-            stopAt = intent.getLongExtra(EXTRA_STOP_AT, 0L);
             preferences.edit()
                 .putString(EXTRA_API_BASE_URL, apiBaseUrl)
-                .putLong(EXTRA_STOP_AT, stopAt)
                 .putBoolean("active", true)
+                .putBoolean("manual_stopped", false)
                 .apply();
         } else {
             if (!preferences.getBoolean("active", false)) {
@@ -93,10 +83,9 @@ public class BackgroundLocationService extends Service implements LocationListen
                 return START_NOT_STICKY;
             }
             apiBaseUrl = normalizeOrigin(preferences.getString(EXTRA_API_BASE_URL, ""));
-            stopAt = preferences.getLong(EXTRA_STOP_AT, 0L);
         }
 
-        if (apiBaseUrl.isEmpty() || stopAt <= System.currentTimeMillis()) {
+        if (apiBaseUrl.isEmpty()) {
             stopTracking();
             return START_NOT_STICKY;
         }
@@ -124,8 +113,6 @@ public class BackgroundLocationService extends Service implements LocationListen
             return START_NOT_STICKY;
         }
 
-        handler.removeCallbacks(endOfShift);
-        handler.post(endOfShift);
         return START_STICKY;
     }
 
@@ -268,7 +255,7 @@ public class BackgroundLocationService extends Service implements LocationListen
             : new Notification.Builder(this);
         builder.setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentTitle("مواردي — تتبع موقع الدوام")
-            .setContentText("موقعك يُستخدم لمتابعة نطاق العمل حتى الانصراف.")
+            .setContentText("يستمر التتبع بعد نهاية الوردية حتى رصد مغادرة موقع العمل.")
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .addAction(
@@ -294,7 +281,6 @@ public class BackgroundLocationService extends Service implements LocationListen
     }
 
     private void stopTracking() {
-        handler.removeCallbacks(endOfShift);
         if (locationManager != null) {
             try {
                 locationManager.removeUpdates(this);
@@ -306,7 +292,6 @@ public class BackgroundLocationService extends Service implements LocationListen
             .edit()
             .putBoolean("active", false)
             .remove(EXTRA_API_BASE_URL)
-            .remove(EXTRA_STOP_AT)
             .apply();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE);
@@ -330,9 +315,13 @@ public class BackgroundLocationService extends Service implements LocationListen
         return false;
     }
 
+    public static boolean wasManuallyStopped(Context context) {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean("manual_stopped", false);
+    }
+
     @Override
     public void onDestroy() {
-        handler.removeCallbacks(endOfShift);
         if (locationManager != null) {
             try {
                 locationManager.removeUpdates(this);

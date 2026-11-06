@@ -14,9 +14,19 @@ def today_iso(tz: str | None = None) -> str:
     return datetime.now(_zone(tz)).strftime("%Y-%m-%d")
 
 
+def now_utc() -> datetime:
+    """Current instant as an aware UTC datetime."""
+    return datetime.now(timezone.utc)
+
+
+def now_local(tz: str | None = None) -> datetime:
+    """Current timezone-aware local datetime in `tz` (default: APP_TZ or Asia/Baghdad)."""
+    return now_utc().astimezone(_zone(tz))
+
+
 def now_time(tz: str | None = None) -> str:
     """Current wall-clock time as HH:MM (24h) in `tz`."""
-    return datetime.now(_zone(tz)).strftime("%H:%M")
+    return now_local(tz).strftime("%H:%M")
 
 
 def current_month(tz: str | None = None) -> str:

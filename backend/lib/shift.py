@@ -8,7 +8,7 @@ Late rule (as specified):
 The same rule applies to an evening shift (16:00 → 00:00) using its own start time.
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 DEFAULT_SHIFT_START = "08:00"
 DEFAULT_SHIFT_END = "16:00"
@@ -122,3 +122,44 @@ def employee_shift(employee: dict) -> tuple[str, str, int]:
         employee.get("shift_end") or DEFAULT_SHIFT_END,
         int(employee.get("grace_minutes", DEFAULT_GRACE_MINUTES)),
     )
+
+def away_minutes_at(
+    record: dict, now: str, shift_start: str, shift_end: str
+) -> int:
+    """Saved away time plus the open interval through `now`, capped at the shift end."""
+    total = int(record.get("away_minutes", 0))
+    outside_since = record.get("outside_since") or ""
+    if not outside_since:
+        return total
+    day_minutes = 24 * 60
+    start = (to_minutes(outside_since) - to_minutes(shift_start)) % day_minutes
+    end = (to_minutes(now) - to_minutes(shift_start)) % day_minutes
+    scheduled = shift_minutes(shift_start, shift_end)
+    start = min(start, scheduled)
+    end = max(start, min(end, scheduled))
+    return total + end - start
+
+
+def effective_away_minutes(
+    record: dict, now: str, today: str, shift_start: str, shift_end: str
+) -> int:
+    """Count an open departure to now during a shift, or to shift end after it."""
+    outside_since = record.get("outside_since") or ""
+    if not outside_since:
+        return int(record.get("away_minutes", 0))
+    record_date = record.get("date") or today
+    try:
+        is_previous_overnight_day = (
+            to_minutes(shift_end) <= to_minutes(shift_start)
+            and date.fromisoformat(record_date) + timedelta(days=1) == date.fromisoformat(today)
+            and to_minutes(now) < to_minutes(shift_end)
+        )
+    except ValueError:
+        is_previous_overnight_day = False
+    if is_previous_overnight_day:
+        interval_end = now
+    elif record_date < today or shift_has_ended(now, shift_start, shift_end):
+        interval_end = shift_end
+    else:
+        interval_end = now
+    return away_minutes_at(record, interval_end, shift_start, shift_end)

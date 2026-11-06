@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { apiDelete, apiGet, apiPost } from "@/lib/api";
 import { durationLabel, errorText, fmtDate, formatNumber, lateLabel, todayStr } from "@/lib/format";
-import type { AttendanceRecord, Employee } from "@/lib/types";
+import { ATTENDANCE_STATUS_LABELS, type AttendanceRecord, type Employee } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -41,7 +41,7 @@ import {
 
 export default function Attendance() {
   const queryClient = useQueryClient();
-  const [dateFilter, setDateFilter] = useState("");
+  const [dateFilter, setDateFilter] = useState(todayStr());
   const [employeeFilter, setEmployeeFilter] = useState("all");
   const [addOpen, setAddOpen] = useState(false);
   const [deleting, setDeleting] = useState<AttendanceRecord | null>(null);
@@ -100,7 +100,7 @@ export default function Attendance() {
   // list spans many days and the ratio would exceed 100%.
   const rate =
     dateFilter && activeCount > 0
-      ? Math.round((records.filter((r) => r.date === dateFilter).length / activeCount) * 100)
+      ? Math.round((records.filter((r) => r.date === dateFilter && r.status === "present" && r.check_in).length / activeCount) * 100)
       : null;
 
   const openAdd = () => {
@@ -179,6 +179,7 @@ export default function Attendance() {
               <TableRow>
                 <TableHead>الموظف</TableHead>
                 <TableHead>التاريخ</TableHead>
+                <TableHead>الحالة</TableHead>
                 <TableHead>الحضور</TableHead>
                 <TableHead>الانصراف</TableHead>
                 <TableHead>مدة العمل</TableHead>
@@ -193,13 +194,32 @@ export default function Attendance() {
                     {employeeName(rec.employee_id)}
                   </TableCell>
                   <TableCell className="text-sm tabular-nums text-slate-600">{fmtDate(rec.date)}</TableCell>
-                  <TableCell className="text-sm tabular-nums text-emerald-700">{rec.check_in || "—"}</TableCell>
-                  <TableCell className="text-sm tabular-nums text-slate-600">{rec.check_out || "—"}</TableCell>
+                  <TableCell>
+                    <span
+                      className={
+                        rec.status === "present"
+                          ? "rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-700"
+                          : rec.status === "absent"
+                            ? "rounded-full bg-rose-100 px-2 py-1 text-[11px] font-semibold text-rose-700"
+                            : "rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600"
+                      }
+                    >
+                      {ATTENDANCE_STATUS_LABELS[rec.status]}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-sm tabular-nums text-emerald-700">
+                    {rec.status === "present" ? rec.check_in || "—" : "—"}
+                  </TableCell>
                   <TableCell className="text-sm tabular-nums text-slate-600">
-                    {durationLabel(rec.check_in, rec.check_out)}
+                    {rec.status === "present" ? rec.check_out || "—" : "—"}
+                  </TableCell>
+                  <TableCell className="text-sm tabular-nums text-slate-600">
+                    {rec.status === "present" ? durationLabel(rec.check_in, rec.check_out) : "—"}
                   </TableCell>
                   <TableCell data-testid={`attendance-late-${rec.id}`}>
-                    {rec.late_minutes + rec.away_minutes > 0 ? (
+                    {rec.status !== "present" ? (
+                      <span className="text-xs text-slate-400">—</span>
+                    ) : rec.late_minutes + rec.away_minutes > 0 ? (
                       <span className="text-sm font-semibold tabular-nums text-red-700">
                         {lateLabel(rec.late_minutes + rec.away_minutes)}
                         {rec.away_minutes > 0 && (
@@ -213,6 +233,7 @@ export default function Attendance() {
                     )}
                   </TableCell>
                   <TableCell className="text-end">
+                    {!rec.is_synthetic && !rec.is_archived && (
                     <Button
                       size="icon-sm"
                       variant="ghost"
@@ -223,6 +244,7 @@ export default function Attendance() {
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
