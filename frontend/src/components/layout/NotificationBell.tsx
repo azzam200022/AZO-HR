@@ -133,6 +133,20 @@ export default function NotificationBell({ audience }: Props) {
     }
   };
 
+  const retryBrowserPushSetup = async () => {
+    setBrowserPushChecked(false);
+    setBrowserPushReady(false);
+    setBrowserPushEnabled(false);
+    const currentPermission = pushPermission();
+    setPermission(currentPermission);
+    const ready = await prepareBrowserPush(true);
+    setBrowserPushReady(ready);
+    setBrowserPushChecked(true);
+    if (ready && currentPermission === "granted") {
+      setBrowserPushEnabled(await initializeBrowserPush());
+    }
+  };
+
   const notifications = listQuery.data ?? [];
 
   const iconFor = (kind: AppNotification["kind"]) =>
@@ -202,10 +216,6 @@ export default function NotificationBell({ audience }: Props) {
                   ? "تعذر تفعيل إشعارات الجهاز."
                   : "متصفحك لا يدعم الإشعارات المنبثقة."}
               </p>
-            ) : permission === "setup-required" ? (
-              <p className="text-[11px] text-slate-600">
-                إشعارات المتصفح غير مهيأة على الخادم. أضف مفاتيح VAPID ثم أعد نشره.
-              </p>
             ) : permission === "denied" ? (
               <p className="text-[11px] text-slate-600" data-testid="push-denied-note">
                 {isNativePushPlatform()
@@ -216,10 +226,21 @@ export default function NotificationBell({ audience }: Props) {
               <p className="text-[11px] text-slate-600">
                 جارٍ التحقق من إعداد إشعارات المتصفح...
               </p>
-            ) : !isNativePushPlatform() && !browserPushReady ? (
-              <p className="text-[11px] text-slate-600">
-                إشعارات المتصفح غير مهيأة على الخادم. أضف مفاتيح VAPID ثم أعد نشره.
-              </p>
+            ) : permission === "setup-required" || (!isNativePushPlatform() && !browserPushReady) ? (
+              <div className="space-y-1.5">
+                <p className="text-[11px] text-slate-600">
+                  تعذر قراءة إعدادات إشعارات المتصفح من الخادم. أعد الفحص بعد التأكد من الاتصال.
+                </p>
+                <button
+                  type="button"
+                  onClick={retryBrowserPushSetup}
+                  className="flex w-full items-center gap-2 text-start text-[11px] font-semibold text-teal-800"
+                  data-testid="retry-browser-push-btn"
+                >
+                  <BellRing className="h-3.5 w-3.5" />
+                  إعادة فحص إعداد الإشعارات
+                </button>
+              </div>
             ) : (
               <button
                 type="button"
