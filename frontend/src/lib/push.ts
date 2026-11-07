@@ -42,7 +42,7 @@ let browserPushContextPromise: Promise<BrowserPushContext | null> | null = null;
 
 function getBrowserPushContext() {
   if (!browserPushContextPromise) {
-    browserPushContextPromise = (async () => {
+    const request = (async () => {
       if (
         typeof window === "undefined" ||
         !("Notification" in window) ||
@@ -60,6 +60,14 @@ function getBrowserPushContext() {
       if (!config.public_key) return null;
       return { publicKey: config.public_key, registration };
     })().catch(() => null);
+
+    browserPushContextPromise = request;
+    // A transient missing config or request error must not stay cached for this page session.
+    void request.then((context) => {
+      if (!context && browserPushContextPromise === request) {
+        browserPushContextPromise = null;
+      }
+    });
   }
   return browserPushContextPromise;
 }
@@ -71,7 +79,8 @@ function decodeApplicationServerKey(encoded: string) {
   return Uint8Array.from(raw, (character) => character.charCodeAt(0));
 }
 
-export async function prepareBrowserPush() {
+export async function prepareBrowserPush(forceRefresh = false) {
+  if (forceRefresh) browserPushContextPromise = null;
   return Boolean(await getBrowserPushContext());
 }
 
