@@ -5,7 +5,10 @@ import pytest
 from pydantic import ValidationError
 
 
-def test_web_push_subscription_only_accepts_chrome_push_service():
+def test_web_push_subscription_only_accepts_chrome_push_service(monkeypatch):
+    monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
+    monkeypatch.setenv("DB_NAME", "push_test")
+
     from routers.auth import WebPushEndpointRequest, WebPushSubscriptionRequest
 
     subscription = WebPushSubscriptionRequest.model_validate(
