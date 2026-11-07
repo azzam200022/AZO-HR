@@ -4,6 +4,7 @@ import { Capacitor } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import { PushNotifications } from "@capacitor/push-notifications";
 import { apiGet, apiPost } from "@/lib/api";
+import { applicationServerKeyMatches } from "@/lib/push-key";
 
 export type PushPermission =
   | "unsupported"
@@ -88,16 +89,47 @@ async function bindWebSubscription(subscription: PushSubscription) {
   return registered;
 }
 
+async function retireWebSubscription(subscription: PushSubscription) {
+  await webSubscriptionRegistration;
+
+  try {
+    await apiPost("/auth/web-push-subscription/unregister", {
+      endpoint: subscription.endpoint,
+    });
+    await subscription.unsubscribe();
+  } catch {
+    return false;
+  }
+
+  if (registeredWebSubscription?.endpoint === subscription.endpoint) {
+    registeredWebSubscription = null;
+    webSubscriptionRegistration = Promise.resolve(false);
+  }
+  return true;
+}
+
 async function ensureWebSubscription(createIfMissing: boolean) {
   const context = await getBrowserPushContext();
   if (!context) return "setup-required" as const;
 
   try {
     let subscription = await context.registration.pushManager.getSubscription();
+    const currentPublicKey = decodeApplicationServerKey(context.publicKey);
+    if (
+      subscription &&
+      !applicationServerKeyMatches(
+        subscription.options.applicationServerKey,
+        currentPublicKey,
+      )
+    ) {
+      if (!(await retireWebSubscription(subscription))) return "failed" as const;
+      subscription = null;
+    }
+
     if (!subscription && createIfMissing) {
       subscription = await context.registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: decodeApplicationServerKey(context.publicKey),
+        applicationServerKey: currentPublicKey,
       });
     }
     if (!subscription) return "not-enabled" as const;
