@@ -34,6 +34,81 @@ self.addEventListener('activate', (event) => {
   )
 })
 
+self.addEventListener('push', (event) => {
+  event.waitUntil(
+    (async () => {
+      let payload = {}
+      try {
+        payload = event.data?.json() ?? {}
+      } catch {
+        payload = { body: event.data?.text() ?? '' }
+      }
+
+      const windows = await self.clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      })
+      const visibleAppIsOpen = windows.some((client) => {
+        const url = new URL(client.url)
+        return (
+          url.origin === self.location.origin &&
+          url.pathname.startsWith(appScope.pathname) &&
+          client.visibilityState === 'visible'
+        )
+      })
+      if (visibleAppIsOpen) return
+
+      const notification = payload.notification ?? payload
+      const title = notification.title ?? payload.title ?? 'مواردي — إشعار جديد'
+      const body =
+        notification.body ?? payload.body ?? 'لديك تحديث جديد. افتح التطبيق للاطلاع على التفاصيل.'
+      const notificationData = payload.data ?? {}
+
+      await self.registration.showNotification(title, {
+        body,
+        dir: 'rtl',
+        lang: 'ar',
+        tag: payload.tag ?? 'mawaridi',
+        icon: new URL('pwa-192.png', appScope).href,
+        badge: new URL('favicon-16x16.png', appScope).href,
+        data: {
+          ...notificationData,
+          url: appShellUrl,
+        },
+      })
+    })(),
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  event.waitUntil(
+    (async () => {
+      const targetUrl = new URL(
+        event.notification.data?.url ?? appShellUrl,
+        appScope,
+      )
+      const url = targetUrl.origin === self.location.origin ? targetUrl.href : appShellUrl
+      const windows = await self.clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      })
+      for (const client of windows) {
+        const clientUrl = new URL(client.url)
+        if (
+          clientUrl.origin === self.location.origin &&
+          clientUrl.pathname.startsWith(appScope.pathname)
+        ) {
+          await client.focus()
+          await client.navigate(url)
+          return
+        }
+      }
+      await self.clients.openWindow(url)
+    })(),
+  )
+})
+
 self.addEventListener('fetch', (event) => {
   const request = event.request
   if (request.method !== 'GET') return

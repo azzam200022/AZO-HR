@@ -1,11 +1,42 @@
 import asyncio
 from types import SimpleNamespace
 
+import pytest
+from pydantic import ValidationError
+
+
+def test_web_push_subscription_only_accepts_chrome_push_service(monkeypatch):
+    monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
+    monkeypatch.setenv("DB_NAME", "push_test")
+
+    from routers.auth import WebPushEndpointRequest, WebPushSubscriptionRequest
+
+    subscription = WebPushSubscriptionRequest.model_validate(
+        {
+            "endpoint": "https://fcm.googleapis.com/fcm/send/test-endpoint",
+            "keys": {"p256dh": "test-p256dh", "auth": "test-auth"},
+        }
+    )
+    assert subscription.endpoint.startswith("https://fcm.googleapis.com/")
+    assert WebPushEndpointRequest.model_validate(
+        {"endpoint": subscription.endpoint}
+    ).endpoint == subscription.endpoint
+
+    with pytest.raises(ValidationError):
+        WebPushSubscriptionRequest.model_validate(
+            {
+                "endpoint": "https://example.com/fcm/send/test-endpoint",
+                "keys": {"p256dh": "test-p256dh", "auth": "test-auth"},
+            }
+        )
+
 
 def test_push_is_a_noop_without_firebase_configuration(monkeypatch):
     monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
     monkeypatch.setenv("DB_NAME", "push_test")
     monkeypatch.delenv("FIREBASE_SERVICE_ACCOUNT_JSON", raising=False)
+    monkeypatch.delenv("WEB_PUSH_VAPID_PUBLIC_KEY", raising=False)
+    monkeypatch.delenv("WEB_PUSH_VAPID_PRIVATE_KEY", raising=False)
 
     from lib import push
 
@@ -47,6 +78,7 @@ def test_push_uses_notification_content(monkeypatch):
     sent = {}
     app = object()
     monkeypatch.setattr(push, "_firebase_app", lambda: app)
+    monkeypatch.setattr(push, "_web_push_config", lambda: None)
     monkeypatch.setattr(
         push,
         "db",
@@ -78,3 +110,56 @@ def test_push_uses_notification_content(monkeypatch):
         "تم تسجيل حافز بقيمة 100,000 د.ع. السبب: إنجاز العمل"
     )
     assert sent["message"].data["notification_id"] == "note-1"
+
+
+def test_web_push_sends_generic_notification_without_firebase(monkeypatch):
+    from lib import push
+
+    sent = {}
+
+    class _Subscriptions:
+        async def to_list(self, limit):
+            return [
+                {
+                    "subscription": {
+                        "endpoint": "https://fcm.googleapis.com/fcm/send/test-endpoint",
+                        "keys": {"p256dh": "test-p256dh", "auth": "test-auth"},
+                    }
+                }
+            ]
+
+    class _WebPushCollection:
+        def find(self, query):
+            assert query == {"role": "manager", "email": "manager@example.test"}
+            return _Subscriptions()
+
+    monkeypatch.setattr(push, "_firebase_app", lambda: None)
+    monkeypatch.setattr(push, "_web_push_config", lambda: ("public-key", "private-key"))
+    monkeypatch.setattr(push, "manager_email", lambda: "manager@example.test")
+    monkeypatch.setattr(
+        push,
+        "db",
+        SimpleNamespace(web_push_subscriptions=_WebPushCollection()),
+    )
+    monkeypatch.setattr(
+        push,
+        "webpush",
+        lambda **kwargs: sent.update(kwargs) or "sent",
+    )
+
+    asyncio.run(
+        push.send_notification(
+            {
+                "id": "note-2",
+                "audience": "manager",
+                "kind": "payroll",
+                "message": "تفاصيل راتب سرية",
+            }
+        )
+    )
+
+    assert sent["subscription_info"]["endpoint"].startswith("https://fcm.googleapis.com/")
+    assert sent["vapid_private_key"] == "private-key"
+    assert '"title": "مواردي — إشعار جديد"' in sent["data"]
+    assert "تفاصيل راتب سرية" not in sent["data"]
+    assert sent["ttl"] == 3600

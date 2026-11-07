@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
+import os
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from lib.auth import (
     SESSION_COOKIE,
@@ -27,6 +29,34 @@ class PushTokenRequest(BaseModel):
     token: str = Field(min_length=20, max_length=4096)
 
 
+class WebPushKeys(BaseModel):
+    p256dh: str = Field(min_length=1, max_length=256)
+    auth: str = Field(min_length=1, max_length=256)
+
+
+class WebPushEndpointRequest(BaseModel):
+    endpoint: str = Field(min_length=1, max_length=2048)
+
+    @field_validator("endpoint")
+    @classmethod
+    def validate_endpoint(cls, value: str) -> str:
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme != "https"
+            or parsed.hostname != "fcm.googleapis.com"
+            or parsed.port not in (None, 443)
+            or parsed.username
+            or parsed.password
+            or not parsed.path.startswith("/fcm/send/")
+        ):
+            raise ValueError("Unsupported browser push endpoint")
+        return value
+
+
+class WebPushSubscriptionRequest(WebPushEndpointRequest):
+    keys: WebPushKeys
+
+
 def _set_cookie(response: Response, token: str, origin: str | None) -> None:
     # Capacitor and the GitHub Pages web app call the API cross-site, so those
     # exact trusted origins need SameSite=None for credentialed browser requests.
@@ -45,6 +75,13 @@ def _set_cookie(response: Response, token: str, origin: str | None) -> None:
         max_age=SESSION_TTL_DAYS * 24 * 3600,
         path="/",
     )
+
+
+@router.get("/web-push-config")
+async def web_push_config():
+    public_key = os.environ.get("WEB_PUSH_VAPID_PUBLIC_KEY", "").strip()
+    private_key = os.environ.get("WEB_PUSH_VAPID_PRIVATE_KEY", "").strip()
+    return {"public_key": public_key if public_key and private_key else None}
 
 
 @router.post("/push-token")
@@ -68,6 +105,48 @@ async def register_push_token(
         upsert=True,
     )
     return {"ok": True}
+
+
+@router.post("/web-push-subscription")
+async def register_web_push_subscription(
+    payload: WebPushSubscriptionRequest,
+    principal: Principal = Depends(current_principal),
+):
+    """Bind a Chrome Web Push subscription to the signed-in identity."""
+    now = datetime.now(timezone.utc)
+    identity = {
+        "role": principal.role,
+        "email": principal.email,
+        "employee_id": principal.employee_id if principal.role == "employee" else "",
+    }
+    await db.web_push_subscriptions.update_one(
+        {"endpoint": payload.endpoint},
+        {
+            "$set": {
+                **identity,
+                "subscription": payload.model_dump(exclude_none=True),
+                "updated_at": now,
+            },
+            "$setOnInsert": {"created_at": now},
+        },
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@router.post("/web-push-subscription/unregister")
+async def unregister_web_push_subscription(
+    payload: WebPushEndpointRequest,
+    principal: Principal = Depends(current_principal),
+):
+    """Remove only this signed-in identity's browser subscription."""
+    query: dict = {"endpoint": payload.endpoint, "role": principal.role}
+    if principal.role == "employee":
+        query["employee_id"] = principal.employee_id
+    else:
+        query["email"] = principal.email
+    result = await db.web_push_subscriptions.delete_one(query)
+    return {"ok": True, "removed": result.deleted_count > 0}
 
 
 @router.post("/push-token/unregister")

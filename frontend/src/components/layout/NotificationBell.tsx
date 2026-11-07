@@ -5,8 +5,10 @@ import { apiGet, apiPost } from "@/lib/api";
 import { fmtDate, formatNumber } from "@/lib/format";
 import {
   currentPushPermission,
+  initializeBrowserPush,
   initializeNativePush,
   isNativePushPlatform,
+  prepareBrowserPush,
   pushPermission,
   requestPush,
   showPush,
@@ -24,6 +26,9 @@ export default function NotificationBell({ audience }: Props) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [permission, setPermission] = useState<PushPermission>(() => pushPermission());
+  const [browserPushChecked, setBrowserPushChecked] = useState(isNativePushPlatform());
+  const [browserPushReady, setBrowserPushReady] = useState(false);
+  const [browserPushEnabled, setBrowserPushEnabled] = useState(false);
   const lastUnread = useRef<number | null>(null);
 
   useEffect(() => {
@@ -32,6 +37,18 @@ export default function NotificationBell({ audience }: Props) {
     void currentPushPermission().then((current) => {
       if (active) setPermission(current);
     });
+    if (!isNativePushPlatform()) {
+      void prepareBrowserPush().then((ready) => {
+        if (!active) return;
+        setBrowserPushReady(ready);
+        setBrowserPushChecked(true);
+        if (ready) {
+          void initializeBrowserPush().then((enabled) => {
+            if (active) setBrowserPushEnabled(enabled);
+          });
+        }
+      });
+    }
     return () => {
       active = false;
     };
@@ -80,7 +97,11 @@ export default function NotificationBell({ audience }: Props) {
             shift_reminder: "تذكير بموعد الدوام",
           };
           const title = latest ? titleByKind[latest.kind] : "مواردي — تنبيه جديد";
-          return showPush(title, latest?.message ?? fallback);
+          return showPush(
+            title,
+            latest?.message ?? fallback,
+            latest?.id ? `mawaridi-${latest.id}` : "mawaridi",
+          );
         })
         .catch(() => showPush("مواردي — تنبيه جديد", fallback));
     }
@@ -106,6 +127,7 @@ export default function NotificationBell({ audience }: Props) {
   const enablePush = async () => {
     const result = await requestPush();
     setPermission(result);
+    setBrowserPushEnabled(result === "granted");
     if (result === "granted") {
       await showPush("تم السماح بالإشعارات", "سيستخدم التطبيق هذا الإذن لإرسال التنبيهات.");
     }
@@ -134,6 +156,9 @@ export default function NotificationBell({ audience }: Props) {
         : kind === "bonus" || kind === "payroll"
           ? "bg-emerald-100 text-emerald-700"
           : "bg-teal-100 text-teal-700";
+
+  const needsPushAction =
+    permission !== "granted" || (!isNativePushPlatform() && !browserPushEnabled);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -169,7 +194,7 @@ export default function NotificationBell({ audience }: Props) {
           )}
         </div>
 
-        {permission !== "granted" && (
+        {needsPushAction && (
           <div className="border-b border-slate-100 bg-teal-50/70 px-3 py-2.5">
             {permission === "unsupported" ? (
               <p className="text-[11px] text-slate-600">
@@ -177,11 +202,23 @@ export default function NotificationBell({ audience }: Props) {
                   ? "تعذر تفعيل إشعارات الجهاز."
                   : "متصفحك لا يدعم الإشعارات المنبثقة."}
               </p>
+            ) : permission === "setup-required" ? (
+              <p className="text-[11px] text-slate-600">
+                إشعارات المتصفح غير مهيأة على الخادم. أضف مفاتيح VAPID ثم أعد نشره.
+              </p>
             ) : permission === "denied" ? (
               <p className="text-[11px] text-slate-600" data-testid="push-denied-note">
                 {isNativePushPlatform()
                   ? "الإشعارات محظورة — فعّلها من إعدادات التطبيق في الجهاز."
                   : "الإشعارات محظورة من إعدادات المتصفح — فعّلها من إعدادات الموقع."}
+              </p>
+            ) : !isNativePushPlatform() && !browserPushChecked ? (
+              <p className="text-[11px] text-slate-600">
+                جارٍ التحقق من إعداد إشعارات المتصفح...
+              </p>
+            ) : !isNativePushPlatform() && !browserPushReady ? (
+              <p className="text-[11px] text-slate-600">
+                إشعارات المتصفح غير مهيأة على الخادم. أضف مفاتيح VAPID ثم أعد نشره.
               </p>
             ) : (
               <button
@@ -193,7 +230,9 @@ export default function NotificationBell({ audience }: Props) {
                 <BellRing className="h-3.5 w-3.5" />
                 {isNativePushPlatform()
                   ? "تمكين إشعارات التطبيق"
-                  : "تمكين الإشعارات المنبثقة في هذا المتصفح"}
+                  : permission === "granted"
+                    ? "تفعيل إشعارات هذا المتصفح"
+                    : "تمكين الإشعارات المنبثقة في هذا المتصفح"}
               </button>
             )}
           </div>

@@ -11,6 +11,40 @@
 
 ترسل الإشعارات إلى أجهزة صاحب التنبيه فقط. محتوى شاشة القفل عام ولا يتضمن تفاصيل الراتب أو الرسائل؛ يفتح المستخدم التطبيق لقراءة التفاصيل. تزال رموز FCM غير الصالحة تلقائيًا.
 
+## إشعارات Chrome عند إغلاق الموقع
+
+تستخدم نسخة المتصفح Web Push عبر عامل الخدمة؛ لا تعتمد على بقاء الصفحة مفتوحة أو على تسجيل FCM الخاص بـ APK.
+
+1. أنشئ مفتاحي VAPID على جهازك المحلي باستخدام Python و`cryptography` المثبتة ضمن متطلبات الخادم:
+
+   ```bash
+   python - <<'PY'
+   import base64
+   from cryptography.hazmat.primitives import serialization
+   from cryptography.hazmat.primitives.asymmetric import ec
+
+   key = ec.generate_private_key(ec.SECP256R1())
+   public = key.public_key().public_bytes(
+       serialization.Encoding.X962,
+       serialization.PublicFormat.UncompressedPoint,
+   )
+   private = key.private_bytes(
+       serialization.Encoding.DER,
+       serialization.PrivateFormat.PKCS8,
+       serialization.NoEncryption(),
+   )
+   encode = lambda value: base64.urlsafe_b64encode(value).decode().rstrip("=")
+   print("WEB_PUSH_VAPID_PUBLIC_KEY=" + encode(public))
+   print("WEB_PUSH_VAPID_PRIVATE_KEY=" + encode(private))
+   PY
+   ```
+
+2. أضف `WEB_PUSH_VAPID_PUBLIC_KEY` و`WEB_PUSH_VAPID_PRIVATE_KEY` إلى متغيرات بيئة الخادم. خزّن المفتاح الخاص كسرّ، ولا ترفعه إلى GitHub. اختياريًا اضبط `WEB_PUSH_VAPID_SUBJECT` على عنوان تواصل بصيغة `mailto:`.
+3. أعد نشر الخادم، ثم افتح الموقع عبر HTTPS في Chrome وسجّل الدخول. من جرس الإشعارات اختر تمكين إشعارات المتصفح واسمح بالإذن.
+4. بعد ظهور رسالة نجاح التمكين، أغلق الموقع واختبر إشعارًا جديدًا. تُرسل إشعارات شاشة القفل بنص عام؛ تظهر التفاصيل بعد فتح التطبيق.
+
+يحفظ الخادم اشتراك المتصفح مع الحساب المسجل دخوله، ويحذفه تلقائيًا عند انتهاء صلاحية نقطة الإرسال أو عند تسجيل الخروج. صفحة GitHub Actions لا تحتاج إلى مفاتيح VAPID.
+
 ## تتبع الموقع عند إغلاق التطبيق
 
 - بعد تسجيل الحضور، يوافق الموظف مرة واحدة على التتبع الخلفي ويمنح Android إذني الموقع والإشعارات. يحفظ التطبيق الموافقة على الجهاز؛ لا يطلب موافقة التطبيق كل يوم. إذا أوقف الموظف التتبع يدويًا، تُلغى الموافقة التلقائية.
