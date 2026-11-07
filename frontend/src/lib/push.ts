@@ -1,11 +1,16 @@
-/** Push notification permissions and native FCM registration. */
+/** Push notification permissions and Android/browser push registration. */
 
 import { Capacitor } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import { PushNotifications } from "@capacitor/push-notifications";
-import { apiPost } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
 
-export type PushPermission = "unsupported" | "default" | "granted" | "denied";
+export type PushPermission =
+  | "unsupported"
+  | "setup-required"
+  | "default"
+  | "granted"
+  | "denied";
 
 export const isNativePushPlatform = () => Capacitor.isNativePlatform();
 
@@ -24,6 +29,83 @@ const fromNativePermission = (permission: string): PushPermission => {
 let nativeListeners: Promise<void> | null = null;
 let registeredToken: string | null = null;
 let tokenRegistration: Promise<void> = Promise.resolve();
+let registeredWebSubscription: PushSubscription | null = null;
+let webSubscriptionRegistration: Promise<boolean> = Promise.resolve(false);
+
+type BrowserPushContext = {
+  publicKey: string;
+  registration: ServiceWorkerRegistration;
+};
+
+let browserPushContextPromise: Promise<BrowserPushContext | null> | null = null;
+
+function getBrowserPushContext() {
+  if (!browserPushContextPromise) {
+    browserPushContextPromise = (async () => {
+      if (
+        typeof window === "undefined" ||
+        !("Notification" in window) ||
+        !("serviceWorker" in navigator) ||
+        !("PushManager" in window) ||
+        !import.meta.env.PROD
+      ) {
+        return null;
+      }
+
+      const [config, registration] = await Promise.all([
+        apiGet<{ public_key: string | null }>("/auth/web-push-config"),
+        navigator.serviceWorker.ready,
+      ]);
+      if (!config.public_key) return null;
+      return { publicKey: config.public_key, registration };
+    })().catch(() => null);
+  }
+  return browserPushContextPromise;
+}
+
+function decodeApplicationServerKey(encoded: string) {
+  const padding = "=".repeat((4 - (encoded.length % 4)) % 4);
+  const base64 = (encoded + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  return Uint8Array.from(raw, (character) => character.charCodeAt(0));
+}
+
+export async function prepareBrowserPush() {
+  return Boolean(await getBrowserPushContext());
+}
+
+async function bindWebSubscription(subscription: PushSubscription) {
+  registeredWebSubscription = subscription;
+  webSubscriptionRegistration = apiPost(
+    "/auth/web-push-subscription",
+    subscription.toJSON(),
+  ).then(
+    () => true,
+    () => false,
+  );
+  const registered = await webSubscriptionRegistration;
+  if (!registered) registeredWebSubscription = null;
+  return registered;
+}
+
+async function ensureWebSubscription(createIfMissing: boolean) {
+  const context = await getBrowserPushContext();
+  if (!context) return "setup-required" as const;
+
+  try {
+    let subscription = await context.registration.pushManager.getSubscription();
+    if (!subscription && createIfMissing) {
+      subscription = await context.registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: decodeApplicationServerKey(context.publicKey),
+      });
+    }
+    if (!subscription) return "not-enabled" as const;
+    return (await bindWebSubscription(subscription)) ? "enabled" as const : "failed" as const;
+  } catch {
+    return "failed" as const;
+  }
+}
 
 function bindToken(token: string) {
   registeredToken = token;
@@ -72,6 +154,11 @@ export async function initializeNativePush() {
   }
 }
 
+export async function initializeBrowserPush() {
+  if (isNativePushPlatform() || pushPermission() !== "granted") return false;
+  return (await ensureWebSubscription(true)) === "enabled";
+}
+
 export async function currentPushPermission(): Promise<PushPermission> {
   if (!isNativePushPlatform()) return pushPermission();
 
@@ -97,12 +184,24 @@ export async function requestPush(): Promise<PushPermission> {
   }
 
   if (pushPermission() === "unsupported") return "unsupported";
-  const result = await Notification.requestPermission();
-  return result as PushPermission;
+  if (!(await getBrowserPushContext())) return "setup-required";
+
+  try {
+    const result = await Notification.requestPermission();
+    if (result !== "granted") return result as PushPermission;
+    const registration = await ensureWebSubscription(true);
+    return registration === "enabled" ? "granted" : "setup-required";
+  } catch {
+    return "unsupported";
+  }
 }
 
 export async function bindCurrentPushToken() {
-  if (registeredToken) await bindToken(registeredToken);
+  if (isNativePushPlatform()) {
+    if (registeredToken) await bindToken(registeredToken);
+    return;
+  }
+  await initializeBrowserPush();
 }
 
 export async function unregisterCurrentPushToken() {
@@ -116,11 +215,22 @@ export async function unregisterCurrentPushToken() {
   if (isNativePushPlatform()) {
     await PushNotifications.removeAllListeners().catch(() => undefined);
     nativeListeners = null;
+    return;
+  }
+
+  await webSubscriptionRegistration;
+  const subscription = registeredWebSubscription;
+  registeredWebSubscription = null;
+  webSubscriptionRegistration = Promise.resolve(false);
+  if (subscription) {
+    await apiPost("/auth/web-push-subscription/unregister", {
+      endpoint: subscription.endpoint,
+    }).catch(() => undefined);
   }
 }
 
 /** Shows a local notification on the current device. */
-export async function showPush(title: string, body: string) {
+export async function showPush(title: string, body: string, tag = "mawaridi") {
   if ((await currentPushPermission()) !== "granted") return;
 
   if (isNativePushPlatform()) {
@@ -142,7 +252,21 @@ export async function showPush(title: string, body: string) {
   }
 
   try {
-    new Notification(title, { body, dir: "rtl", lang: "ar", tag: "mawaridi" });
+    const options: NotificationOptions = {
+      body,
+      dir: "rtl",
+      lang: "ar",
+      tag,
+      icon: `${import.meta.env.BASE_URL}pwa-192.png`,
+      badge: `${import.meta.env.BASE_URL}favicon-16x16.png`,
+    };
+    const registration =
+      "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : undefined;
+    if (registration) {
+      await registration.showNotification(title, options);
+    } else {
+      new Notification(title, options);
+    }
   } catch {
     // Some browsers only allow notifications from a service worker — ignore quietly.
   }
