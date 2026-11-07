@@ -179,7 +179,7 @@ async def _send_web_push(
     _, private_key = config
     subject = os.environ.get(
         "WEB_PUSH_VAPID_SUBJECT",
-        "https://github.com/azzam200022/AZO-HR",
+        "https://azzam200022.github.io",
     ).strip()
     notification_id = str(note.get("id") or "")
     payload = {

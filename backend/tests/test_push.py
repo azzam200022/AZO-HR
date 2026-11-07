@@ -114,7 +114,9 @@ def test_push_uses_notification_content(monkeypatch):
 
 def test_web_push_sends_generic_notification_without_firebase(monkeypatch):
     from lib import push
+    from py_vapid import Vapid
 
+    monkeypatch.delenv("WEB_PUSH_VAPID_SUBJECT", raising=False)
     sent = {}
 
     class _Subscriptions:
@@ -163,3 +165,8 @@ def test_web_push_sends_generic_notification_without_firebase(monkeypatch):
     assert '"title": "مواردي — إشعار جديد"' in sent["data"]
     assert "تفاصيل راتب سرية" not in sent["data"]
     assert sent["ttl"] == 3600
+    assert sent["vapid_claims"] == {"sub": "https://azzam200022.github.io"}
+
+    vapid = Vapid()
+    vapid.generate_keys()
+    vapid.sign({**sent["vapid_claims"], "aud": "https://fcm.googleapis.com"})
