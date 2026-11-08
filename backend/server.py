@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 import os
@@ -116,3 +117,40 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+# In the Render production build, the frontend is compiled from the repository root
+# into frontend/dist and served by this same origin as /api. Local API-only runs remain
+# supported when the frontend has not been built.
+FRONTEND_DIST = ROOT_DIR.parent / "frontend" / "dist"
+FRONTEND_INDEX = FRONTEND_DIST / "index.html"
+
+if FRONTEND_INDEX.is_file():
+    resolved_frontend_dist = FRONTEND_DIST.resolve()
+
+    @app.get("/{asset_path:path}", include_in_schema=False)
+    async def serve_frontend(asset_path: str):
+        # Do not turn unknown API routes into HTML responses.
+        if asset_path == "api" or asset_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+
+        requested_file = (FRONTEND_DIST / asset_path).resolve()
+        try:
+            requested_file.relative_to(resolved_frontend_dist)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Not Found")
+
+        if requested_file.is_file():
+            headers = (
+                {"Cache-Control": "no-store"}
+                if requested_file == FRONTEND_INDEX.resolve()
+                else None
+            )
+            return FileResponse(requested_file, headers=headers)
+
+        # Client-side routes such as /employees and /me/profile belong to React Router.
+        # File-like misses remain 404s so missing JS/CSS is not answered with index.html.
+        if asset_path.startswith("assets/") or Path(asset_path).suffix:
+            raise HTTPException(status_code=404, detail="Not Found")
+
+        return FileResponse(FRONTEND_INDEX, headers={"Cache-Control": "no-store"})
