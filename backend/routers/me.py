@@ -16,7 +16,7 @@ from lib.db import db
 from lib.adjustments import to_model as adjustment_model
 from lib.messaging import GROUP_THREAD, mark_thread_read, send_message, to_model as message_model
 from lib.notify import notify_manager_event
-from lib.punch import punch_in, punch_out, record_presence
+from lib.punch import punch_in, punch_out, record_presence, require_tracking_consent
 from lib.reports import build_report, leave_balance
 from lib.shift import effective_away_minutes, employee_shift, is_working_day, late_minutes
 from models.hr import (
@@ -37,6 +37,7 @@ from models.hr import (
     PresenceStatus,
     SelfLeaveCreate,
     SelfPunch,
+    TrackingConsent,
     WorkLocation,
 )
 
@@ -55,6 +56,24 @@ async def my_profile(principal: Principal = Depends(require_employee)):
     doc = await _my_employee(principal)
     doc["created_at"] = aware(doc.get("created_at"))
     return Employee(**doc)
+
+
+@router.get("/tracking-consent", response_model=TrackingConsent)
+async def my_tracking_consent(principal: Principal = Depends(require_employee)):
+    employee = await _my_employee(principal)
+    return TrackingConsent(enabled=bool(employee.get("background_tracking_consent", False)))
+
+
+@router.post("/tracking-consent", response_model=TrackingConsent)
+async def update_my_tracking_consent(
+    payload: TrackingConsent, principal: Principal = Depends(require_employee)
+):
+    await _my_employee(principal)
+    await db.employees.update_one(
+        {"id": principal.employee_id},
+        {"$set": {"background_tracking_consent": payload.enabled}},
+    )
+    return payload
 
 
 @router.get("/location", response_model=WorkLocation | None)
@@ -130,6 +149,7 @@ async def my_attendance(principal: Principal = Depends(require_employee)):
 @router.post("/check-in", response_model=AttendanceRecord)
 async def my_check_in(payload: SelfPunch, principal: Principal = Depends(require_employee)):
     employee = await _my_employee(principal)
+    require_tracking_consent(employee)
     return await punch_in(employee, payload.lat, payload.lng)
 
 
@@ -144,6 +164,7 @@ async def my_check_out(principal: Principal = Depends(require_employee)):
 async def my_presence(payload: SelfPunch, principal: Principal = Depends(require_employee)):
     """Location heartbeat while punched in — leaving the site accrues away minutes."""
     employee = await _my_employee(principal)
+    require_tracking_consent(employee)
     doc = await record_presence(employee, payload.lat, payload.lng)
     late = int(doc.get("late_minutes", 0))
     away = int(doc.get("away_minutes", 0))
@@ -170,6 +191,7 @@ async def my_presence_batch(
         raise HTTPException(status_code=403, detail="لا يمكن مزامنة مواقع حساب موظف آخر")
 
     employee = await _my_employee(principal)
+    require_tracking_consent(employee)
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
     ordered = sorted(payload.samples, key=lambda sample: sample.observed_at_ms)
     acknowledged_ids: list[str] = []

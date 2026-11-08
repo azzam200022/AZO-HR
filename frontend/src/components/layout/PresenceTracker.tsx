@@ -1,15 +1,15 @@
 import { Capacitor } from "@capacitor/core";
 import { useEffect } from "react";
+import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost } from "@/lib/api";
 import {
-  hasBackgroundLocationConsent,
   isBackgroundLocationActive,
   isBackgroundLocationManuallyStopped,
   startBackgroundLocationTracking,
   supportsBackgroundLocation,
 } from "@/lib/background-location";
-import type { AttendanceRecord, Employee, PresenceStatus, TodayResponse, WorkLocation } from "@/lib/types";
+import type { AttendanceRecord, Employee, PresenceStatus, TodayResponse, TrackingConsent, WorkLocation } from "@/lib/types";
 
 /** Keep geofence heartbeats alive across every employee-portal tab while the app is open. */
 export default function PresenceTracker() {
@@ -31,9 +31,14 @@ export default function PresenceTracker() {
     queryKey: ["me", "profile"],
     queryFn: () => apiGet<Employee>("/me/profile"),
   });
+  const trackingConsentQuery = useQuery({
+    queryKey: ["me", "tracking-consent"],
+    queryFn: () => apiGet<TrackingConsent>("/me/tracking-consent"),
+  });
 
   const today = todayQuery.data?.today;
   const employee = profileQuery.data;
+  const trackingConsent = trackingConsentQuery.data?.enabled === true;
   const previousDate = today ? new Date(`${today}T00:00:00Z`) : null;
   if (previousDate) previousDate.setUTCDate(previousDate.getUTCDate() - 1);
   const shiftMinutes = (value?: string) => {
@@ -61,7 +66,7 @@ export default function PresenceTracker() {
   const employeeId = profileQuery.data?.id;
 
   useEffect(() => {
-    if (!live || !location || !navigator.geolocation) {
+    if (!trackingConsent || !live || !location || !navigator.geolocation) {
       queryClient.setQueryData(["me", "presence"], null);
       return;
     }
@@ -108,15 +113,15 @@ export default function PresenceTracker() {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [live, location?.id, queryClient]);
+  }, [live, location?.id, queryClient, trackingConsent]);
 
   useEffect(() => {
     if (
       !supportsBackgroundLocation() ||
+      !trackingConsent ||
       !live ||
       !location ||
-      !employeeId ||
-      !hasBackgroundLocationConsent(employeeId)
+      !employeeId
     ) {
       return;
     }
@@ -129,14 +134,14 @@ export default function PresenceTracker() {
       ) return;
       try {
         await startBackgroundLocationTracking(employeeId, false);
-      } catch {
-        // Do not show repeated OS prompts; the employee can retry from the attendance screen.
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "تعذر بدء تتبع الموقع بالخلفية.");
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [employeeId, live, location?.id]);
+  }, [employeeId, live, location?.id, trackingConsent]);
 
   return null;
 }

@@ -5,7 +5,7 @@ import { API_ORIGIN } from "@/lib/api";
 
 interface BackgroundTrackingPlugin {
   start(options: { apiBaseUrl: string; employeeId: string }): Promise<{ active: boolean }>;
-  stop(): Promise<{ active: boolean }>;
+  stop(options?: { manual?: boolean }): Promise<{ active: boolean }>;
   getStatus(): Promise<{ active: boolean; manuallyStopped: boolean }>;
 }
 
@@ -14,25 +14,31 @@ let startInFlight: Promise<{ active: boolean }> | null = null;
 
 export const supportsBackgroundLocation = () => Capacitor.getPlatform() === "android";
 
-const consentKey = (employeeId: string) => "azo-hr-background-location-consent-" + employeeId;
+async function ensureBackgroundLocationPermissions(requestMissingPermissions: boolean) {
+  let locationPermission = await Geolocation.checkPermissions();
+  if (
+    requestMissingPermissions &&
+    locationPermission.location !== "granted" &&
+    locationPermission.coarseLocation !== "granted"
+  ) {
+    locationPermission = await Geolocation.requestPermissions();
+  }
+  if (locationPermission.location !== "granted" && locationPermission.coarseLocation !== "granted") {
+    throw new Error("يلزم السماح للموقع حتى يعمل التتبع أثناء الدوام.");
+  }
 
-export function hasBackgroundLocationConsent(employeeId: string) {
-  if (typeof localStorage === "undefined") return false;
-  try {
-    return localStorage.getItem(consentKey(employeeId)) === "true";
-  } catch {
-    return false;
+  let notificationPermission = await LocalNotifications.checkPermissions();
+  if (requestMissingPermissions && notificationPermission.display !== "granted") {
+    notificationPermission = await LocalNotifications.requestPermissions();
+  }
+  if (notificationPermission.display !== "granted") {
+    throw new Error("يلزم السماح بالإشعارات ليظهر تنبيه التتبع المستمر.");
   }
 }
 
-export function setBackgroundLocationConsent(employeeId: string, accepted: boolean) {
-  if (typeof localStorage === "undefined") return;
-  try {
-    if (accepted) localStorage.setItem(consentKey(employeeId), "true");
-    else localStorage.removeItem(consentKey(employeeId));
-  } catch {
-    // If storage is unavailable, keep the user in control and do not claim persistent consent.
-  }
+export async function requestBackgroundLocationPermissions() {
+  if (!supportsBackgroundLocation()) return;
+  await ensureBackgroundLocationPermissions(true);
 }
 
 export async function isBackgroundLocationActive() {
@@ -69,26 +75,7 @@ export async function startBackgroundLocationTracking(
   if (startInFlight) return startInFlight;
 
   const request = (async () => {
-    let locationPermission = await Geolocation.checkPermissions();
-    if (
-      requestMissingPermissions &&
-      locationPermission.location !== "granted" &&
-      locationPermission.coarseLocation !== "granted"
-    ) {
-      locationPermission = await Geolocation.requestPermissions();
-    }
-    if (locationPermission.location !== "granted" && locationPermission.coarseLocation !== "granted") {
-      throw new Error("يلزم السماح للموقع حتى يعمل التتبع أثناء الدوام.");
-    }
-
-    let notificationPermission = await LocalNotifications.checkPermissions();
-    if (requestMissingPermissions && notificationPermission.display !== "granted") {
-      notificationPermission = await LocalNotifications.requestPermissions();
-    }
-    if (notificationPermission.display !== "granted") {
-      throw new Error("يلزم السماح بالإشعارات ليظهر تنبيه التتبع المستمر.");
-    }
-
+    await ensureBackgroundLocationPermissions(requestMissingPermissions);
     return BackgroundTracking.start({ apiBaseUrl: API_ORIGIN, employeeId });
   })();
   startInFlight = request;
@@ -99,10 +86,10 @@ export async function startBackgroundLocationTracking(
   }
 }
 
-export async function stopBackgroundLocationTracking() {
+export async function stopBackgroundLocationTracking(manual = false) {
   if (!supportsBackgroundLocation()) return;
   try {
-    await BackgroundTracking.stop();
+    await BackgroundTracking.stop({ manual });
   } catch {
     // App logout and checkout must continue even if the native service is already stopped.
   }

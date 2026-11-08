@@ -41,6 +41,7 @@ public class BackgroundLocationService extends Service implements LocationListen
     public static final String ACTION_STOP = "com.azzam200022.azo.STOP_BACKGROUND_TRACKING";
     public static final String EXTRA_API_BASE_URL = "apiBaseUrl";
     public static final String EXTRA_EMPLOYEE_ID = "employeeId";
+    public static final String EXTRA_MANUAL_STOP = "manualStop";
     private static final String CHANNEL_ID = "azo-work-location";
     private static final int NOTIFICATION_ID = 8214;
     private static final String PREFS = "azo_background_location";
@@ -75,9 +76,10 @@ public class BackgroundLocationService extends Service implements LocationListen
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && ACTION_STOP.equals(intent.getAction())) {
+            boolean manualStop = intent.getBooleanExtra(EXTRA_MANUAL_STOP, true);
             getSharedPreferences(PREFS, MODE_PRIVATE)
                 .edit()
-                .putBoolean("manual_stopped", true)
+                .putBoolean("manual_stopped", manualStop)
                 .apply();
             stopTracking();
             return START_NOT_STICKY;
