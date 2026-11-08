@@ -170,3 +170,18 @@ def test_web_push_sends_generic_notification_without_firebase(monkeypatch):
     vapid = Vapid()
     vapid.generate_keys()
     vapid.sign({**sent["vapid_claims"], "aud": "https://fcm.googleapis.com"})
+
+def test_web_push_config_is_not_cached(monkeypatch):
+    monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
+    monkeypatch.setenv("DB_NAME", "push_test")
+    monkeypatch.setenv("WEB_PUSH_VAPID_PUBLIC_KEY", "test-public-key")
+    monkeypatch.setenv("WEB_PUSH_VAPID_PRIVATE_KEY", "test-private-key")
+
+    from fastapi import Response
+    from routers.auth import web_push_config
+
+    response = Response()
+    config = asyncio.run(web_push_config(response))
+
+    assert config["public_key"] == "test-public-key"
+    assert response.headers["cache-control"] == "no-store"
