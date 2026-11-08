@@ -78,7 +78,8 @@ def _set_cookie(response: Response, token: str, origin: str | None) -> None:
 
 
 @router.get("/web-push-config")
-async def web_push_config():
+async def web_push_config(response: Response):
+    response.headers["Cache-Control"] = "no-store"
     public_key = os.environ.get("WEB_PUSH_VAPID_PUBLIC_KEY", "").strip()
     private_key = os.environ.get("WEB_PUSH_VAPID_PRIVATE_KEY", "").strip()
     return {"public_key": public_key if public_key and private_key else None}

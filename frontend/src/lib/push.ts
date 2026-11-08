@@ -3,7 +3,7 @@
 import { Capacitor } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import { PushNotifications } from "@capacitor/push-notifications";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiGetNoCache, apiPost } from "@/lib/api";
 import { applicationServerKeyMatches } from "@/lib/push-key";
 
 export type PushPermission =
@@ -54,7 +54,7 @@ function getBrowserPushContext() {
       }
 
       const [config, registration] = await Promise.all([
-        apiGet<{ public_key: string | null }>("/auth/web-push-config"),
+        apiGetNoCache<{ public_key: string | null }>("/auth/web-push-config"),
         navigator.serviceWorker.ready,
       ]);
       if (!config.public_key) return null;
