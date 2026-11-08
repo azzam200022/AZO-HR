@@ -6,6 +6,7 @@ import sys
 from zoneinfo import ZoneInfo
 
 import pytest
+from fastapi import HTTPException
 
 
 # Keep punch tests independent of a live database and outbound notifications.
@@ -97,6 +98,18 @@ def employee(**updates):
         "work_days": list(range(7)),
         **updates,
     }
+
+
+def test_tracking_consent_is_required_before_employee_self_service():
+    with pytest.raises(HTTPException) as error:
+        punch.require_tracking_consent(employee())
+
+    assert error.value.status_code == 403
+    assert "تتبع الموقع أثناء الدوام" in error.value.detail
+
+
+def test_enabled_tracking_consent_passes_guard():
+    punch.require_tracking_consent(employee(background_tracking_consent=True))
 
 
 @pytest.mark.asyncio

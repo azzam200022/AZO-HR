@@ -186,6 +186,10 @@ class SelfPunch(BaseModel):
     lng: float | None = None
 
 
+class TrackingConsent(BaseModel):
+    enabled: bool
+
+
 class PresenceLocationSample(BaseModel):
     """One locally queued Android location fix; identity is checked against the session."""
 

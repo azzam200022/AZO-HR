@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Link } from "react-router-dom";
 import { CheckCircle2, Clock3, Fingerprint, LogOut, MapPin } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import {
-  hasBackgroundLocationConsent,
-  isBackgroundLocationActive,
-  setBackgroundLocationConsent,
+  requestBackgroundLocationPermissions,
   startBackgroundLocationTracking,
   stopBackgroundLocationTracking,
   supportsBackgroundLocation,
@@ -31,6 +30,7 @@ import {
   type EmployeeReport,
   type PayrollItem,
   type PresenceStatus,
+  type TrackingConsent,
   type TodayResponse,
   type WorkLocation,
 } from "@/lib/types";
@@ -45,6 +45,10 @@ export default function MyAttendance() {
   const locationQuery = useQuery({
     queryKey: ["me", "location"],
     queryFn: () => apiGet<WorkLocation | null>("/me/location"),
+  });
+  const trackingConsentQuery = useQuery({
+    queryKey: ["me", "tracking-consent"],
+    queryFn: () => apiGet<TrackingConsent>("/me/tracking-consent"),
   });
   const todayQuery = useQuery({
     queryKey: ["today"],
@@ -68,6 +72,7 @@ export default function MyAttendance() {
   const me = profileQuery.data?.employee;
   const shift = profileQuery.data?.attendance;
   const myLocation = locationQuery.data ?? null;
+  const trackingConsent = trackingConsentQuery.data?.enabled === true;
   const today = todayQuery.data?.today ?? todayStr();
   const records = attendanceQuery.data ?? [];
   const todayDate = new Date(`${today}T00:00:00Z`);
@@ -191,67 +196,14 @@ export default function MyAttendance() {
     const remainingSeconds = String(seconds % 60).padStart(2, "0");
     return `${hours}س ${minutes}د ${remainingSeconds}ث`;
   };
-  const [backgroundTrackingActive, setBackgroundTrackingActive] = useState(false);
-  const [backgroundTrackingBusy, setBackgroundTrackingBusy] = useState(false);
-  const [backgroundTrackingConsent, setBackgroundTrackingConsent] = useState(false);
-
-  useEffect(() => {
-    if (me?.id) setBackgroundTrackingConsent(hasBackgroundLocationConsent(me.id));
-  }, [me?.id]);
-
-  useEffect(() => {
-    if (!supportsBackgroundLocation()) return;
-    let active = true;
-    const refresh = () => {
-      void isBackgroundLocationActive().then((running) => {
-        if (active) setBackgroundTrackingActive(running);
-      });
-    };
-    refresh();
-    const timer = window.setInterval(refresh, 15_000);
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", refresh);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", refresh);
-    };
-  }, []);
-
-  const enableBackgroundTracking = async () => {
-    if (!me?.id || !live || !myLocation) {
-      toast.error("سجّل حضورك وتأكد من وجود موقع عمل مرتبط بحسابك أولاً.");
-      return;
-    }
-
-    setBackgroundTrackingBusy(true);
-    try {
-      await startBackgroundLocationTracking(me.id, true);
-      setBackgroundLocationConsent(me.id, true);
-      setBackgroundTrackingConsent(true);
-      setBackgroundTrackingActive(true);
-      toast.success("تم حفظ الموافقة؛ سيبدأ التتبع تلقائياً مع حضورك في الأيام القادمة.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "تعذر بدء تتبع الموقع بالخلفية.");
-    } finally {
-      setBackgroundTrackingBusy(false);
-    }
-  };
-
-  const disableBackgroundTracking = async () => {
-    setBackgroundTrackingBusy(true);
-    await stopBackgroundLocationTracking();
-    if (me?.id) setBackgroundLocationConsent(me.id, false);
-    setBackgroundTrackingConsent(false);
-    setBackgroundTrackingActive(false);
-    setBackgroundTrackingBusy(false);
-    toast.success("تم إيقاف التتبع وإلغاء الموافقة التلقائية.");
-  };
 
   const checkInMutation = useMutation({
     // The geofence is enforced server-side: 403 outside the radius, 400 without a fix.
     mutationFn: async () => {
+      if (!trackingConsent) {
+        throw new Error("فعّل «تتبع الموقع أثناء الدوام» من ملفك الشخصي قبل تسجيل الحضور.");
+      }
+      await requestBackgroundLocationPermissions();
       let coords: { lat: number; lng: number } | null = null;
       if (myLocation) {
         if (!navigator.geolocation) {
@@ -270,6 +222,11 @@ export default function MyAttendance() {
     },
     onSuccess: () => {
       invalidate();
+      if (supportsBackgroundLocation() && me?.id && myLocation && trackingConsent) {
+        void startBackgroundLocationTracking(me.id, false).catch((error) => {
+          toast.error(error instanceof Error ? error.message : "تعذر بدء تتبع الموقع بالخلفية.");
+        });
+      }
       toast.success("تم تسجيل حضورك — يوماً سعيداً!");
     },
     onError: (error) => toast.error(errorText(error)),
@@ -278,8 +235,7 @@ export default function MyAttendance() {
   const checkOutMutation = useMutation({
     mutationFn: () => apiPost<AttendanceRecord>("/me/check-out"),
     onSuccess: () => {
-      void stopBackgroundLocationTracking();
-      setBackgroundTrackingActive(false);
+      void stopBackgroundLocationTracking(false);
       invalidate();
       toast.success("تم تسجيل الانصراف — أحسنت العمل");
     },
@@ -330,7 +286,7 @@ export default function MyAttendance() {
               <button
                 type="button"
                 onClick={() => checkInMutation.mutate()}
-                disabled={busy || attendanceQuery.isLoading}
+                disabled={busy || attendanceQuery.isLoading || trackingConsentQuery.isLoading || !trackingConsent}
                 className="group flex h-32 w-32 flex-col items-center justify-center gap-1 rounded-full bg-teal-500/90 text-white shadow-xl transition-all duration-200 hover:bg-teal-400 active:scale-95 disabled:opacity-60"
                 data-testid="my-checkin-btn"
               >
@@ -387,49 +343,15 @@ export default function MyAttendance() {
               </>
             )}
 
-            {supportsBackgroundLocation() &&
-              ((live && myLocation) || backgroundTrackingActive) && (
-                <div
-                  className="w-full max-w-md rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-start"
-                  data-testid="background-location-controls"
-                >
-                  <p className="text-sm font-semibold text-white">تتبع الموقع أثناء الدوام</p>
-                  <p className="mt-1 text-xs leading-relaxed text-teal-100">
-                    {backgroundTrackingActive
-                      ? "التتبع نشط أثناء الدوام وحتى رصد المغادرة بعد الوردية. عند انقطاع الإنترنت تُحفظ النقاط مؤقتاً على الجهاز ثم تُرسل عند عودة الاتصال. يحتفظ النظام بوقت وإحداثيات الخروج والعودة ومدتهما، ولا يحفظ مسار الحركة كاملاً."
-                      : backgroundTrackingConsent
-                        ? "موافقتك محفوظة لهذا الجهاز؛ سيبدأ التتبع تلقائياً مع الحضور. عند انقطاع الإنترنت تُحفظ النقاط مؤقتاً ثم تُرسل عند عودة الاتصال. يحتفظ النظام بوقت وإحداثيات الخروج والعودة ومدتهما، ولا يحفظ مسار الحركة كاملاً."
-                        : "موافقة لمرة واحدة: يبدأ التتبع مع الحضور ويستمر حتى رصد المغادرة. عند انقطاع الإنترنت تُحفظ النقاط مؤقتاً على الجهاز ثم تُرسل عند عودة الاتصال. يحتفظ النظام بوقت وإحداثيات الخروج والعودة ومدة الغياب، ولا يحفظ مسار الحركة كاملاً."}
-                  </p>
-                  {backgroundTrackingActive ? (
-                    <Button
-                      className="mt-3"
-                      size="sm"
-                      variant="outline"
-                      onClick={disableBackgroundTracking}
-                      disabled={backgroundTrackingBusy}
-                      data-testid="stop-background-location-btn"
-                    >
-                      إيقاف التتبع وإلغاء الموافقة
-                    </Button>
-                  ) : (
-                    <Button
-                      className="mt-3"
-                      size="sm"
-                      variant="outline"
-                      onClick={enableBackgroundTracking}
-                      disabled={backgroundTrackingBusy || !live || !myLocation}
-                      data-testid="start-background-location-btn"
-                    >
-                      {backgroundTrackingBusy
-                        ? "جارٍ تفعيل التتبع…"
-                        : backgroundTrackingConsent
-                          ? "إعادة محاولة التتبع"
-                          : "موافقة وتفعيل لمرة واحدة"}
-                    </Button>
-                  )}
-                </div>
-              )}
+            {canCheckIn && !trackingConsent && (
+              <Link
+                to="/me/profile"
+                className="rounded-full bg-white/10 px-4 py-2 text-xs font-semibold text-teal-100 underline-offset-4 hover:underline"
+                data-testid="tracking-consent-required"
+              >
+                فعّل تتبع الموقع أثناء الدوام من ملفك الشخصي قبل تسجيل الحضور
+              </Link>
+            )}
 
             {/* Live geofence state while punched in */}
             {liveNow && myLocation && presence?.tracking && (

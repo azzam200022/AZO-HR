@@ -44,6 +44,10 @@ public class BackgroundTrackingPlugin extends Plugin {
     public void stop(PluginCall call) {
         Intent intent = new Intent(getContext(), BackgroundLocationService.class);
         intent.setAction(BackgroundLocationService.ACTION_STOP);
+        intent.putExtra(
+            BackgroundLocationService.EXTRA_MANUAL_STOP,
+            call.getData().optBoolean("manual", false)
+        );
         getContext().startService(intent);
         JSObject result = new JSObject();
         result.put("active", false);

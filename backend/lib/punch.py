@@ -34,6 +34,14 @@ async def _employee_location(employee: dict) -> dict | None:
     return await db.locations.find_one({"id": location_id})
 
 
+def require_tracking_consent(employee: dict) -> None:
+    if not employee.get("background_tracking_consent", False):
+        raise HTTPException(
+            status_code=403,
+            detail="فعّل «تتبع الموقع أثناء الدوام» من ملفك الشخصي قبل تسجيل الحضور.",
+        )
+
+
 async def _attendance_for_shift(
     employee_id: str, work_date: str, shift_start: str, shift_end: str
 ) -> tuple[dict | None, str]:

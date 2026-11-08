@@ -104,6 +104,10 @@ export interface WorkLocation {
   created_at: string;
 }
 
+export interface TrackingConsent {
+  enabled: boolean;
+}
+
 export interface AttendanceRecord {
   id: string;
   employee_id: string;
