@@ -64,6 +64,9 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
         working-directory: frontend
+      - name: Apply AZO launcher icons
+        run: cp -R android-override/res/. android/app/src/main/res/
+        working-directory: frontend
       - name: Set Android version and signing config
         run: python3 android-override/configure-gradle.py
         working-directory: frontend

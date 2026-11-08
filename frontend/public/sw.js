@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'azo-hr-pwa-'
-const CACHE_NAME = `${CACHE_PREFIX}v1`
+const CACHE_NAME = `${CACHE_PREFIX}v2`
 const appScope = new URL(self.registration.scope)
 const appShellUrl = new URL('./', appScope).href
 const assetsPath = new URL('assets/', appScope).pathname
