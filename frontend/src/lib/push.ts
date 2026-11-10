@@ -68,14 +68,18 @@ function getBrowserPushContext() {
         !("Notification" in window) ||
         !("serviceWorker" in navigator) ||
         !("PushManager" in window) ||
-        !import.meta.env.PROD
+        !window.isSecureContext
       ) {
         return null;
       }
 
       const [config, registration] = await Promise.all([
         apiGetNoCache<{ public_key: string | null }>("/auth/web-push-config"),
-        navigator.serviceWorker.ready,
+        navigator.serviceWorker
+          .register(`${import.meta.env.BASE_URL}sw.js`, {
+            scope: import.meta.env.BASE_URL,
+          })
+          .then(() => navigator.serviceWorker.ready),
       ]);
       if (!config.public_key) return null;
       return { publicKey: config.public_key, registration };
