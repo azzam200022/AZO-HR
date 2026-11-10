@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlarmClock, Bell, BellRing, CalendarDays, CheckCheck, CircleDollarSign, Gift, MapPinOff, MessageSquare } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
+import { browserPushSetupMessage } from "@/lib/browser-push-status";
 import { fmtDate, formatNumber } from "@/lib/format";
 import {
   currentPushPermission,
+  getBrowserPushSetupIssue,
   initializeBrowserPush,
   initializeNativePush,
   isNativePushPlatform,
@@ -28,6 +30,9 @@ export default function NotificationBell({ audience }: Props) {
   const [permission, setPermission] = useState<PushPermission>(() => pushPermission());
   const [browserPushChecked, setBrowserPushChecked] = useState(isNativePushPlatform());
   const [browserPushReady, setBrowserPushReady] = useState(false);
+  const [browserPushIssue, setBrowserPushIssue] = useState(
+    getBrowserPushSetupIssue(),
+  );
   const [browserPushEnabled, setBrowserPushEnabled] = useState(false);
   const lastUnread = useRef<number | null>(null);
 
@@ -42,6 +47,7 @@ export default function NotificationBell({ audience }: Props) {
         if (!active) return;
         setBrowserPushReady(ready);
         setBrowserPushChecked(true);
+        setBrowserPushIssue(ready ? null : getBrowserPushSetupIssue());
         if (ready) {
           void initializeBrowserPush().then((enabled) => {
             if (active) setBrowserPushEnabled(enabled);
@@ -137,11 +143,13 @@ export default function NotificationBell({ audience }: Props) {
     setBrowserPushChecked(false);
     setBrowserPushReady(false);
     setBrowserPushEnabled(false);
+    setBrowserPushIssue(null);
     const currentPermission = pushPermission();
     setPermission(currentPermission);
     const ready = await prepareBrowserPush(true);
     setBrowserPushReady(ready);
     setBrowserPushChecked(true);
+    setBrowserPushIssue(ready ? null : getBrowserPushSetupIssue());
     if (ready && currentPermission === "granted") {
       setBrowserPushEnabled(await initializeBrowserPush());
     }
@@ -226,10 +234,12 @@ export default function NotificationBell({ audience }: Props) {
               <p className="text-[11px] text-slate-600">
                 جارٍ التحقق من إعداد إشعارات المتصفح...
               </p>
-            ) : permission === "setup-required" || (!isNativePushPlatform() && !browserPushReady) ? (
+            ) : permission === "setup-required" ||
+              (!isNativePushPlatform() && !browserPushReady) ||
+              (!isNativePushPlatform() && browserPushIssue !== null) ? (
               <div className="space-y-1.5">
                 <p className="text-[11px] text-slate-600">
-                  إعداد إشعارات المتصفح غير جاهز. تأكد من الاتصال الآمن بالخادم ثم أعد الفحص.
+                  {browserPushSetupMessage(browserPushIssue)}
                 </p>
                 <button
                   type="button"

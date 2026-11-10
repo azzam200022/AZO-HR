@@ -2,7 +2,8 @@
 
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
-import { apiGet, apiGetNoCache, apiPost } from "@/lib/api";
+import { apiGetNoCache, apiPost } from "@/lib/api";
+import type { BrowserPushSetupIssue } from "@/lib/browser-push-status";
 import { applicationServerKeyMatches } from "@/lib/push-key";
 
 type NativeNotification = { title?: string; body?: string };
@@ -59,31 +60,58 @@ type BrowserPushContext = {
 };
 
 let browserPushContextPromise: Promise<BrowserPushContext | null> | null = null;
+let browserPushSetupIssue: BrowserPushSetupIssue | null = null;
 
 function getBrowserPushContext() {
   if (!browserPushContextPromise) {
     const request = (async () => {
+      browserPushSetupIssue = null;
+      if (typeof window === "undefined") {
+        browserPushSetupIssue = "unsupported";
+        return null;
+      }
+      if (!window.isSecureContext) {
+        browserPushSetupIssue = "insecure-context";
+        return null;
+      }
       if (
-        typeof window === "undefined" ||
         !("Notification" in window) ||
         !("serviceWorker" in navigator) ||
-        !("PushManager" in window) ||
-        !window.isSecureContext
+        !("PushManager" in window)
       ) {
+        browserPushSetupIssue = "unsupported";
         return null;
       }
 
-      const [config, registration] = await Promise.all([
-        apiGetNoCache<{ public_key: string | null }>("/auth/web-push-config"),
-        navigator.serviceWorker
+      let config: { public_key: string | null };
+      try {
+        config = await apiGetNoCache<{ public_key: string | null }>(
+          "/auth/web-push-config",
+        );
+      } catch {
+        browserPushSetupIssue = "server-unreachable";
+        return null;
+      }
+      if (!config.public_key) {
+        browserPushSetupIssue = "server-unconfigured";
+        return null;
+      }
+
+      try {
+        const registration = await navigator.serviceWorker
           .register(`${import.meta.env.BASE_URL}sw.js`, {
             scope: import.meta.env.BASE_URL,
           })
-          .then(() => navigator.serviceWorker.ready),
-      ]);
-      if (!config.public_key) return null;
-      return { publicKey: config.public_key, registration };
-    })().catch(() => null);
+          .then(() => navigator.serviceWorker.ready);
+        return { publicKey: config.public_key, registration };
+      } catch {
+        browserPushSetupIssue = "service-worker-unavailable";
+        return null;
+      }
+    })().catch(() => {
+      browserPushSetupIssue = "service-worker-unavailable";
+      return null;
+    });
 
     browserPushContextPromise = request;
     // A transient missing config or request error must not stay cached for this page session.
@@ -96,6 +124,10 @@ function getBrowserPushContext() {
   return browserPushContextPromise;
 }
 
+export function getBrowserPushSetupIssue() {
+  return browserPushSetupIssue;
+}
+
 function decodeApplicationServerKey(encoded: string) {
   const padding = "=".repeat((4 - (encoded.length % 4)) % 4);
   const base64 = (encoded + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -104,7 +136,10 @@ function decodeApplicationServerKey(encoded: string) {
 }
 
 export async function prepareBrowserPush(forceRefresh = false) {
-  if (forceRefresh) browserPushContextPromise = null;
+  if (forceRefresh) {
+    browserPushContextPromise = null;
+    browserPushSetupIssue = null;
+  }
   return Boolean(await getBrowserPushContext());
 }
 
