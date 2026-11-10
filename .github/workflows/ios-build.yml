@@ -1,0 +1,74 @@
+name: iOS Simulator Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install frontend dependencies
+        run: npm install --no-audit --no-fund --legacy-peer-deps
+        working-directory: frontend
+
+      - name: Build web app
+        run: npm run build
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: ${{ vars.API_BASE_URL || 'https://https-github-com-azzam200022-azo.onrender.com' }}
+
+      - name: Sync Capacitor iOS project
+        run: npx cap sync ios
+        working-directory: frontend
+
+      - name: Add Firebase iOS configuration
+        working-directory: frontend
+        env:
+          FIREBASE_IOS_GOOGLE_SERVICES_PLIST_BASE64: ${{ secrets.FIREBASE_IOS_GOOGLE_SERVICES_PLIST_BASE64 }}
+        run: |
+          if [[ -z "$FIREBASE_IOS_GOOGLE_SERVICES_PLIST_BASE64" ]]; then
+            echo "::warning::Firebase iOS configuration is missing; push notifications will not register on a device."
+          else
+            printf '%s' "$FIREBASE_IOS_GOOGLE_SERVICES_PLIST_BASE64" \
+              | python3 -c 'import base64, sys; sys.stdout.buffer.write(base64.b64decode(sys.stdin.buffer.read()))' \
+              > ios/App/App/GoogleService-Info.plist
+          fi
+
+      - name: Configure iOS permissions and push resources
+        run: python3 ios-override/configure-ios.py
+        working-directory: frontend
+
+      - name: Build iOS Simulator app
+        run: |
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -destination 'generic/platform=iOS Simulator' \
+            -sdk iphonesimulator \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+        working-directory: frontend
+
+      - name: Upload iOS Simulator build
+        uses: actions/upload-artifact@v4
+        with:
+          name: azo-hr-ios-simulator
+          path: frontend/build/DerivedData/Build/Products/Debug-iphonesimulator/App.app
+          if-no-files-found: error
+          retention-days: 14
