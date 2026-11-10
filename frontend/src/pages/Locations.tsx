@@ -118,7 +118,7 @@ export default function Locations() {
     } catch (error) {
       const code = (error as { code?: number | string } | null)?.code;
       if (code === 1 || code === "OS-PLUG-GLOC-0003") {
-        toast.error("لم يتم منح إذن الموقع. اسمح لتطبيق AZO HR بالوصول للموقع من إعدادات Android.");
+        toast.error("لم يتم منح إذن الموقع. اسمح لتطبيق AZO HR بالوصول للموقع من إعدادات الجهاز.");
       } else if (code === "OS-PLUG-GLOC-0007") {
         toast.error("خدمات الموقع متوقفة. فعّل الموقع (GPS) ثم أعد المحاولة.");
       } else {

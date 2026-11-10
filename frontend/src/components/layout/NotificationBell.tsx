@@ -75,7 +75,7 @@ export default function NotificationBell({ audience }: Props) {
   // A rise in the unread counter raises a local/browser notification when allowed.
   useEffect(() => {
     if (isNativePushPlatform()) {
-      // Android receives these through FCM; a second local notification would duplicate it.
+      // Native Android/iOS notifications arrive through FCM; a second local alert would duplicate them.
       lastUnread.current = unread;
       return;
     }

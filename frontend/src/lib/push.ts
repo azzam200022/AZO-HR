@@ -1,10 +1,30 @@
-/** Push notification permissions and Android/browser push registration. */
+/** Push notification permissions and native/browser push registration. */
 
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, registerPlugin } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
-import { PushNotifications } from "@capacitor/push-notifications";
 import { apiGet, apiGetNoCache, apiPost } from "@/lib/api";
 import { applicationServerKeyMatches } from "@/lib/push-key";
+
+type NativeNotification = { title?: string; body?: string };
+
+interface FirebaseMessagingBridge {
+  checkPermissions(): Promise<{ receive: string }>;
+  requestPermissions(): Promise<{ receive: string }>;
+  getToken(): Promise<{ token: string }>;
+  addListener(
+    eventName: "tokenReceived",
+    listener: (event: { token: string }) => void,
+  ): Promise<{ remove(): Promise<void> }>;
+  addListener(
+    eventName: "notificationReceived",
+    listener: (event: { notification: NativeNotification }) => void,
+  ): Promise<{ remove(): Promise<void> }>;
+  removeAllListeners(): Promise<void>;
+}
+
+// The web app uses its existing Web Push flow; only native builds call this bridge.
+// Registering the native plugin directly avoids bundling Firebase's unused web SDK.
+const FirebaseMessaging = registerPlugin<FirebaseMessagingBridge>("FirebaseMessaging");
 
 export type PushPermission =
   | "unsupported"
@@ -161,14 +181,11 @@ async function ensureNativeListeners() {
   if (!isNativePushPlatform()) return;
   if (!nativeListeners) {
     nativeListeners = (async () => {
-      await PushNotifications.addListener("registration", ({ value }) => {
+      await FirebaseMessaging.addListener("tokenReceived", ({ token }) => {
         // The token is sent over the authenticated session and is never logged or returned.
-        void bindToken(value);
+        void bindToken(token);
       });
-      await PushNotifications.addListener("registrationError", () => {
-        console.warn("Firebase push registration failed.");
-      });
-      await PushNotifications.addListener("pushNotificationReceived", (notification) => {
+      await FirebaseMessaging.addListener("notificationReceived", ({ notification }) => {
         const body = notification.body?.trim();
         if (body) {
           void showPush(notification.title?.trim() || "مواردي", body);
@@ -186,9 +203,10 @@ export async function initializeNativePush() {
   if (!isNativePushPlatform()) return;
   try {
     await ensureNativeListeners();
-    const permission = await PushNotifications.checkPermissions();
+    const permission = await FirebaseMessaging.checkPermissions();
     if (permission.receive === "granted") {
-      await PushNotifications.register();
+      const result = await FirebaseMessaging.getToken();
+      if (result.token) await bindToken(result.token);
     }
   } catch {
     // Push setup is optional; the in-app notification feed remains available.
@@ -204,7 +222,7 @@ export async function currentPushPermission(): Promise<PushPermission> {
   if (!isNativePushPlatform()) return pushPermission();
 
   try {
-    const result = await PushNotifications.checkPermissions();
+    const result = await FirebaseMessaging.checkPermissions();
     return fromNativePermission(result.receive);
   } catch {
     return "default";
@@ -215,9 +233,12 @@ export async function requestPush(): Promise<PushPermission> {
   if (isNativePushPlatform()) {
     try {
       await ensureNativeListeners();
-      const result = await PushNotifications.requestPermissions();
+      const result = await FirebaseMessaging.requestPermissions();
       const permission = fromNativePermission(result.receive);
-      if (permission === "granted") await PushNotifications.register();
+      if (permission === "granted") {
+        const token = await FirebaseMessaging.getToken();
+        if (token.token) await bindToken(token.token);
+      }
       return permission;
     } catch {
       return "unsupported";
@@ -254,7 +275,7 @@ export async function unregisterCurrentPushToken() {
     await apiPost("/auth/push-token/unregister", { token }).catch(() => undefined);
   }
   if (isNativePushPlatform()) {
-    await PushNotifications.removeAllListeners().catch(() => undefined);
+    await FirebaseMessaging.removeAllListeners().catch(() => undefined);
     nativeListeners = null;
     return;
   }

@@ -4,6 +4,7 @@ import { LocalNotifications } from "@capacitor/local-notifications";
 import { API_ORIGIN } from "@/lib/api";
 
 interface BackgroundTrackingPlugin {
+  requestBackgroundPermissions(): Promise<{ granted: boolean }>;
   start(options: { apiBaseUrl: string; employeeId: string }): Promise<{ active: boolean }>;
   stop(options?: { manual?: boolean }): Promise<{ active: boolean }>;
   getStatus(): Promise<{ active: boolean; manuallyStopped: boolean }>;
@@ -12,7 +13,8 @@ interface BackgroundTrackingPlugin {
 const BackgroundTracking = registerPlugin<BackgroundTrackingPlugin>("BackgroundTracking");
 let startInFlight: Promise<{ active: boolean }> | null = null;
 
-export const supportsBackgroundLocation = () => Capacitor.getPlatform() === "android";
+export const supportsBackgroundLocation = () =>
+  Capacitor.getPlatform() === "android" || Capacitor.getPlatform() === "ios";
 
 async function ensureBackgroundLocationPermissions(requestMissingPermissions: boolean) {
   let locationPermission = await Geolocation.checkPermissions();
@@ -27,12 +29,21 @@ async function ensureBackgroundLocationPermissions(requestMissingPermissions: bo
     throw new Error("يلزم السماح للموقع حتى يعمل التتبع أثناء الدوام.");
   }
 
-  let notificationPermission = await LocalNotifications.checkPermissions();
-  if (requestMissingPermissions && notificationPermission.display !== "granted") {
-    notificationPermission = await LocalNotifications.requestPermissions();
+  if (Capacitor.getPlatform() === "android") {
+    let notificationPermission = await LocalNotifications.checkPermissions();
+    if (requestMissingPermissions && notificationPermission.display !== "granted") {
+      notificationPermission = await LocalNotifications.requestPermissions();
+    }
+    if (notificationPermission.display !== "granted") {
+      throw new Error("يلزم السماح بالإشعارات ليظهر تنبيه التتبع المستمر.");
+    }
   }
-  if (notificationPermission.display !== "granted") {
-    throw new Error("يلزم السماح بالإشعارات ليظهر تنبيه التتبع المستمر.");
+
+  if (Capacitor.getPlatform() === "ios" && requestMissingPermissions) {
+    const permission = await BackgroundTracking.requestBackgroundPermissions();
+    if (!permission.granted) {
+      throw new Error("اسمح لمواردي بالوصول إلى الموقع دائماً لتتبّع الدوام عند إغلاق التطبيق.");
+    }
   }
 }
 
@@ -64,7 +75,7 @@ export async function startBackgroundLocationTracking(
   requestMissingPermissions = false,
 ) {
   if (!supportsBackgroundLocation()) {
-    throw new Error("التتبع عند إغلاق التطبيق متاح في نسخة Android فقط.");
+    throw new Error("التتبع عند إغلاق التطبيق متاح في نسختي Android وiOS فقط.");
   }
   if (!employeeId) {
     throw new Error("تعذر تحديد حساب الموظف لحفظ مواقع الانقطاع بأمان.");

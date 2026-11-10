@@ -1,4 +1,3 @@
-import { Capacitor } from "@capacitor/core";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -77,7 +76,7 @@ export default function PresenceTracker() {
       if (cancelled || pending || document.visibilityState === "hidden") return;
       pending = true;
       try {
-        if (Capacitor.getPlatform() === "android" && (await isBackgroundLocationActive())) return;
+        if (await isBackgroundLocationActive()) return;
         const position = await new Promise<GeolocationPosition>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(resolve, reject, {
             enableHighAccuracy: true,
