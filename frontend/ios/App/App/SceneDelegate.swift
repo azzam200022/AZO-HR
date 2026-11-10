@@ -24,7 +24,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 }
 
 final class AzoBridgeViewController: CAPBridgeViewController {
-    override open func capacitorDidLoad() {
+    public override func capacitorDidLoad() {
         bridge?.registerPluginInstance(BackgroundTrackingPlugin())
     }
 }
