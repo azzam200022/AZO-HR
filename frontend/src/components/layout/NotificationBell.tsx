@@ -229,7 +229,7 @@ export default function NotificationBell({ audience }: Props) {
             ) : permission === "setup-required" || (!isNativePushPlatform() && !browserPushReady) ? (
               <div className="space-y-1.5">
                 <p className="text-[11px] text-slate-600">
-                  تعذر قراءة إعدادات إشعارات المتصفح من الخادم. أعد الفحص بعد التأكد من الاتصال.
+                  إعداد إشعارات المتصفح غير جاهز. تأكد من الاتصال الآمن بالخادم ثم أعد الفحص.
                 </p>
                 <button
                   type="button"
