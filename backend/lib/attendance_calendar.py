@@ -45,6 +45,7 @@ def _actual_record(doc: dict, employee: dict, today: str, now: str) -> Attendanc
         record.pop("created_at", None)
     else:
         record["created_at"] = aware(created_at)
+    record["check_in_at"] = aware(record.get("check_in_at"))
     start, end, grace = employee_shift(employee)
     work_days = employee.get("work_days")
     record["late_minutes"] = late_minutes(

@@ -129,6 +129,7 @@ async def my_attendance(principal: Principal = Depends(require_employee)):
         record = dict(doc)
         record["status"] = record.get("status") or "present"
         record["created_at"] = aware(record.get("created_at"))
+        record["check_in_at"] = aware(record.get("check_in_at"))
         record["late_minutes"] = late_minutes(
             record.get("check_in", ""),
             shift_start,
@@ -157,6 +158,7 @@ async def my_check_in(payload: SelfPunch, principal: Principal = Depends(require
 async def my_check_out(principal: Principal = Depends(require_employee)):
     doc = await punch_out(principal.employee_id)
     doc["created_at"] = aware(doc.get("created_at"))
+    doc["check_in_at"] = aware(doc.get("check_in_at"))
     return AttendanceRecord(**doc)
 
 

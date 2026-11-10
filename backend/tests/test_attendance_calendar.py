@@ -72,6 +72,28 @@ def test_real_punch_overrides_synthetic_leave_status():
     assert result[0].is_synthetic is False
 
 
+def test_mongo_check_in_timestamp_is_serialized_as_utc():
+    punch = {
+        "id": "attendance-utc",
+        "employee_id": "employee-1",
+        "date": "2026-11-10",
+        "check_in": "23:55",
+        # MongoDB returns UTC datetimes without tzinfo.
+        "check_in_at": datetime(2026, 11, 10, 20, 55),
+    }
+
+    record = records(
+        "2026-11-10",
+        punches=[punch],
+        today="2026-11-10",
+        now="23:55",
+    )[0]
+
+    assert record.check_in_at == datetime(2026, 11, 10, 20, 55, tzinfo=timezone.utc)
+    serialized = record.model_dump(mode="json")["check_in_at"]
+    assert serialized.endswith(("Z", "+00:00"))
+
+
 def test_overnight_shift_is_not_marked_absent_before_its_start_or_end():
     night_staff = staff(shift_start="22:00", shift_end="06:00")
     assert records(
