@@ -1,4 +1,5 @@
 import asyncio
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -112,7 +113,7 @@ def test_push_uses_notification_content(monkeypatch):
     assert sent["message"].data["notification_id"] == "note-1"
 
 
-def test_web_push_sends_generic_notification_without_firebase(monkeypatch):
+def test_web_push_includes_full_notification_content_without_firebase(monkeypatch):
     from lib import push
     from py_vapid import Vapid
 
@@ -162,8 +163,15 @@ def test_web_push_sends_generic_notification_without_firebase(monkeypatch):
 
     assert sent["subscription_info"]["endpoint"].startswith("https://fcm.googleapis.com/")
     assert sent["vapid_private_key"] == "private-key"
-    assert '"title": "مواردي — إشعار جديد"' in sent["data"]
-    assert "تفاصيل راتب سرية" not in sent["data"]
+    payload = json.loads(sent["data"])
+    assert payload["title"] == "تسوية الراتب"
+    assert payload["body"] == "تفاصيل راتب سرية"
+    assert payload["tag"] == "mawaridi-note-2"
+    assert payload["data"] == {
+        "notification_id": "note-2",
+        "kind": "payroll",
+        "audience": "manager",
+    }
     assert sent["ttl"] == 3600
     assert sent["vapid_claims"] == {"sub": "https://azzam200022.github.io"}
 
