@@ -166,6 +166,9 @@ async def _send_web_push(
     query: dict[str, str],
     note: dict[str, Any],
     config: tuple[str, str],
+    title: str,
+    body: str,
+    data: dict[str, str],
 ) -> None:
     try:
         subscriptions = await db.web_push_subscriptions.find(query).to_list(500)
@@ -180,14 +183,10 @@ async def _send_web_push(
     ).strip()
     notification_id = str(note.get("id") or "")
     payload = {
-        "title": "مواردي — إشعار جديد",
-        "body": "لديك تحديث جديد. افتح التطبيق للاطلاع على التفاصيل.",
+        "title": title,
+        "body": body,
         "tag": f"mawaridi-{notification_id}" if notification_id else "mawaridi",
-        "data": {
-            "notification_id": notification_id,
-            "kind": str(note.get("kind") or "message"),
-            "audience": str(note.get("audience") or ""),
-        },
+        "data": data,
     }
 
     for record in subscriptions:
@@ -238,4 +237,4 @@ async def send_notification(note: dict[str, Any]) -> None:
     if app is not None:
         await _send_fcm(note, query, app, title, body, data)
     if web_config is not None:
-        await _send_web_push(query, note, web_config)
+        await _send_web_push(query, note, web_config, title, body, data)
