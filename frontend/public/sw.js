@@ -70,7 +70,7 @@ self.addEventListener('push', (event) => {
         lang: 'ar',
         tag: payload.tag ?? 'mawaridi',
         icon: new URL('pwa-192.png', appScope).href,
-        badge: new URL('favicon-16x16.png', appScope).href,
+        badge: new URL('pwa-192.png', appScope).href,
         data: {
           ...notificationData,
           url: appShellUrl,
