@@ -1,13 +1,15 @@
 const CACHE_PREFIX = 'azo-hr-pwa-'
-const CACHE_NAME = `${CACHE_PREFIX}v2`
+const CACHE_NAME = `${CACHE_PREFIX}v3`
 const appScope = new URL(self.registration.scope)
 const appShellUrl = new URL('./', appScope).href
+const notificationBadgeUrl = new URL('notification-badge.png', appScope).href
 const assetsPath = new URL('assets/', appScope).pathname
 const apiPath = new URL('api/', appScope).pathname
 const manifestPath = new URL('manifest.webmanifest', appScope).pathname
 const pwaIconPaths = new Set([
   new URL('pwa-192.png', appScope).pathname,
   new URL('pwa-512.png', appScope).pathname,
+  new URL('notification-badge.png', appScope).pathname,
 ])
 
 self.addEventListener('install', (event) => {
@@ -15,6 +17,7 @@ self.addEventListener('install', (event) => {
     (async () => {
       const cache = await caches.open(CACHE_NAME)
       await cache.add(appShellUrl)
+      await cache.add(notificationBadgeUrl)
       await self.skipWaiting()
     })(),
   )
@@ -70,7 +73,7 @@ self.addEventListener('push', (event) => {
         lang: 'ar',
         tag: payload.tag ?? 'mawaridi',
         icon: new URL('pwa-192.png', appScope).href,
-        badge: new URL('pwa-192.png', appScope).href,
+        badge: notificationBadgeUrl,
         data: {
           ...notificationData,
           url: appShellUrl,

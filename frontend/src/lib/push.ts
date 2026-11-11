@@ -375,7 +375,7 @@ export async function showPush(title: string, body: string, tag = "mawaridi") {
       lang: "ar",
       tag,
       icon: `${import.meta.env.BASE_URL}pwa-192.png`,
-      badge: `${import.meta.env.BASE_URL}favicon-16x16.png`,
+      badge: `${import.meta.env.BASE_URL}notification-badge.png`,
     };
     const registration =
       "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : undefined;
