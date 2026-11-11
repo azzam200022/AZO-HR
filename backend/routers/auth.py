@@ -17,6 +17,7 @@ from lib.auth import (
     verify_password,
 )
 from lib.db import db
+from lib.web_push_config import get_web_push_config
 from models.auth import EmployeeLogin, LogoutResult, ManagerLogin, SessionInfo
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -80,9 +81,8 @@ def _set_cookie(response: Response, token: str, origin: str | None) -> None:
 @router.get("/web-push-config")
 async def web_push_config(response: Response):
     response.headers["Cache-Control"] = "no-store"
-    public_key = os.environ.get("WEB_PUSH_VAPID_PUBLIC_KEY", "").strip()
-    private_key = os.environ.get("WEB_PUSH_VAPID_PRIVATE_KEY", "").strip()
-    return {"public_key": public_key if public_key and private_key else None}
+    config = get_web_push_config()
+    return {"public_key": config[0] if config else None}
 
 
 @router.post("/push-token")

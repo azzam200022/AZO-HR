@@ -9,8 +9,9 @@ describe("browserPushSetupMessage", () => {
     ["unsupported", "هذا المتصفح لا يدعم إشعارات الويب المطلوبة."],
     ["insecure-context", "افتح الموقع عبر HTTPS"],
     ["server-unreachable", "تعذر الوصول إلى إعدادات الإشعارات"],
-    ["server-unconfigured", "الخادم لا يرسل إعدادات إشعارات المتصفح"],
+    ["server-unconfigured", "مفتاح إشعارات المتصفح على الخادم غير صالح"],
     ["service-worker-unavailable", "تعذر تسجيل خدمة الإشعارات"],
+    ["subscription-failed", "تعذر إنشاء اشتراك الإشعارات"],
   ] as const satisfies ReadonlyArray<[BrowserPushSetupIssue, string]>)(
     "explains the %s setup failure",
     (issue, expectedMessage) => {
