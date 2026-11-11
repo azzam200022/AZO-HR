@@ -50,7 +50,11 @@ export default function NotificationBell({ audience }: Props) {
         setBrowserPushIssue(ready ? null : getBrowserPushSetupIssue());
         if (ready) {
           void initializeBrowserPush().then((enabled) => {
-            if (active) setBrowserPushEnabled(enabled);
+            if (!active) return;
+            setBrowserPushEnabled(enabled);
+            if (!enabled && getBrowserPushSetupIssue()) {
+              setBrowserPushIssue(getBrowserPushSetupIssue());
+            }
           });
         }
       });
@@ -134,6 +138,9 @@ export default function NotificationBell({ audience }: Props) {
     const result = await requestPush();
     setPermission(result);
     setBrowserPushEnabled(result === "granted");
+    if (result === "setup-required") {
+      setBrowserPushIssue(getBrowserPushSetupIssue());
+    }
     if (result === "granted") {
       await showPush("تم السماح بالإشعارات", "سيستخدم التطبيق هذا الإذن لإرسال التنبيهات.");
     }
@@ -151,7 +158,11 @@ export default function NotificationBell({ audience }: Props) {
     setBrowserPushChecked(true);
     setBrowserPushIssue(ready ? null : getBrowserPushSetupIssue());
     if (ready && currentPermission === "granted") {
-      setBrowserPushEnabled(await initializeBrowserPush());
+      const enabled = await initializeBrowserPush();
+      setBrowserPushEnabled(enabled);
+      if (!enabled && getBrowserPushSetupIssue()) {
+        setBrowserPushIssue(getBrowserPushSetupIssue());
+      }
     }
   };
 

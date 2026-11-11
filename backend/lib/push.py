@@ -17,6 +17,7 @@ from pywebpush import WebPushException, webpush
 
 from lib.auth import manager_email
 from lib.db import db
+from lib.web_push_config import get_web_push_config
 
 logger = logging.getLogger(__name__)
 APP_NAME = "azo-hr"
@@ -66,11 +67,7 @@ def _recipient_query(note: dict[str, Any]) -> dict[str, str] | None:
 
 
 def _web_push_config() -> tuple[str, str] | None:
-    public_key = os.environ.get("WEB_PUSH_VAPID_PUBLIC_KEY", "").strip()
-    private_key = os.environ.get("WEB_PUSH_VAPID_PRIVATE_KEY", "").strip()
-    if not public_key or not private_key:
-        return None
-    return public_key, private_key
+    return get_web_push_config()
 
 
 def _notification_content(note: dict[str, Any]) -> tuple[str, str, dict[str, str]]:

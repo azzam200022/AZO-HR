@@ -4,7 +4,10 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import { apiGetNoCache, apiPost } from "@/lib/api";
 import type { BrowserPushSetupIssue } from "@/lib/browser-push-status";
-import { applicationServerKeyMatches } from "@/lib/push-key";
+import {
+  applicationServerKeyMatches,
+  isValidVapidPublicKey,
+} from "@/lib/push-key";
 
 type NativeNotification = { title?: string; body?: string };
 
@@ -93,6 +96,10 @@ function getBrowserPushContext() {
         return null;
       }
       if (!config.public_key) {
+        browserPushSetupIssue = "server-unconfigured";
+        return null;
+      }
+      if (!isValidVapidPublicKey(config.public_key)) {
         browserPushSetupIssue = "server-unconfigured";
         return null;
       }
@@ -190,7 +197,10 @@ async function ensureWebSubscription(createIfMissing: boolean) {
         currentPublicKey,
       )
     ) {
-      if (!(await retireWebSubscription(subscription))) return "failed" as const;
+      if (!(await retireWebSubscription(subscription))) {
+        browserPushSetupIssue = "subscription-failed";
+        return "failed" as const;
+      }
       subscription = null;
     }
 
@@ -201,8 +211,14 @@ async function ensureWebSubscription(createIfMissing: boolean) {
       });
     }
     if (!subscription) return "not-enabled" as const;
-    return (await bindWebSubscription(subscription)) ? "enabled" as const : "failed" as const;
+    const bound = await bindWebSubscription(subscription);
+    if (!bound) {
+      browserPushSetupIssue = "subscription-failed";
+      return "failed" as const;
+    }
+    return "enabled" as const;
   } catch {
+    browserPushSetupIssue = "subscription-failed";
     return "failed" as const;
   }
 }
