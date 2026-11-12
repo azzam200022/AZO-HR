@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from lib.dates import now_local, now_time, today_iso
 from lib.db import db
 from lib.geo import haversine_m
-from lib.notify import notify_late, notify_left_site, notify_manager_event
+from lib.notify import notify_late, notify_left_site, notify_manager_event, notify_returned_site
 from lib.shift import (
     EARLY_PUNCH_WINDOW_MINUTES,
     employee_shift,
@@ -354,6 +354,7 @@ async def record_presence(
     after_shift = scheduled_day and elapsed > duration
 
     updates: dict = {"last_seen": now}
+    return_alert: tuple[str, float] | None = None
     if event_id and event_timestamp_ms is not None:
         updates["_presence_cursor_ms"] = event_timestamp_ms
     intervals = list(doc.get("away_intervals") or [])
@@ -388,6 +389,7 @@ async def record_presence(
                     "away_intervals": intervals,
                 }
             )
+            return_alert = (now, distance)
         elif doc.get("outside_since"):
             updates.update(
                 _close_away_interval(
@@ -477,6 +479,10 @@ async def record_presence(
             employee=employee,
             date=attendance_date,
             message=f"سُجّل انصراف {employee.get('name', '')} تلقائياً الساعة {updates['check_out']}.",
+        )
+    if return_alert is not None:
+        await notify_returned_site(
+            employee, location_doc["name"], return_alert[0], return_alert[1]
         )
     if fresh.get("outside_since"):
         if event_id and interval_start:

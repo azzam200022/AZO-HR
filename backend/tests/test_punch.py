@@ -25,6 +25,7 @@ async def _noop_notification(*_args, **_kwargs):
     return None
 notification_module.notify_late = _noop_notification
 notification_module.notify_left_site = _noop_notification
+notification_module.notify_returned_site = _noop_notification
 notification_module.notify_manager_event = _noop_notification
 sys.modules["lib.notify"] = notification_module
 
@@ -73,6 +74,7 @@ def make_records(monkeypatch, record, employee, clock, today=None):
     monkeypatch.setattr(punch, "now_time", lambda: clock["now"])
     monkeypatch.setattr(punch, "haversine_m", lambda *_args: clock["distance"])
     monkeypatch.setattr(punch, "notify_left_site", AsyncMock())
+    monkeypatch.setattr(punch, "notify_returned_site", AsyncMock())
     return database
 
 
@@ -219,7 +221,9 @@ async def test_departure_notification_fires_once_until_employee_returns(monkeypa
     staff = employee()
     make_records(monkeypatch, record, staff, clock)
     notify = AsyncMock()
+    returned_notify = AsyncMock()
     monkeypatch.setattr(punch, "notify_left_site", notify)
+    monkeypatch.setattr(punch, "notify_returned_site", returned_notify)
 
     await punch.record_presence(staff, 0, 0)
     clock.update(now="10:00", distance=520)
@@ -228,9 +232,11 @@ async def test_departure_notification_fires_once_until_employee_returns(monkeypa
 
     clock.update(now="10:01", distance=100)
     await punch.record_presence(staff, 0, 0)
+    returned_notify.assert_awaited_once_with(staff, "موقع العمل", "10:01", 100)
     clock.update(now="10:02", distance=500)
     await punch.record_presence(staff, 0, 0)
     assert notify.await_count == 2
+    assert returned_notify.await_count == 1
 
 
 @pytest.mark.asyncio

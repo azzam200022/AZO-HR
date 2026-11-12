@@ -117,6 +117,20 @@ async def notify_left_site(employee: dict, location_name: str, at_time: str, dis
     )
 
 
+async def notify_returned_site(
+    employee: dict, location_name: str, at_time: str, distance_m: float
+) -> None:
+    await notify_manager(
+        kind="returned_site",
+        employee=employee,
+        minutes=0,
+        message=(
+            f"عاد {employee.get('name', '')} إلى موقع العمل «{location_name}» "
+            f"الساعة {at_time} — يبعد الآن {int(distance_m)} مترًا"
+        ),
+    )
+
+
 async def notify_employee_adjustment(employee: dict, adjustment: dict) -> None:
     """Create a private alert when a bonus or deduction is recorded."""
     kind = adjustment.get("kind")

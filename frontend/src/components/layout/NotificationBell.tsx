@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlarmClock, Bell, BellRing, CalendarDays, CheckCheck, CircleDollarSign, Gift, MapPinOff, MessageSquare } from "lucide-react";
+import { AlarmClock, Bell, BellRing, CalendarDays, CheckCheck, CircleDollarSign, Gift, MapPin, MapPinOff, MessageSquare } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { browserPushSetupMessage } from "@/lib/browser-push-status";
 import { fmtDate, formatNumber } from "@/lib/format";
@@ -97,6 +97,7 @@ export default function NotificationBell({ audience }: Props) {
           const titleByKind: Record<AppNotification["kind"], string> = {
             late: "تأخر عن الدوام",
             left_site: "مغادرة موقع العمل",
+            returned_site: "عودة إلى موقع العمل",
             attendance: "الحضور والانصراف",
             message: "رسالة جديدة",
             bonus: "حافز جديد",
@@ -173,7 +174,9 @@ export default function NotificationBell({ audience }: Props) {
       ? AlarmClock
       : kind === "left_site"
         ? MapPinOff
-        : kind === "leave_request" || kind === "leave_status"
+        : kind === "returned_site"
+          ? MapPin
+          : kind === "leave_request" || kind === "leave_status"
           ? CalendarDays
           : kind === "bonus"
             ? Gift
@@ -186,7 +189,7 @@ export default function NotificationBell({ audience }: Props) {
       ? "bg-amber-100 text-amber-700"
       : kind === "left_site" || kind === "deduction"
         ? "bg-rose-100 text-rose-700"
-        : kind === "bonus" || kind === "payroll"
+        : kind === "returned_site" || kind === "bonus" || kind === "payroll"
           ? "bg-emerald-100 text-emerald-700"
           : "bg-teal-100 text-teal-700";
 

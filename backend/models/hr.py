@@ -310,6 +310,7 @@ class Notification(BaseModel):
     kind: Literal[
         "late",
         "left_site",
+        "returned_site",
         "message",
         "bonus",
         "deduction",
