@@ -76,6 +76,7 @@ def _notification_content(note: dict[str, Any]) -> tuple[str, str, dict[str, str
     title_by_kind = {
         "late": "تأخر عن الدوام",
         "left_site": "مغادرة موقع العمل",
+        "returned_site": "عودة إلى موقع العمل",
         "attendance": "الحضور والانصراف",
         "message": "رسالة جديدة",
         "bonus": "حافز جديد",
