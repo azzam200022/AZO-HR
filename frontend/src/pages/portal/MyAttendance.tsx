@@ -22,6 +22,7 @@ import {
   shiftLabel,
   todayStr,
 } from "@/lib/format";
+import { browserLocationErrorMessage } from "@/lib/browser-location";
 import { onsiteDurationSeconds } from "@/lib/attendance-duration";
 import {
   ATTENDANCE_STATUS_LABELS,
@@ -206,14 +207,21 @@ export default function MyAttendance() {
       await requestBackgroundLocationPermissions();
       let coords: { lat: number; lng: number } | null = null;
       if (myLocation) {
+        if (!window.isSecureContext) {
+          throw new Error("تحديد الموقع يتطلب فتح مواردي عبر اتصال آمن HTTPS.");
+        }
         if (!navigator.geolocation) {
           throw new Error("المتصفح لا يدعم تحديد الموقع — لا يمكن تسجيل الحضور في موقع مقيّد");
         }
         coords = await new Promise<{ lat: number; lng: number }>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(
             (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-            () =>
-              reject(new Error("تعذر تحديد موقعك — فعّل صلاحية الموقع في المتصفح ثم أعد المحاولة")),
+            (error) => {
+              const message = supportsBackgroundLocation()
+                ? "تعذر تحديد موقعك في تطبيق الهاتف. تحقق من إذن الموقع وخدمات الموقع ثم أعد المحاولة."
+                : browserLocationErrorMessage(error.code);
+              reject(new Error(message));
+            },
             { enableHighAccuracy: true, timeout: 12_000 },
           );
         });
