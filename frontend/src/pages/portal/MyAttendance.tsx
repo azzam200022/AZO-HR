@@ -12,9 +12,7 @@ import {
 } from "@/lib/background-location";
 import {
   currentMonthStr,
-  durationLabel,
   errorText,
-  fmtDate,
   formatIQD,
   formatNumber,
   lateLabel,
@@ -90,7 +88,6 @@ export default function MyAttendance() {
     ? records.find((record) => record.date === previousDate && !record.check_out)
     : undefined;
   const todayRecord = records.find((record) => record.date === today) ?? openOvernightRecord;
-  const monthRecords = records.filter((r) => r.date.startsWith(currentMonthStr()));
   const payslip = (payrollQuery.data ?? [])[0];
 
   const [now, setNow] = useState(() => Date.now());
@@ -408,50 +405,6 @@ export default function MyAttendance() {
           </div>
         </div>
       </section>
-
-      <CardSection
-        title={`حضوري — ${monthLabel(currentMonthStr())}`}
-        testid="my-attendance-card"
-        className="mt-6"
-      >
-        {attendanceQuery.isLoading ? (
-          <LoadingBlock className="h-48" />
-        ) : monthRecords.length === 0 ? (
-          <EmptyState title="لا توجد سجلات حضور هذا الشهر" />
-        ) : (
-          <div className="space-y-2">
-            {monthRecords.map((rec) => (
-              <div
-                key={rec.id}
-                data-testid={`my-attendance-row-${rec.id}`}
-                className="flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50/60 px-4 py-2.5"
-              >
-                <span className="text-sm font-semibold tabular-nums text-slate-700">{fmtDate(rec.date)}</span>
-                <span
-                  className={
-                    rec.status === "present"
-                      ? "rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-700"
-                      : rec.status === "absent"
-                        ? "rounded-full bg-rose-100 px-2 py-1 text-[11px] font-semibold text-rose-700"
-                        : "rounded-full bg-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600"
-                  }
-                  data-testid={`attendance-status-${rec.id}`}
-                >
-                  {ATTENDANCE_STATUS_LABELS[rec.status]}
-                </span>
-                <span className="text-xs tabular-nums text-slate-500">
-                  {rec.status === "present" ? `حضور ${rec.check_in || "—"} • انصراف ${rec.check_out || "—"}` : "—"}
-                </span>
-                <span className="text-sm font-semibold tabular-nums text-teal-700">
-                  {rec.status === "present"
-                    ? durationLabel(rec.check_in, rec.check_out, rec.away_minutes)
-                    : "—"}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardSection>
 
       <CardSection
         title="مسير راتبي"

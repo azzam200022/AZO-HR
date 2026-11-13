@@ -1,13 +1,9 @@
 import { NavLink } from "react-router-dom";
-import { CalendarDays, Fingerprint, UserRound } from "lucide-react";
+import { CalendarDays, ClipboardList, Fingerprint, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Employee bottom navigation (RTL): leaves on the right, the raised fingerprint punch
-// button in the middle, the personal profile on the left.
-const ITEMS = [
-  { to: "/me/leaves", label: "الإجازات", icon: CalendarDays, testid: "bottom-nav-leaves" },
-  { to: "/me/profile", label: "ملفي", icon: UserRound, testid: "bottom-nav-profile" },
-];
+// Employee bottom navigation (RTL): leaves on the right, the raised punch button in the
+// middle, and the log/profile links together on the left.
 
 export default function BottomNav() {
   return (
@@ -18,8 +14,8 @@ export default function BottomNav() {
       <div className="mx-auto grid max-w-md grid-cols-3 items-end px-5 pt-2 pb-2.5">
         {/* right: leaves */}
         <NavLink
-          to={ITEMS[0].to}
-          data-testid={ITEMS[0].testid}
+          to="/me/leaves"
+          data-testid="bottom-nav-leaves"
           className={({ isActive }) =>
             cn(
               "flex flex-col items-center gap-1 rounded-xl py-1.5 text-[11px] font-semibold transition-colors",
@@ -30,7 +26,7 @@ export default function BottomNav() {
           {({ isActive }) => (
             <>
               <CalendarDays className={cn("h-5 w-5 transition-transform", isActive && "scale-110")} />
-              {ITEMS[0].label}
+              الإجازات
             </>
           )}
         </NavLink>
@@ -61,24 +57,43 @@ export default function BottomNav() {
           )}
         </NavLink>
 
-        {/* left: profile */}
-        <NavLink
-          to={ITEMS[1].to}
-          data-testid={ITEMS[1].testid}
-          className={({ isActive }) =>
-            cn(
-              "flex flex-col items-center gap-1 rounded-xl py-1.5 text-[11px] font-semibold transition-colors",
-              isActive ? "text-teal-700" : "text-slate-400 hover:text-slate-600",
-            )
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <UserRound className={cn("h-5 w-5 transition-transform", isActive && "scale-110")} />
-              {ITEMS[1].label}
-            </>
-          )}
-        </NavLink>
+        {/* left: personal log next to profile */}
+        <div className="grid grid-cols-2 items-end gap-1">
+          <NavLink
+            to="/me/log"
+            data-testid="bottom-nav-log"
+            className={({ isActive }) =>
+              cn(
+                "flex flex-col items-center gap-1 rounded-xl py-1.5 text-[11px] font-semibold transition-colors",
+                isActive ? "text-teal-700" : "text-slate-400 hover:text-slate-600",
+              )
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <ClipboardList className={cn("h-5 w-5 transition-transform", isActive && "scale-110")} />
+                سجلي
+              </>
+            )}
+          </NavLink>
+          <NavLink
+            to="/me/profile"
+            data-testid="bottom-nav-profile"
+            className={({ isActive }) =>
+              cn(
+                "flex flex-col items-center gap-1 rounded-xl py-1.5 text-[11px] font-semibold transition-colors",
+                isActive ? "text-teal-700" : "text-slate-400 hover:text-slate-600",
+              )
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <UserRound className={cn("h-5 w-5 transition-transform", isActive && "scale-110")} />
+                ملفي
+              </>
+            )}
+          </NavLink>
+        </div>
       </div>
     </nav>
   );

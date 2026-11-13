@@ -81,6 +81,7 @@ export default function EmployeeReportPanel({
   onMonthChange,
   adjustmentsPath,
   showSalary = false,
+  showAttendanceLog = true,
   testidPrefix = "report",
 }: {
   report: EmployeeReport | undefined;
@@ -89,6 +90,7 @@ export default function EmployeeReportPanel({
   onMonthChange: (month: string) => void;
   adjustmentsPath: string;
   showSalary?: boolean;
+  showAttendanceLog?: boolean;
   testidPrefix?: string;
 }) {
   const adjustmentsQuery = useQuery({
@@ -291,81 +293,84 @@ export default function EmployeeReportPanel({
             العمل أثناء الدوام.
           </p>
         )}
-        {/* Full daily log — every day of the month with its exact punch times, not just the
-            summary above. */}
-        <p className="mt-3 text-[11px] font-bold text-slate-700">
-          السجل اليومي الكامل ({formatNumber(attendance.records.length)} يوم)
-        </p>
-        {attendance.records.length === 0 ? (
-          <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
-            لا توجد سجلات حضور في هذا الشهر.
-          </p>
-        ) : (
-          <div
-            className="mt-2 overflow-x-auto rounded-xl border border-slate-100"
-            data-testid={`${testidPrefix}-attendance-list`}
-          >
-            <table className="w-full text-[11px]">
-              <thead className="bg-slate-50 text-slate-500">
-                <tr>
-                  <th className="px-2.5 py-1.5 text-start font-semibold">اليوم</th>
-                  <th className="px-2 py-1.5 text-start font-semibold">التاريخ</th>
-                  <th className="px-2 py-1.5 text-center font-semibold">الحالة</th>
-                  <th className="px-2 py-1.5 text-center font-semibold">الحضور</th>
-                  <th className="px-2 py-1.5 text-center font-semibold">الانصراف</th>
-                  <th className="px-2 py-1.5 text-center font-semibold">المدة</th>
-                  <th className="px-2 py-1.5 text-center font-semibold">التأخير</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...attendance.records]
-                  .sort((a, b) => a.date.localeCompare(b.date))
-                  .map((rec) => (
-                    <tr
-                      key={rec.id}
-                      className="border-t border-slate-100 even:bg-slate-50/50"
-                      data-testid={`${testidPrefix}-attendance-${rec.id}`}
-                    >
-                      <td className="px-2.5 py-1.5 font-medium text-slate-600">{weekdayName(rec.date)}</td>
-                      <td className="px-2 py-1.5 font-semibold tabular-nums text-slate-700">
-                        {fmtDate(rec.date)}
-                      </td>
-                      <td className="px-2 py-1.5 text-center">
-                        <span className={cn("rounded-full px-2 py-0.5 font-semibold", ATTENDANCE_TONE[rec.status])}>
-                          {ATTENDANCE_STATUS_LABELS[rec.status]}
-                        </span>
-                      </td>
-                      <td className="px-2 py-1.5 text-center font-bold tabular-nums text-emerald-700">
-                        {rec.status === "present" ? rec.check_in || "—" : "—"}
-                      </td>
-                      <td className="px-2 py-1.5 text-center font-bold tabular-nums text-slate-600">
-                        {rec.status === "present" ? rec.check_out || "—" : "—"}
-                      </td>
-                      <td className="px-2 py-1.5 text-center tabular-nums text-teal-700">
-                        {rec.status === "present"
-                          ? durationLabel(rec.check_in, rec.check_out, rec.away_minutes)
-                          : "—"}
-                      </td>
-                      <td
-                        className={cn(
-                          "px-2 py-1.5 text-center font-semibold tabular-nums",
-                          rec.status === "present" && rec.late_minutes + rec.away_minutes > 0
-                            ? "text-red-700"
-                            : "text-slate-400",
-                        )}
-                      >
-                        {rec.status === "present" ? lateLabel(rec.late_minutes + rec.away_minutes) : "—"}
-                        {rec.away_minutes > 0 && (
-                          <span className="block text-[10px] font-normal text-amber-700">
-                            منها {lateLabel(rec.away_minutes)} خارج الموقع
-                          </span>
-                        )}
-                      </td>
+        {showAttendanceLog && (
+          <>
+            {/* The employee portal has a dedicated "My Log" tab for daily records. */}
+            <p className="mt-3 text-[11px] font-bold text-slate-700">
+              السجل اليومي الكامل ({formatNumber(attendance.records.length)} يوم)
+            </p>
+            {attendance.records.length === 0 ? (
+              <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+                لا توجد سجلات حضور في هذا الشهر.
+              </p>
+            ) : (
+              <div
+                className="mt-2 overflow-x-auto rounded-xl border border-slate-100"
+                data-testid={`${testidPrefix}-attendance-list`}
+              >
+                <table className="w-full text-[11px]">
+                  <thead className="bg-slate-50 text-slate-500">
+                    <tr>
+                      <th className="px-2.5 py-1.5 text-start font-semibold">اليوم</th>
+                      <th className="px-2 py-1.5 text-start font-semibold">التاريخ</th>
+                      <th className="px-2 py-1.5 text-center font-semibold">الحالة</th>
+                      <th className="px-2 py-1.5 text-center font-semibold">الحضور</th>
+                      <th className="px-2 py-1.5 text-center font-semibold">الانصراف</th>
+                      <th className="px-2 py-1.5 text-center font-semibold">المدة</th>
+                      <th className="px-2 py-1.5 text-center font-semibold">التأخير</th>
                     </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {[...attendance.records]
+                      .sort((a, b) => a.date.localeCompare(b.date))
+                      .map((rec) => (
+                        <tr
+                          key={rec.id}
+                          className="border-t border-slate-100 even:bg-slate-50/50"
+                          data-testid={`${testidPrefix}-attendance-${rec.id}`}
+                        >
+                          <td className="px-2.5 py-1.5 font-medium text-slate-600">{weekdayName(rec.date)}</td>
+                          <td className="px-2 py-1.5 font-semibold tabular-nums text-slate-700">
+                            {fmtDate(rec.date)}
+                          </td>
+                          <td className="px-2 py-1.5 text-center">
+                            <span className={cn("rounded-full px-2 py-0.5 font-semibold", ATTENDANCE_TONE[rec.status])}>
+                              {ATTENDANCE_STATUS_LABELS[rec.status]}
+                            </span>
+                          </td>
+                          <td className="px-2 py-1.5 text-center font-bold tabular-nums text-emerald-700">
+                            {rec.status === "present" ? rec.check_in || "—" : "—"}
+                          </td>
+                          <td className="px-2 py-1.5 text-center font-bold tabular-nums text-slate-600">
+                            {rec.status === "present" ? rec.check_out || "—" : "—"}
+                          </td>
+                          <td className="px-2 py-1.5 text-center tabular-nums text-teal-700">
+                            {rec.status === "present"
+                              ? durationLabel(rec.check_in, rec.check_out, rec.away_minutes)
+                              : "—"}
+                          </td>
+                          <td
+                            className={cn(
+                              "px-2 py-1.5 text-center font-semibold tabular-nums",
+                              rec.status === "present" && rec.late_minutes + rec.away_minutes > 0
+                                ? "text-red-700"
+                                : "text-slate-400",
+                            )}
+                          >
+                            {rec.status === "present" ? lateLabel(rec.late_minutes + rec.away_minutes) : "—"}
+                            {rec.away_minutes > 0 && (
+                              <span className="block text-[10px] font-normal text-amber-700">
+                                منها {lateLabel(rec.away_minutes)} خارج الموقع
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </div>
 

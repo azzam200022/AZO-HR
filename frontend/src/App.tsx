@@ -15,6 +15,7 @@ import Discipline from "@/pages/Discipline";
 import Messages from "@/pages/Messages";
 import MyMessages from "@/pages/portal/MyMessages";
 import MyAttendance from "@/pages/portal/MyAttendance";
+import MyLog from "@/pages/portal/MyLog";
 import MyLeaves from "@/pages/portal/MyLeaves";
 import MyProfile from "@/pages/portal/MyProfile";
 import Login from "@/pages/Login";
@@ -135,6 +136,14 @@ function Shell() {
             element={
               <EmployeeOnly>
                 <MyAttendance />
+              </EmployeeOnly>
+            }
+          />
+          <Route
+            path="/me/log"
+            element={
+              <EmployeeOnly>
+                <MyLog />
               </EmployeeOnly>
             }
           />

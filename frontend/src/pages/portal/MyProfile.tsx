@@ -54,6 +54,7 @@ export default function MyProfile() {
           month={month}
           onMonthChange={setMonth}
           adjustmentsPath="/me/adjustments"
+          showAttendanceLog={false}
           testidPrefix="my-report"
         />
       </div>
