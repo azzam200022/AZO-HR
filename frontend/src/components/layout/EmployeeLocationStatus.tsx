@@ -65,6 +65,7 @@ export default function EmployeeLocationStatus({ open }: EmployeeLocationStatusP
           tracking: getTrackingSummary(employee, shiftState, records, today, now),
         };
       })
+      .filter((row) => row.shiftState === "working")
       .sort((left, right) => {
         const shiftOrder = SHIFT_PRIORITY[left.shiftState] - SHIFT_PRIORITY[right.shiftState];
         if (shiftOrder !== 0) return shiftOrder;
@@ -104,7 +105,7 @@ export default function EmployeeLocationStatus({ open }: EmployeeLocationStatusP
           تعذر تحميل حالة التتبع. أعد المحاولة من زر التحديث.
         </p>
       ) : trackingRows.length === 0 ? (
-        <p className="px-1 py-2 text-xs text-slate-500">لا يوجد موظفون لعرضهم.</p>
+        <p className="px-1 py-2 text-xs text-slate-500">لا يوجد موظفون ضمن الدوام الآن.</p>
       ) : (
         <ul className="space-y-1">
           {trackingRows.map(({ employee, shiftLabel, tracking }) => (
