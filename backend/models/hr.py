@@ -474,6 +474,7 @@ class MonthlyAttendanceReport(BaseModel):
     cycle_start: str = ""  # hire-date anchored cycle the report covers
     cycle_end: str = ""
     days_present: int
+    days_absent: int = 0
     days_complete: int  # both punches recorded
     total_minutes: int
     avg_check_in: str = ""

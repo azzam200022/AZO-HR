@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiGet, apiPost } from "@/lib/api";
@@ -7,7 +6,7 @@ import {
   stopBackgroundLocationTracking,
   supportsBackgroundLocation,
 } from "@/lib/background-location";
-import { currentMonthStr, errorText } from "@/lib/format";
+import { errorText } from "@/lib/format";
 import type { EmployeeReport, TrackingConsent } from "@/lib/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FadeIn, PageHeader } from "@/components/shared";
@@ -15,11 +14,10 @@ import EmployeeReportPanel from "@/components/EmployeeReportPanel";
 
 /** Left tab: the employee's own profile + full monthly reports. */
 export default function MyProfile() {
-  const [month, setMonth] = useState(currentMonthStr());
   const queryClient = useQueryClient();
   const reportQuery = useQuery({
-    queryKey: ["me", "report", month],
-    queryFn: () => apiGet<EmployeeReport>(`/me/report?month=${month}`),
+    queryKey: ["me", "report", "cycle", "current"],
+    queryFn: () => apiGet<EmployeeReport>("/me/report?cycle=current"),
   });
   const trackingConsentQuery = useQuery({
     queryKey: ["me", "tracking-consent"],
@@ -51,10 +49,10 @@ export default function MyProfile() {
         <EmployeeReportPanel
           report={reportQuery.data}
           isLoading={reportQuery.isLoading}
-          month={month}
-          onMonthChange={setMonth}
           adjustmentsPath="/me/adjustments"
           showAttendanceLog={false}
+          showMonthPicker={false}
+          reportLabel="تقرير حضور الدورة الحالية"
           testidPrefix="my-report"
         />
       </div>

@@ -82,15 +82,19 @@ export default function EmployeeReportPanel({
   adjustmentsPath,
   showSalary = false,
   showAttendanceLog = true,
+  showMonthPicker = true,
+  reportLabel,
   testidPrefix = "report",
 }: {
   report: EmployeeReport | undefined;
   isLoading: boolean;
-  month: string;
-  onMonthChange: (month: string) => void;
+  month?: string;
+  onMonthChange?: (month: string) => void;
   adjustmentsPath: string;
   showSalary?: boolean;
   showAttendanceLog?: boolean;
+  showMonthPicker?: boolean;
+  reportLabel?: string;
   testidPrefix?: string;
 }) {
   const adjustmentsQuery = useQuery({
@@ -201,7 +205,7 @@ export default function EmployeeReportPanel({
         {attendance.cycle_start && (
           <p className="flex items-center gap-1.5" data-testid="report-cycle-range">
             <CalendarRange className="h-3.5 w-3.5 text-slate-400" />
-            دورة الشهر:{" "}
+            دورة التقرير:{" "}
             <span dir="ltr" className="tabular-nums">
               {fmtDate(attendance.cycle_start)} ← {fmtDate(attendance.cycle_end)}
             </span>
@@ -240,17 +244,21 @@ export default function EmployeeReportPanel({
         </p>
       </div>
 
-      {/* Monthly attendance report */}
+        {/* Attendance-cycle report */}
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs font-bold text-slate-800">تقرير حضور {monthLabel(month)}</p>
-          <Input
-            type="month"
-            value={month}
-            onChange={(e) => e.target.value && onMonthChange(e.target.value)}
-            className="h-8 w-36 text-xs"
-            data-testid={`${testidPrefix}-month-input`}
-          />
+            <p className="text-xs font-bold text-slate-800">
+              {reportLabel ?? `تقرير حضور ${monthLabel(month ?? attendance.month)}`}
+            </p>
+            {showMonthPicker && month && onMonthChange && (
+              <Input
+                type="month"
+                value={month}
+                onChange={(e) => e.target.value && onMonthChange(e.target.value)}
+                className="h-8 w-36 text-xs"
+                data-testid={`${testidPrefix}-month-input`}
+              />
+            )}
         </div>
         <div className="mt-2.5 grid grid-cols-2 gap-2">
           <Stat
@@ -258,6 +266,11 @@ export default function EmployeeReportPanel({
             value={formatNumber(attendance.days_present)}
             icon={<CalendarCheck className="h-3 w-3" />}
           />
+            <Stat
+              label="أيام الغياب"
+              value={formatNumber(attendance.days_absent)}
+              icon={<CalendarCheck className="h-3 w-3" />}
+            />
           <Stat
             label="أيام مكتملة"
             value={formatNumber(attendance.days_complete)}
