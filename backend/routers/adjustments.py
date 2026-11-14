@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from lib.adjustments import to_model
+from lib.adjustments import cycle_adjustment_query, to_model
 from lib.auth import require_manager
 from lib.cycle import pay_cycle
 from lib.dates import today_iso
@@ -14,12 +14,22 @@ router = APIRouter(
 
 
 @router.get("", response_model=list[Adjustment])
-async def list_adjustments(employee_id: str | None = None, month: str | None = None):
-    query: dict = {}
-    if employee_id:
-        query["employee_id"] = employee_id
-    if month:
-        query["date"] = {"$regex": f"^{month}"}
+async def list_adjustments(
+    employee_id: str | None = None,
+    month: str | None = None,
+    cycle_start: str | None = None,
+    cycle_end: str | None = None,
+):
+    if cycle_start and cycle_end:
+        query = cycle_adjustment_query(employee_id, cycle_start, cycle_end)
+    else:
+        query: dict = {}
+        if employee_id:
+            query["employee_id"] = employee_id
+        if cycle_start:
+            query["cycle_start"] = cycle_start
+        elif month:
+            query["date"] = {"$regex": f"^{month}"}
     docs = await db.adjustments.find(query).sort("date", -1).to_list(1000)
     return [to_model(d) for d in docs]
 

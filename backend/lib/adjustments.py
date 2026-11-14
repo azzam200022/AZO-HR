@@ -1,20 +1,49 @@
 """Manual bonuses and deductions, each one requiring a stated reason."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from lib.cycle import pay_cycle
 from lib.dates import aware, today_iso
-from lib.db import db
-from models.hr import Adjustment
+
+if TYPE_CHECKING:
+    from models.hr import Adjustment
+
+
+def cycle_adjustment_query(
+    employee_id: str | None,
+    start: str,
+    end: str,
+) -> dict:
+    """Match saved cycle assignments and include legacy, unassigned adjustments by date."""
+    query: dict = {
+        "$or": [
+            {"cycle_start": start},
+            {
+                "cycle_start": {"$in": ["", None]},
+                "date": {"$gte": start, "$lte": end},
+            },
+        ]
+    }
+    if employee_id:
+        query["employee_id"] = employee_id
+    return query
 
 
 def to_model(doc: dict) -> Adjustment:
+    from models.hr import Adjustment
+
     doc["created_at"] = aware(doc.get("created_at"))
     return Adjustment(**doc)
 
 
 async def cycle_adjustments(employee: dict, start: str, end: str) -> list[dict]:
-    """Adjustments dated inside the cycle, settled ones excluded from re-use."""
+    """Fetch adjustments assigned to a cycle, falling back to dates for legacy records."""
+    from lib.db import db
+
     return await db.adjustments.find(
-        {"employee_id": employee["id"], "date": {"$gte": start, "$lte": end}}
+        cycle_adjustment_query(employee["id"], start, end)
     ).to_list(500)
 
 

@@ -182,6 +182,20 @@ export default function MyLog() {
             الدورة السابقة
           </TabsTrigger>
         </TabsList>
+        {previousQuery.isError ? (
+          <p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">
+            تعذّر تحميل سجل الدورة السابقة.
+          </p>
+        ) : (
+          !previousQuery.isLoading &&
+          currentAttendance &&
+          previousAttendance &&
+          !hasPreviousCycle && (
+            <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+              لا توجد دورة سابقة ضمن فترة عملك بعد.
+            </p>
+          )
+        )}
         <TabsContent value="current" className="mt-0">
           <CycleLog
             report={currentQuery.data}
@@ -200,14 +214,8 @@ export default function MyLog() {
               label="الدورة السابقة"
               testid="my-log-previous"
             />
-          ) : previousQuery.isError ? (
-            <p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">
-              تعذّر تحميل سجل الدورة السابقة.
-            </p>
           ) : (
-            <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
-              لا توجد دورة سابقة ضمن فترة عملك بعد.
-            </p>
+            null
           )}
         </TabsContent>
       </Tabs>

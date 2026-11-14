@@ -83,6 +83,7 @@ export default function EmployeeReportPanel({
   showSalary = false,
   showAttendanceLog = true,
   showMonthPicker = true,
+  showLeaveBalance = true,
   reportLabel,
   testidPrefix = "report",
 }: {
@@ -94,6 +95,7 @@ export default function EmployeeReportPanel({
   showSalary?: boolean;
   showAttendanceLog?: boolean;
   showMonthPicker?: boolean;
+  showLeaveBalance?: boolean;
   reportLabel?: string;
   testidPrefix?: string;
 }) {
@@ -108,6 +110,13 @@ export default function EmployeeReportPanel({
 
   const { employee, attendance, leaves, balance, location_name } = report;
   const takenLeaves = leaves.filter((l) => l.status !== "rejected");
+  const adjustmentItems = adjustmentsQuery.data ?? [];
+  const bonusTotal = adjustmentItems
+    .filter((item) => item.kind === "bonus")
+    .reduce((total, item) => total + item.amount, 0);
+  const deductionTotal = adjustmentItems
+    .filter((item) => item.kind === "deduction")
+    .reduce((total, item) => total + item.amount, 0);
 
   return (
     <div className="space-y-5" data-testid={`${testidPrefix}-panel`}>
@@ -142,49 +151,82 @@ export default function EmployeeReportPanel({
         </div>
         {adjustmentsQuery.isLoading ? (
           <LoadingBlock className="mt-2 h-16" />
-        ) : (adjustmentsQuery.data ?? []).length === 0 ? (
-          <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
-            لا توجد حوافز أو خصومات مسجّلة.
+        ) : adjustmentsQuery.isError ? (
+          <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-[11px] text-rose-700">
+            تعذّر تحميل حوافز وخصومات هذه الدورة.
           </p>
         ) : (
-          <div className="mt-2 space-y-2">
-            {(adjustmentsQuery.data ?? []).map((item) => {
-              const isBonus = item.kind === "bonus";
-              return (
-                <div
-                  key={item.id}
-                  className="rounded-lg border border-slate-100 px-3 py-2.5"
-                  data-testid={testidPrefix + "-adjustment-" + item.id}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-semibold",
-                        isBonus ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700",
-                      )}
+          <>
+            <div
+              className="mt-2 grid grid-cols-2 gap-2"
+              data-testid={`${testidPrefix}-adjustment-totals`}
+            >
+              <Stat
+                label="إجمالي الحوافز"
+                value={formatIQD(bonusTotal)}
+                icon={<Gift className="h-3 w-3" />}
+              />
+              <Stat
+                label="إجمالي الخصومات"
+                value={formatIQD(deductionTotal)}
+                icon={<CircleDollarSign className="h-3 w-3" />}
+              />
+            </div>
+            {adjustmentItems.length === 0 ? (
+              <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+                لا توجد حوافز أو خصومات في هذه الدورة.
+              </p>
+            ) : (
+              <div className="mt-2 space-y-2">
+                {adjustmentItems.map((item) => {
+                  const isBonus = item.kind === "bonus";
+                  return (
+                    <div
+                      key={item.id}
+                      className="rounded-lg border border-slate-100 px-3 py-2.5"
+                      data-testid={testidPrefix + "-adjustment-" + item.id}
                     >
-                      {isBonus ? <Gift className="h-3.5 w-3.5" /> : <CircleDollarSign className="h-3.5 w-3.5" />}
-                      {isBonus ? "حافز" : "خصم"}
-                    </span>
-                    <span
-                      dir="ltr"
-                      className={cn(
-                        "text-xs font-bold tabular-nums",
-                        isBonus ? "text-emerald-700" : "text-rose-700",
-                      )}
-                    >
-                      {isBonus ? "+" : "−"} {formatIQD(item.amount)}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-[11px] leading-relaxed text-slate-700">السبب: {item.reason}</p>
-                  <div className="mt-1 flex flex-wrap items-center justify-between gap-1 text-[10px] text-slate-500">
-                    <span>التاريخ: {fmtDate(item.date)}</span>
-                    <span>{item.settled ? "تمت تسويته مع الراتب" : "لم تتم تسويته بعد"}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-semibold",
+                            isBonus
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-rose-50 text-rose-700",
+                          )}
+                        >
+                          {isBonus ? (
+                            <Gift className="h-3.5 w-3.5" />
+                          ) : (
+                            <CircleDollarSign className="h-3.5 w-3.5" />
+                          )}
+                          {isBonus ? "حافز" : "خصم"}
+                        </span>
+                        <span
+                          dir="ltr"
+                          className={cn(
+                            "text-xs font-bold tabular-nums",
+                            isBonus ? "text-emerald-700" : "text-rose-700",
+                          )}
+                        >
+                          {isBonus ? "+" : "−"} {formatIQD(item.amount)}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-[11px] leading-relaxed text-slate-700">
+                        السبب: {item.reason}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center justify-between gap-1 text-[10px] text-slate-500">
+                        <span>التاريخ: {fmtDate(item.date)}</span>
+                        <span>
+                          {item.settled ? "تمت تسويته مع الراتب" : "لم تتم تسويته بعد"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </section>
 
@@ -220,45 +262,47 @@ export default function EmployeeReportPanel({
       </div>
 
       {/* Leave balance for the hire-date cycle */}
-      <div
-        className="rounded-xl border border-teal-100 bg-teal-50/70 p-3.5"
-        data-testid={`${testidPrefix}-balance`}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-semibold text-teal-900">رصيد إجازات الدورة الحالية</p>
-          <span className="text-sm font-extrabold tabular-nums text-teal-800">
-            {formatNumber(balance.remaining)} / {formatNumber(balance.quota)}
-          </span>
+      {showLeaveBalance && (
+        <div
+          className="rounded-xl border border-teal-100 bg-teal-50/70 p-3.5"
+          data-testid={`${testidPrefix}-balance`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-teal-900">رصيد إجازات الدورة الحالية</p>
+            <span className="text-sm font-extrabold tabular-nums text-teal-800">
+              {formatNumber(balance.remaining)} / {formatNumber(balance.quota)}
+            </span>
+          </div>
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-teal-200/60">
+            <div
+              className="h-full rounded-full bg-teal-600 transition-all duration-300"
+              style={{
+                width: `${balance.quota > 0 ? Math.min(100, (balance.used / balance.quota) * 100) : 100}%`,
+              }}
+            />
+          </div>
+          <p className="mt-2 text-[11px] tabular-nums text-teal-800/80">
+            الدورة: {fmtDate(balance.cycle_start)} ← {fmtDate(balance.cycle_end)} • المستخدم{" "}
+            {formatNumber(balance.used)}
+          </p>
         </div>
-        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-teal-200/60">
-          <div
-            className="h-full rounded-full bg-teal-600 transition-all duration-300"
-            style={{
-              width: `${balance.quota > 0 ? Math.min(100, (balance.used / balance.quota) * 100) : 100}%`,
-            }}
-          />
-        </div>
-        <p className="mt-2 text-[11px] tabular-nums text-teal-800/80">
-          الدورة: {fmtDate(balance.cycle_start)} ← {fmtDate(balance.cycle_end)} • المستخدم{" "}
-          {formatNumber(balance.used)}
-        </p>
-      </div>
+      )}
 
-        {/* Attendance-cycle report */}
+      {/* Attendance-cycle report */}
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-bold text-slate-800">
-              {reportLabel ?? `تقرير حضور ${monthLabel(month ?? attendance.month)}`}
-            </p>
-            {showMonthPicker && month && onMonthChange && (
-              <Input
-                type="month"
-                value={month}
-                onChange={(e) => e.target.value && onMonthChange(e.target.value)}
-                className="h-8 w-36 text-xs"
-                data-testid={`${testidPrefix}-month-input`}
-              />
-            )}
+          <p className="text-xs font-bold text-slate-800">
+            {reportLabel ?? `تقرير حضور ${monthLabel(month ?? attendance.month)}`}
+          </p>
+          {showMonthPicker && month && onMonthChange && (
+            <Input
+              type="month"
+              value={month}
+              onChange={(e) => e.target.value && onMonthChange(e.target.value)}
+              className="h-8 w-36 text-xs"
+              data-testid={`${testidPrefix}-month-input`}
+            />
+          )}
         </div>
         <div className="mt-2.5 grid grid-cols-2 gap-2">
           <Stat
@@ -266,11 +310,11 @@ export default function EmployeeReportPanel({
             value={formatNumber(attendance.days_present)}
             icon={<CalendarCheck className="h-3 w-3" />}
           />
-            <Stat
-              label="أيام الغياب"
-              value={formatNumber(attendance.days_absent)}
-              icon={<CalendarCheck className="h-3 w-3" />}
-            />
+          <Stat
+            label="أيام الغياب"
+            value={formatNumber(attendance.days_absent)}
+            icon={<CalendarCheck className="h-3 w-3" />}
+          />
           <Stat
             label="أيام مكتملة"
             value={formatNumber(attendance.days_complete)}
@@ -314,7 +358,7 @@ export default function EmployeeReportPanel({
             </p>
             {attendance.records.length === 0 ? (
               <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
-                لا توجد سجلات حضور في هذا الشهر.
+                لا توجد سجلات حضور في هذه الدورة.
               </p>
             ) : (
               <div
