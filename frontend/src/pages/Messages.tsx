@@ -278,7 +278,7 @@ export default function Messages() {
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder={broadcastMode ? "رسالة لكل الموظفين..." : "اكتب رسالتك..."}
                 rows={2}
-                className="min-h-[4.5rem] flex-1 resize-none rounded-xl bg-slate-50/60 text-sm",
+                className="min-h-[4.5rem] flex-1 resize-none rounded-xl bg-slate-50/60 text-sm"
                 data-testid="message-input"
               />
               <Button
