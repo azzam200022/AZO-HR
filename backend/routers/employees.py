@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
+from lib.cycle import CyclePeriod
+
 from lib.auth import Principal, hash_password, new_access_code, require_manager
 from lib.dates import aware
 from lib.db import db
@@ -51,9 +53,15 @@ async def create_employee(payload: EmployeeCreate):
 
 
 @router.get("/{employee_id}/report", response_model=EmployeeReport)
-async def employee_report(employee_id: str, month: str | None = None):
+async def employee_report(
+    employee_id: str,
+    month: str | None = None,
+    cycle: CyclePeriod | None = None,
+):
     """Same report the employee sees in their own profile."""
-    return await build_report(await _get_employee_or_404(employee_id), month)
+    if month is not None and cycle is not None:
+        raise HTTPException(status_code=400, detail="اختر دورة أو شهرًا واحدًا للتقرير")
+    return await build_report(await _get_employee_or_404(employee_id), month, cycle)
 
 
 @router.post("/{employee_id}/regenerate-code", response_model=AccessCodeResult)
