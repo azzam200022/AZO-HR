@@ -716,7 +716,11 @@ export default function Employees() {
             isLoading={reportQuery.isLoading}
             month={reportMonth}
             onMonthChange={setReportMonth}
-            adjustmentsPath={`/adjustments?employee_id=${reportFor?.id ?? ""}`}
+            adjustmentsPath={
+              reportQuery.data?.attendance.cycle_start
+                ? `/adjustments?employee_id=${reportFor?.id ?? ""}&cycle_start=${reportQuery.data.attendance.cycle_start}&cycle_end=${reportQuery.data.attendance.cycle_end}`
+                : `/adjustments?employee_id=${reportFor?.id ?? ""}`
+            }
             showSalary
             testidPrefix="manager-report"
           />

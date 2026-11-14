@@ -1,4 +1,5 @@
 from lib.cycle import report_cycle_bounds
+from lib.adjustments import cycle_adjustment_query
 
 
 def test_current_and_previous_pay_cycles_use_employee_cycle_anchor():
@@ -34,3 +35,14 @@ def test_previous_pay_cycle_does_not_go_before_hire_date():
     previous = report_cycle_bounds(employee, "previous", "2026-11-14")
 
     assert previous == current
+
+
+def test_cycle_adjustment_query_uses_saved_cycle_and_legacy_date_fallback():
+    query = cycle_adjustment_query("emp-1", "2026-10-20", "2026-11-19")
+
+    assert query["employee_id"] == "emp-1"
+    assert query["$or"][0] == {"cycle_start": "2026-10-20"}
+    assert query["$or"][1] == {
+        "cycle_start": {"$in": ["", None]},
+        "date": {"$gte": "2026-10-20", "$lte": "2026-11-19"},
+    }

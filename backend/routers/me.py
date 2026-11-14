@@ -15,7 +15,7 @@ from lib.attendance_calendar import daily_attendance_records
 from lib.cycle import report_cycle_bounds
 from lib.dates import aware, current_month, now_time, today_iso
 from lib.db import db
-from lib.adjustments import to_model as adjustment_model
+from lib.adjustments import cycle_adjustment_query, to_model as adjustment_model
 from lib.messaging import GROUP_THREAD, mark_thread_read, send_message, to_model as message_model
 from lib.notify import notify_manager_event
 from lib.punch import punch_in, punch_out, record_presence, require_tracking_consent
@@ -401,10 +401,18 @@ async def read_my_messages(payload: MessageSend, principal: Principal = Depends(
 
 
 @router.get("/adjustments", response_model=list[Adjustment])
-async def my_adjustments(principal: Principal = Depends(require_employee)):
+async def my_adjustments(
+    cycle: Literal["current", "previous"] | None = None,
+    principal: Principal = Depends(require_employee),
+):
     """Own bonuses and deductions, each with the reason the manager stated."""
+    query: dict = {"employee_id": principal.employee_id}
+    if cycle is not None:
+        employee = await _my_employee(principal)
+        cycle_start, cycle_end = report_cycle_bounds(employee, cycle)
+        query = cycle_adjustment_query(principal.employee_id, cycle_start, cycle_end)
     docs = (
-        await db.adjustments.find({"employee_id": principal.employee_id})
+        await db.adjustments.find(query)
         .sort("date", -1)
         .to_list(300)
     )
