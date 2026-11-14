@@ -59,8 +59,8 @@ export default function MyAttendance() {
     queryFn: () => apiGet<AttendanceRecord[]>("/me/attendance"),
   });
   const profileQuery = useQuery({
-    queryKey: ["me", "report", currentMonthStr()],
-    queryFn: () => apiGet<EmployeeReport>(`/me/report?month=${currentMonthStr()}`),
+    queryKey: ["me", "report", "cycle", "current"],
+    queryFn: () => apiGet<EmployeeReport>("/me/report?cycle=current"),
   });
   const [payslipMonth, setPayslipMonth] = useState(currentMonthStr());
   const payrollQuery = useQuery({

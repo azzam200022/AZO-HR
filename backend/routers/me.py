@@ -6,6 +6,7 @@ merely checked.
 """
 
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -262,8 +263,14 @@ async def my_leave_balance(principal: Principal = Depends(require_employee)):
 
 
 @router.get("/report", response_model=EmployeeReport)
-async def my_report(month: str | None = None, principal: Principal = Depends(require_employee)):
-    return await build_report(await _my_employee(principal), month)
+async def my_report(
+    month: str | None = None,
+    cycle: Literal["current", "previous"] | None = None,
+    principal: Principal = Depends(require_employee),
+):
+    if month is not None and cycle is not None:
+        raise HTTPException(status_code=400, detail="اختر دورة أو شهرًا واحدًا للتقرير")
+    return await build_report(await _my_employee(principal), month, cycle)
 
 
 @router.post("/leaves", response_model=LeaveRequest, status_code=201)

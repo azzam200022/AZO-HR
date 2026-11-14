@@ -41,6 +41,7 @@ export interface MonthlyAttendanceReport {
   cycle_start: string;
   cycle_end: string;
   days_present: number;
+  days_absent: number;
   days_complete: number;
   total_minutes: number;
   avg_check_in: string;

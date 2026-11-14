@@ -2,7 +2,7 @@
 (/employees/{id}/report) — one implementation, two audiences."""
 
 from lib.attendance_calendar import daily_attendance_records
-from lib.cycle import pay_cycle
+from lib.cycle import CyclePeriod, pay_cycle, report_cycle_bounds
 from lib.dates import aware, current_month, now_time, today_iso
 from lib.db import db
 from lib.leave_cycle import cycle_bounds, overlaps_cycle
@@ -39,11 +39,20 @@ async def leave_balance(employee: dict) -> LeaveBalance:
     )
 
 
-async def build_report(employee: dict, month: str | None = None) -> EmployeeReport:
-    """Report for the employee's OWN cycle inside `month` (hire-date anchored, not calendar)."""
-    month = month or current_month()
-    reference = today_iso() if today_iso().startswith(month) else f"{month}-15"
-    cycle_start, cycle_end = pay_cycle(employee, reference)
+async def build_report(
+    employee: dict,
+    month: str | None = None,
+    cycle: CyclePeriod | None = None,
+) -> EmployeeReport:
+    """Report for one employee pay cycle, or the cycle selected by `month`."""
+    today = today_iso()
+    if cycle:
+        cycle_start, cycle_end = report_cycle_bounds(employee, cycle, today)
+        month = cycle_start[:7]
+    else:
+        month = month or current_month()
+        reference = today if today.startswith(month) else f"{month}-15"
+        cycle_start, cycle_end = pay_cycle(employee, reference)
 
     shift_start, shift_end, grace = employee_shift(employee)
 
@@ -55,7 +64,6 @@ async def build_report(employee: dict, month: str | None = None) -> EmployeeRepo
     for d in leave_docs:
         d["created_at"] = aware(d.get("created_at"))
 
-    today = today_iso()
     records = daily_attendance_records(
         employee,
         cycle_start,
@@ -97,6 +105,7 @@ async def build_report(employee: dict, month: str | None = None) -> EmployeeRepo
             cycle_start=cycle_start,
             cycle_end=cycle_end,
             days_present=len(present_records),
+            days_absent=sum(1 for record in records if record.status == "absent"),
             days_complete=len(complete),
             total_minutes=total_minutes,
             avg_check_in=avg_check_in,
