@@ -11,12 +11,10 @@ import {
   supportsBackgroundLocation,
 } from "@/lib/background-location";
 import {
-  currentMonthStr,
   errorText,
   formatIQD,
   formatNumber,
   lateLabel,
-  monthLabel,
   shiftLabel,
   todayStr,
 } from "@/lib/format";
@@ -34,7 +32,6 @@ import {
   type WorkLocation,
 } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { CardSection, EmptyState, FadeIn, LoadingBlock, StatusBadge } from "@/components/shared";
 
 /** Center tab: the punch screen. */
@@ -62,10 +59,10 @@ export default function MyAttendance() {
     queryKey: ["me", "report", "cycle", "current"],
     queryFn: () => apiGet<EmployeeReport>("/me/report?cycle=current"),
   });
-  const [payslipMonth, setPayslipMonth] = useState(currentMonthStr());
+  const [payslipCycle, setPayslipCycle] = useState<"current" | "previous">("current");
   const payrollQuery = useQuery({
-    queryKey: ["me", "payroll", payslipMonth],
-    queryFn: () => apiGet<PayrollItem[]>(`/me/payroll?month=${payslipMonth}`),
+    queryKey: ["me", "payroll", "cycle", payslipCycle],
+    queryFn: () => apiGet<PayrollItem[]>(`/me/payroll?cycle=${payslipCycle}`),
   });
 
   const me = profileQuery.data?.employee;
@@ -411,20 +408,40 @@ export default function MyAttendance() {
         testid="my-payslip-card"
         className="mt-6"
         action={
-          <Input
-            type="month"
-            value={payslipMonth}
-            onChange={(e) => e.target.value && setPayslipMonth(e.target.value)}
-            className="h-8 w-36 text-xs"
-            data-testid="payslip-month-input"
-          />
+          <div
+            className="flex items-center gap-1"
+            role="group"
+            aria-label="اختيار دورة المسير"
+            data-testid="payslip-cycle-switcher"
+          >
+            <Button
+              type="button"
+              size="sm"
+              variant={payslipCycle === "current" ? "default" : "outline"}
+              aria-pressed={payslipCycle === "current"}
+              onClick={() => setPayslipCycle("current")}
+              data-testid="payslip-cycle-current"
+            >
+              الدورة الحالية
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={payslipCycle === "previous" ? "default" : "outline"}
+              aria-pressed={payslipCycle === "previous"}
+              onClick={() => setPayslipCycle("previous")}
+              data-testid="payslip-cycle-previous"
+            >
+              الدورة السابقة
+            </Button>
+          </div>
         }
       >
         {payrollQuery.isLoading ? (
           <LoadingBlock className="h-24" />
         ) : !payslip ? (
           <EmptyState
-            title={`لا يوجد مسير لشهر ${monthLabel(payslipMonth)}`}
+            title={`لا يوجد مسير للدورة ${payslipCycle === "current" ? "الحالية" : "السابقة"}`}
             description="سيظهر المسير هنا بعد اعتماده من الإدارة."
           />
         ) : (

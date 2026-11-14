@@ -6,7 +6,6 @@ import { arSA } from "date-fns/locale";
 import {
   LogOut,
   Menu,
-  MessageSquare,
   Moon,
   RefreshCw,
   Sun,
@@ -102,21 +101,6 @@ export default function Navbar() {
           <span className="hidden text-xs font-medium text-slate-500 xl:block" data-testid="header-date">
             {format(now, "EEEE، d MMMM yyyy", { locale: arSA })}
           </span>
-          {role === "employee" && (
-            <NavLink
-              to="/me/messages"
-              title="الرسائل"
-              className={({ isActive }) =>
-                cn(
-                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors",
-                  isActive ? "bg-teal-50 text-teal-700" : "text-slate-600 hover:bg-slate-100",
-                )
-              }
-              data-testid="employee-messages-link"
-            >
-              <MessageSquare className="h-4.5 w-4.5" />
-            </NavLink>
-          )}
           <Button
             type="button"
             size="icon-sm"

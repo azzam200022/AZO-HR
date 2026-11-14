@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from lib.auth import Principal, require_employee
 from lib.attendance_calendar import daily_attendance_records
+from lib.cycle import report_cycle_bounds
 from lib.dates import aware, current_month, now_time, today_iso
 from lib.db import db
 from lib.adjustments import to_model as adjustment_model
@@ -411,10 +412,23 @@ async def my_adjustments(principal: Principal = Depends(require_employee)):
 
 
 @router.get("/payroll", response_model=list[PayrollItem])
-async def my_payroll(month: str | None = None, principal: Principal = Depends(require_employee)):
-    docs = await db.payroll.find(
-        {"employee_id": principal.employee_id, "month": month or current_month()}
-    ).to_list(100)
+async def my_payroll(
+    month: str | None = None,
+    cycle: Literal["current", "previous"] | None = None,
+    principal: Principal = Depends(require_employee),
+):
+    if month is not None and cycle is not None:
+        raise HTTPException(status_code=400, detail="اختر دورة أو شهرًا واحدًا للمسير")
+
+    query = {"employee_id": principal.employee_id}
+    if cycle is not None:
+        employee = await _my_employee(principal)
+        cycle_start, _ = report_cycle_bounds(employee, cycle)
+        query["cycle_start"] = cycle_start
+    else:
+        query["month"] = month or current_month()
+
+    docs = await db.payroll.find(query).to_list(100)
     for d in docs:
         d["created_at"] = aware(d.get("created_at"))
     return [PayrollItem(**d) for d in docs]
