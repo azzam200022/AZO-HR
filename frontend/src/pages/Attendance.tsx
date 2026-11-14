@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { apiDelete, apiGet, apiPost } from "@/lib/api";
 import { durationLabel, errorText, fmtDate, formatNumber, lateLabel, todayStr } from "@/lib/format";
-import { ATTENDANCE_STATUS_LABELS, type AttendanceRecord, type Employee } from "@/lib/types";
+import { ATTENDANCE_STATUS_LABELS, type AttendanceRecord, type Employee, type EmployeeReport } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -43,6 +43,8 @@ export default function Attendance() {
   const queryClient = useQueryClient();
   const [dateFilter, setDateFilter] = useState(todayStr());
   const [employeeFilter, setEmployeeFilter] = useState("all");
+  const [viewMode, setViewMode] = useState<"day" | "cycle">("day");
+  const [cycleFilter, setCycleFilter] = useState<"current" | "previous">("current");
   const [addOpen, setAddOpen] = useState(false);
   const [deleting, setDeleting] = useState<AttendanceRecord | null>(null);
   const [form, setForm] = useState({
@@ -57,9 +59,33 @@ export default function Attendance() {
     queryFn: () => apiGet<Employee[]>("/employees"),
   });
   const employees = employeesQuery.data ?? [];
+  const currentCycleQuery = useQuery({
+    queryKey: ["attendance", "employee-cycle-report", employeeFilter, "current"],
+    enabled: viewMode === "cycle" && employeeFilter !== "all",
+    queryFn: () =>
+      apiGet<EmployeeReport>(`/employees/${encodeURIComponent(employeeFilter)}/report?cycle=current`),
+  });
+  const previousCycleQuery = useQuery({
+    queryKey: ["attendance", "employee-cycle-report", employeeFilter, "previous"],
+    enabled: viewMode === "cycle" && employeeFilter !== "all",
+    queryFn: () =>
+      apiGet<EmployeeReport>(`/employees/${encodeURIComponent(employeeFilter)}/report?cycle=previous`),
+  });
+  const currentAttendance = currentCycleQuery.data?.attendance;
+  const previousAttendance = previousCycleQuery.data?.attendance;
+  const hasPreviousCycle = Boolean(
+    currentAttendance &&
+      previousAttendance &&
+      previousAttendance.cycle_start !== currentAttendance.cycle_start &&
+      previousAttendance.cycle_end >= (currentCycleQuery.data?.employee.hire_date ?? ""),
+  );
+  const activeCycle = cycleFilter === "previous" && hasPreviousCycle ? "previous" : "current";
+  const cycleQuery = activeCycle === "previous" ? previousCycleQuery : currentCycleQuery;
+  const cycleReport = cycleQuery.data;
 
   const recordsQuery = useQuery({
     queryKey: ["attendance", dateFilter, employeeFilter],
+    enabled: viewMode === "day",
     queryFn: () => {
       const params = new URLSearchParams();
       if (dateFilter) params.set("date", dateFilter);
@@ -67,7 +93,10 @@ export default function Attendance() {
       return apiGet<AttendanceRecord[]>(`/attendance?${params.toString()}`);
     },
   });
-  const records = recordsQuery.data ?? [];
+  const records =
+    viewMode === "cycle" ? cycleReport?.attendance.records ?? [] : recordsQuery.data ?? [];
+  const recordsLoading = viewMode === "cycle" ? cycleQuery.isLoading : recordsQuery.isLoading;
+  const recordsError = viewMode === "cycle" && cycleQuery.isError;
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["attendance"] });
@@ -99,7 +128,7 @@ export default function Attendance() {
   // The attendance rate only means something for a single day — without a date filter the
   // list spans many days and the ratio would exceed 100%.
   const rate =
-    dateFilter && activeCount > 0
+    viewMode === "day" && dateFilter && activeCount > 0
       ? Math.round((records.filter((r) => r.date === dateFilter && r.status === "present" && r.check_in).length / activeCount) * 100)
       : null;
 
@@ -113,7 +142,7 @@ export default function Attendance() {
     <FadeIn>
       <PageHeader
         title="سجل الحضور والانصراف"
-        description="متابعة بصمات الحضور اليومية وإضافة سجلات يدوية."
+        description="عرض الحضور اليومي أو كامل دورة الموظف الشهرية، مع إضافة سجلات يدوية."
         testid="attendance-title"
         action={
           <Button onClick={openAdd} data-testid="add-attendance-btn">
@@ -123,20 +152,54 @@ export default function Attendance() {
         }
       />
 
+      <div className="mb-3 flex flex-wrap items-center gap-2" role="group" aria-label="نوع عرض الحضور" data-testid="attendance-view-switcher">
+        <Button
+          type="button"
+          variant={viewMode === "day" ? "default" : "outline"}
+          aria-pressed={viewMode === "day"}
+          onClick={() => setViewMode("day")}
+          data-testid="attendance-view-day"
+        >
+          عرض يوم محدد
+        </Button>
+        <Button
+          type="button"
+          variant={viewMode === "cycle" ? "default" : "outline"}
+          aria-pressed={viewMode === "cycle"}
+          disabled={employeeFilter === "all"}
+          onClick={() => setViewMode("cycle")}
+          data-testid="attendance-view-cycle"
+        >
+          دورة الموظف الشهرية
+        </Button>
+        {employeeFilter === "all" && (
+          <span className="text-xs text-slate-500">اختر موظفًا لعرض دورته الشهرية.</span>
+        )}
+      </div>
+
       <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
-          <Label className="text-xs text-slate-500">التاريخ</Label>
-          <Input
-            type="date"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className="w-44"
-            data-testid="attendance-date-input"
-          />
-        </div>
+        {viewMode === "day" && (
+          <div className="space-y-1">
+            <Label className="text-xs text-slate-500">التاريخ</Label>
+            <Input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="w-44"
+              data-testid="attendance-date-input"
+            />
+          </div>
+        )}
         <div className="space-y-1">
           <Label className="text-xs text-slate-500">الموظف</Label>
-          <Select value={employeeFilter} onValueChange={(value: string) => setEmployeeFilter(value)}>
+          <Select
+            value={employeeFilter}
+            onValueChange={(value: string) => {
+              setEmployeeFilter(value);
+              setCycleFilter("current");
+              setViewMode(value === "all" ? "day" : "cycle");
+            }}
+          >
             <SelectTrigger className="w-48" data-testid="attendance-employee-filter">
               <SelectValue>
                 {(v: string) => (v === "all" ? "كل الموظفين" : employeeName(v))}
@@ -152,6 +215,34 @@ export default function Attendance() {
             </SelectContent>
           </Select>
         </div>
+        {viewMode === "cycle" && employeeFilter !== "all" && (
+          <div className="space-y-1">
+            <Label className="text-xs text-slate-500">الدورة الشهرية</Label>
+            <div className="flex gap-1" role="group" aria-label="اختيار دورة الموظف">
+              <Button
+                type="button"
+                size="sm"
+                variant={activeCycle === "current" ? "default" : "outline"}
+                aria-pressed={activeCycle === "current"}
+                onClick={() => setCycleFilter("current")}
+                data-testid="attendance-cycle-current"
+              >
+                الدورة الحالية
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={activeCycle === "previous" ? "default" : "outline"}
+                aria-pressed={activeCycle === "previous"}
+                disabled={!hasPreviousCycle}
+                onClick={() => setCycleFilter("previous")}
+                data-testid="attendance-cycle-previous"
+              >
+                الدورة السابقة
+              </Button>
+            </div>
+          </div>
+        )}
         <div className="flex gap-3 ms-auto">
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-center shadow-xs">
             <p className="text-xs text-slate-500">السجلات المعروضة</p>
@@ -160,16 +251,26 @@ export default function Attendance() {
             </p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-center shadow-xs">
-            <p className="text-xs text-slate-500">نسبة حضور اليوم المحدد</p>
-            <p className="text-lg font-bold tabular-nums text-teal-700" data-testid="attendance-rate">
-              {rate === null ? "—" : `${formatNumber(rate)}%`}
+            <p className="text-xs text-slate-500">
+              {viewMode === "cycle" ? "فترة الدورة المعروضة" : "نسبة حضور اليوم المحدد"}
+            </p>
+            <p className="text-sm font-bold tabular-nums text-teal-700" data-testid="attendance-rate">
+              {viewMode === "cycle"
+                ? cycleReport?.attendance.cycle_start && cycleReport.attendance.cycle_end
+                  ? `${fmtDate(cycleReport.attendance.cycle_start)} — ${fmtDate(cycleReport.attendance.cycle_end)}`
+                  : "—"
+                : rate === null
+                  ? "—"
+                  : `${formatNumber(rate)}%`}
             </p>
           </div>
         </div>
       </div>
 
-      {recordsQuery.isLoading ? (
+      {recordsLoading ? (
         <LoadingBlock className="h-64" />
+      ) : recordsError ? (
+        <EmptyState title="تعذّر تحميل سجل الدورة" description="تحقق من الاتصال ثم أعد المحاولة." />
       ) : records.length === 0 ? (
         <EmptyState title="لا توجد سجلات حضور" description="جرّب تغيير الفلتر أو أضف سجلاً يدوياً." />
       ) : (
