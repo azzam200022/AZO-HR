@@ -28,9 +28,20 @@ export const MANAGER_NAV: ManagerNavItem[] = [
   { to: "/locations", label: "المواقع", icon: MapPin, testid: "nav-locations" },
 ];
 
-// RTL order: leaves and dashboard on the right; discipline and attendance on the left.
-// Messages move to the top bar, so attendance takes its former bottom-nav position.
+// Sidebar order starts with messages, then lists the remaining manager sections.
+export const MANAGER_SIDEBAR_NAV: ManagerNavItem[] = [
+  MANAGER_NAV[6],
+  MANAGER_NAV[0],
+  MANAGER_NAV[2],
+  MANAGER_NAV[3],
+  MANAGER_NAV[4],
+  MANAGER_NAV[5],
+  MANAGER_NAV[7],
+];
+
+// RTL order: employees, leaves, dashboard, discipline, and attendance.
 export const MANAGER_BOTTOM_NAV: ManagerNavItem[] = [
+  MANAGER_NAV[1],
   MANAGER_NAV[3],
   MANAGER_NAV[0],
   MANAGER_NAV[5],
