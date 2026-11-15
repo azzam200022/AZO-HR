@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 
 from lib.cycle import CyclePeriod
 
 from lib.auth import Principal, hash_password, new_access_code, require_manager
 from lib.dates import aware
 from lib.db import db
+from lib.employee_photo import employee_photo_response
 from lib.reports import build_report
 from models.auth import AccessCodeResult, SetPasswordPayload
 from models.hr import DeleteResult, Employee, EmployeeCreate, EmployeeReport, EmployeeUpdate
@@ -22,6 +24,7 @@ async def _get_employee_or_404(employee_id: str) -> dict:
 
 def _to_model(doc: dict) -> Employee:
     doc["created_at"] = aware(doc.get("created_at"))
+    doc["has_photo"] = bool(doc.get("photo_data"))
     return Employee(**doc)
 
 
@@ -38,18 +41,26 @@ async def get_employee(employee_id: str):
     return _to_model(doc)
 
 
+@router.get("/{employee_id}/photo", response_class=Response)
+async def get_employee_photo(employee_id: str):
+    return employee_photo_response(await _get_employee_or_404(employee_id))
+
+
 @router.post("", response_model=Employee, status_code=201)
 async def create_employee(payload: EmployeeCreate):
     """Creating an employee also issues the login code they sign in with."""
-    employee = Employee(**payload.model_dump())
+    employee_data = payload.model_dump(exclude={"photo_data"})
+    employee = Employee(**employee_data)
     while await db.employees.find_one({"access_code": employee.access_code or "x"}):
         employee.access_code = new_access_code()
     if not employee.access_code:
         employee.access_code = new_access_code()
         while await db.employees.find_one({"access_code": employee.access_code}):
             employee.access_code = new_access_code()
-    await db.employees.insert_one(employee.model_dump())
-    return employee
+    employee_doc = employee.model_dump()
+    employee_doc["photo_data"] = payload.photo_data
+    await db.employees.insert_one(employee_doc)
+    return _to_model(employee_doc)
 
 
 @router.get("/{employee_id}/report", response_model=EmployeeReport)

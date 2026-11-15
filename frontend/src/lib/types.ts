@@ -12,6 +12,7 @@ export interface Employee {
   job_title: string;
   email: string;
   phone: string;
+  has_photo?: boolean;
   base_salary: number;
   allowances: number;
   hire_date: string;

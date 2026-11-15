@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useIsFetching, useQueryClient } from "@tanstack/react-query";
+import { useIsFetching, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, NavLink } from "react-router-dom";
 import { format } from "date-fns";
 import { arSA } from "date-fns/locale";
@@ -12,7 +12,10 @@ import {
   Sun,
   Users,
 } from "lucide-react";
+import EmployeeAvatar from "@/components/EmployeeAvatar";
+import { apiGet, getApiOrigin } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import type { Employee } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import NotificationBell from "@/components/layout/NotificationBell";
@@ -30,6 +33,11 @@ export default function Navbar() {
   const { session, role, logout, theme, setTheme } = useAuth();
   const queryClient = useQueryClient();
   const isRefreshing = useIsFetching() > 0;
+  const employeeProfileQuery = useQuery({
+    queryKey: ["me", "profile", session?.employee_id],
+    queryFn: () => apiGet<Employee>("/me/profile"),
+    enabled: role === "employee" && Boolean(session?.employee_id),
+  });
   const [now, setNow] = useState(() => new Date());
   const [drawerOpen, setDrawerOpen] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -73,15 +81,36 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 shadow-xs backdrop-blur-md">
       <div className="mx-auto flex min-w-0 max-w-7xl items-center gap-2 px-2.5 py-2.5 sm:gap-3 sm:px-4 sm:py-3 md:gap-6 md:px-8 max-[360px]:gap-1 max-[360px]:px-2">
-        <Link to={role === "manager" ? "/" : "/me"} data-testid="brand-link" className="flex shrink-0 items-center gap-2.5">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500 to-teal-700 text-white shadow-sm">
-            <Users className="h-5 w-5" />
-          </span>
-          <span className="min-w-0 leading-tight">
-            <span className="block text-base font-extrabold tracking-tight text-slate-900">مواردي</span>
-            <span className="block text-[11px] font-medium text-slate-500 max-[500px]:hidden">إدارة الموارد البشرية</span>
-          </span>
-        </Link>
+        {role === "employee" ? (
+          <div className="flex shrink-0 items-center gap-2.5">
+            {employeeProfileQuery.data?.has_photo ? (
+              <EmployeeAvatar
+                name={employeeProfileQuery.data.name || session?.name || "الموظف"}
+                photoUrl={`${getApiOrigin()}/api/me/photo`}
+                size="md"
+                testId="employee-header-avatar"
+              />
+            ) : (
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500 to-teal-700 text-white shadow-sm">
+                <Users className="h-5 w-5" />
+              </span>
+            )}
+            <Link to="/me" data-testid="brand-link" className="min-w-0 leading-tight">
+              <span className="block text-base font-extrabold tracking-tight text-slate-900">مواردي</span>
+              <span className="block text-[11px] font-medium text-slate-500 max-[500px]:hidden">إدارة الموارد البشرية</span>
+            </Link>
+          </div>
+        ) : (
+          <Link to="/" data-testid="brand-link" className="flex shrink-0 items-center gap-2.5">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500 to-teal-700 text-white shadow-sm">
+              <Users className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 leading-tight">
+              <span className="block text-base font-extrabold tracking-tight text-slate-900">مواردي</span>
+              <span className="block text-[11px] font-medium text-slate-500 max-[500px]:hidden">إدارة الموارد البشرية</span>
+            </span>
+          </Link>
+        )}
 
         {role === "manager" && (
           <Button

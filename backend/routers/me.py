@@ -9,8 +9,10 @@ from datetime import date, datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 
 from lib.auth import Principal, require_employee
+from lib.employee_photo import employee_photo_response
 from lib.attendance_calendar import daily_attendance_records
 from lib.cycle import report_cycle_bounds
 from lib.dates import aware, current_month, now_time, today_iso
@@ -90,7 +92,13 @@ def _product_view(doc: dict, today: date) -> EmployeeProductView:
 async def my_profile(principal: Principal = Depends(require_employee)):
     doc = await _my_employee(principal)
     doc["created_at"] = aware(doc.get("created_at"))
+    doc["has_photo"] = bool(doc.get("photo_data"))
     return Employee(**doc)
+
+
+@router.get("/photo", response_class=Response)
+async def my_photo(principal: Principal = Depends(require_employee)):
+    return employee_photo_response(await _my_employee(principal))
 
 
 @router.get("/tracking-consent", response_model=TrackingConsent)
