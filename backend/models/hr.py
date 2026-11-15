@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, field_validator
 
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
+EMPLOYEE_PHOTO_PATTERN = r"^$|^data:image/jpeg;base64,[A-Za-z0-9+/]+={0,2}$"
 
 
 def _uuid() -> str:
@@ -41,6 +42,7 @@ class Employee(BaseModel):
     job_title: str
     email: str = ""
     phone: str = ""
+    has_photo: bool = False
     base_salary: float = Field(default=0, ge=0)
     allowances: float = Field(default=0, ge=0)
     hire_date: str
@@ -69,6 +71,9 @@ class EmployeeCreate(BaseModel):
     job_title: str
     email: str = ""
     phone: str = ""
+    photo_data: str = Field(
+        default="", max_length=420_000, pattern=EMPLOYEE_PHOTO_PATTERN
+    )
     base_salary: float = Field(ge=0)
     allowances: float = Field(default=0, ge=0)
     hire_date: str
@@ -101,6 +106,9 @@ class EmployeeUpdate(BaseModel):
     job_title: str | None = None
     email: str | None = None
     phone: str | None = None
+    photo_data: str | None = Field(
+        default=None, max_length=420_000, pattern=EMPLOYEE_PHOTO_PATTERN
+    )
     base_salary: float | None = Field(default=None, ge=0)
     allowances: float | None = Field(default=None, ge=0)
     hire_date: str | None = None

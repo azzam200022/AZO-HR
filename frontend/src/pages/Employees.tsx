@@ -1,13 +1,16 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import type { ChangeEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Clock, Copy, FileText, KeyRound, MapPin, Pencil, Plus, RefreshCw, Search, Trash2, UserRoundCheck, UserRoundX } from "lucide-react";
-import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut, getApiOrigin } from "@/lib/api";
+import { prepareEmployeePhoto } from "@/lib/employee-photo";
 import { currentMonthStr, errorText, fmtDate, formatIQD, shiftLabel, todayStr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { DEFAULT_WORK_DAYS, WORK_DAYS, workDaysLabel } from "@/lib/work-days";
 import { EMPLOYEE_STATUS_LABELS, type AccessCodeResult, type Employee, type EmployeeReport, type EmployeeStatus, type WorkLocation } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import EmployeeAvatar from "@/components/EmployeeAvatar";
 import {
   Dialog,
   DialogContent,
@@ -47,6 +50,7 @@ interface EmployeeForm {
   job_title: string;
   email: string;
   phone: string;
+  photo_data: string | null;
   base_salary: string;
   allowances: string;
   hire_date: string;
@@ -65,6 +69,7 @@ const EMPTY_FORM: EmployeeForm = {
   job_title: "",
   email: "",
   phone: "",
+  photo_data: null,
   base_salary: "",
   allowances: "0",
   hire_date: todayStr(),
@@ -80,6 +85,7 @@ const EMPTY_FORM: EmployeeForm = {
 
 export default function Employees() {
   const queryClient = useQueryClient();
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const { data: employees = [], isLoading } = useQuery({
     queryKey: ["employees"],
     queryFn: () => apiGet<Employee[]>("/employees"),
@@ -115,6 +121,7 @@ export default function Employees() {
     mutationFn: (payload: EmployeeForm) => {
       const body = {
         ...payload,
+        photo_data: payload.photo_data ?? undefined,
         base_salary: Number(payload.base_salary) || 0,
         allowances: Number(payload.allowances) || 0,
         monthly_leave_quota: Number(payload.monthly_leave_quota) || 0,
@@ -207,6 +214,7 @@ export default function Employees() {
       job_title: emp.job_title,
       email: emp.email,
       phone: emp.phone,
+      photo_data: null,
       base_salary: String(emp.base_salary),
       allowances: String(emp.allowances),
       hire_date: emp.hire_date,
@@ -220,6 +228,18 @@ export default function Employees() {
       payroll_cycle_start: emp.payroll_cycle_start,
     });
     setDialogOpen(true);
+  };
+
+  const selectPhoto = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const photoData = await prepareEmployeePhoto(file);
+      setForm((current) => ({ ...current, photo_data: photoData }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "تعذرت معالجة الصورة");
+    }
   };
 
   const submit = () => {
@@ -246,6 +266,13 @@ export default function Employees() {
         : [...current.work_days, day].sort((a, b) => a - b),
     }));
   };
+
+  const existingPhotoUrl =
+    editing?.has_photo && form.photo_data === null
+      ? `${getApiOrigin()}/api/employees/${editing.id}/photo`
+      : undefined;
+  const previewPhoto = form.photo_data || existingPhotoUrl;
+  const canRemovePhoto = Boolean(form.photo_data) || Boolean(existingPhotoUrl);
 
   return (
     <FadeIn>
@@ -315,9 +342,15 @@ export default function Employees() {
                 <TableRow key={emp.id} data-testid={`employee-row-${emp.id}`}>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-teal-50 text-sm font-bold text-teal-700">
-                        {emp.name.slice(0, 1)}
-                      </span>
+                      <EmployeeAvatar
+                        name={emp.name}
+                        photoUrl={
+                          emp.has_photo
+                            ? `${getApiOrigin()}/api/employees/${emp.id}/photo`
+                            : undefined
+                        }
+                        testId={`employee-avatar-${emp.id}`}
+                      />
                       <div>
                         <p className="text-sm font-semibold text-slate-900">{emp.name}</p>
                         <p className="text-xs text-slate-500">{emp.email || "—"}</p>
@@ -476,6 +509,58 @@ export default function Employees() {
             <DialogDescription>أدخل بيانات الموظف الوظيفية والمالية.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="emp-photo-file">صورة الموظف</Label>
+              <div className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
+                {previewPhoto ? (
+                  <img
+                    src={previewPhoto}
+                    alt={`معاينة صورة ${form.name || "الموظف"}`}
+                    className="h-16 w-16 shrink-0 rounded-full object-cover ring-1 ring-slate-200"
+                  />
+                ) : (
+                  <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-teal-50 text-lg font-bold text-teal-700">
+                    {form.name.trim().slice(0, 1) || "؟"}
+                  </span>
+                )}
+                <div className="min-w-0 space-y-2">
+                  <input
+                    ref={photoInputRef}
+                    id="emp-photo-file"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    onChange={selectPhoto}
+                    data-testid="employee-photo-input"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => photoInputRef.current?.click()}
+                      data-testid="choose-employee-photo-btn"
+                    >
+                      {previewPhoto ? "تغيير الصورة" : "اختيار صورة"}
+                    </Button>
+                    {canRemovePhoto && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setForm((current) => ({ ...current, photo_data: "" }))}
+                        data-testid="remove-employee-photo-btn"
+                      >
+                        إزالة الصورة
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs leading-relaxed text-slate-500">
+                    JPG أو PNG أو WebP. تُضغط الصورة تلقائياً لتناسب سجل الموظف.
+                  </p>
+                </div>
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="emp-name">الاسم الكامل *</Label>
               <Input

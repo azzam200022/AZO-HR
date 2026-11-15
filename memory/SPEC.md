@@ -19,20 +19,22 @@
 
 ## الأدوار والصفحات
 - **مدير النظام**: لوحة التحكم `/`، الموظفون `/employees` (إضافة/تعديل/حذف + عمود «رمز الدخول»
-  للنسخ وإعادة التوليد وتعطيل الدخول)، الحضور `/attendance`، الإجازات `/leaves`،
-  الرواتب `/payroll`، مواقع العمل `/locations`.
+  للنسخ وإعادة التوليد وتعطيل الدخول، وصورة اختيارية للموظف قابلة للتكبير)، الحضور `/attendance`،
+  الإجازات `/leaves`، الرواتب `/payroll`، مواقع العمل `/locations`.
 - **الموظف**: بوابته `/me` فقط — حضوره وإجازاته ومسير راتبه هو، وتسجيل حضور/انصراف، وطلب إجازة.
-  لا يرى روابط الإدارة، وأي رابط إداري مباشر يعيده إلى بوابته.
+  تظهر صورته في شريط البوابة العلوي ويمكن تكبيرها؛ لا يرى روابط الإدارة، وأي رابط إداري مباشر يعيده إلى بوابته.
 
 ## الواجهة الخلفية (كلها تحت /api على api_router)
 - `POST /auth/manager-login` · `POST /auth/employee-login` (`access_code` أو `email`+`password`)
   · `GET /auth/me` (200 دائماً مع `authenticated`) · `POST /auth/logout`
 - `/me/*` (موظف فقط): `GET /me/profile` · `GET /me/location` · `GET /me/attendance`
-  · `POST /me/check-in` · `POST /me/check-out` · `GET /me/leaves` · `POST /me/leaves`
+  · `GET /me/photo` (صورة صاحب الجلسة فقط) · `POST /me/check-in` · `POST /me/check-out`
+  · `GET /me/leaves` · `POST /me/leaves`
   · `GET /me/payroll?month=` · `GET /me/leave-balance` · `GET /me/report?month=`
 - مدير فقط: `GET/POST /employees` · `GET/PUT/DELETE /employees/{id}` (الحذف يتسلسل للحضور
   والإجازات والرواتب والجلسات) · `POST /employees/{id}/regenerate-code` ·
-  `POST /employees/{id}/set-password` · `GET /employees/{id}/report?month=`
+  `POST /employees/{id}/set-password` · `GET /employees/{id}/photo` ·
+  `GET /employees/{id}/report?month=`
 - مدير فقط: `GET/POST /attendance` · `POST /attendance/check-in|check-out` · `PATCH/DELETE /attendance/{id}`
 - مدير فقط: `GET/POST /leaves` · `PATCH /leaves/{id}` (approved/rejected + manager_note) · `DELETE /leaves/{id}`
 - مدير فقط: `GET /payroll` · `POST /payroll/generate {month}` (idempotent) · `PATCH /payroll/{id}`
