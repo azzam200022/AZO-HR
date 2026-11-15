@@ -1,10 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { apiDelete, apiGet, apiPost } from "@/lib/api";
 import { durationLabel, errorText, fmtDate, formatNumber, lateLabel, todayStr } from "@/lib/format";
-import { ATTENDANCE_STATUS_LABELS, type AttendanceRecord, type Employee, type EmployeeReport } from "@/lib/types";
+import {
+  ATTENDANCE_STATUS_LABELS,
+  type AttendanceRecord,
+  type Employee,
+  type EmployeeReport,
+  type TodayResponse,
+} from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -53,6 +59,20 @@ export default function Attendance() {
     check_in: "09:00",
     check_out: "17:00",
   });
+  const [followsToday, setFollowsToday] = useState(true);
+
+  const todayQuery = useQuery({
+    queryKey: ["dashboard", "today"],
+    queryFn: () => apiGet<TodayResponse>("/dashboard/today"),
+    refetchInterval: 60_000,
+  });
+  const serverToday = todayQuery.data?.today;
+
+  useEffect(() => {
+    if (followsToday && serverToday) {
+      setDateFilter(serverToday);
+    }
+  }, [followsToday, serverToday]);
 
   const employeesQuery = useQuery({
     queryKey: ["employees"],
@@ -184,7 +204,11 @@ export default function Attendance() {
             <Input
               type="date"
               value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
+              onChange={(e) => {
+                const selectedDate = e.target.value;
+                setDateFilter(selectedDate);
+                setFollowsToday(selectedDate === (serverToday ?? todayStr()));
+              }}
               className="w-44"
               data-testid="attendance-date-input"
             />
