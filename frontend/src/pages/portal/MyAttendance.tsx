@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { CheckCircle2, Clock3, Fingerprint, LogOut, MapPin } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
+import { findOpenOvernightRecord } from "@/lib/overnight-attendance";
 import {
   requestBackgroundLocationPermissions,
   startBackgroundLocationTracking,
@@ -50,10 +51,12 @@ export default function MyAttendance() {
     queryKey: ["today"],
     queryFn: () => apiGet<TodayResponse>("/today"),
     staleTime: 60_000,
+    refetchInterval: 60_000,
   });
   const attendanceQuery = useQuery({
     queryKey: ["me", "attendance"],
     queryFn: () => apiGet<AttendanceRecord[]>("/me/attendance"),
+    refetchInterval: 60_000,
   });
   const profileQuery = useQuery({
     queryKey: ["me", "report", "cycle", "current"],
@@ -82,7 +85,7 @@ export default function MyAttendance() {
     shift && clockMinutes(shift.shift_end) <= clockMinutes(shift.shift_start),
   );
   const openOvernightRecord = overnightShift
-    ? records.find((record) => record.date === previousDate && !record.check_out)
+    ? findOpenOvernightRecord(records, previousDate)
     : undefined;
   const todayRecord = records.find((record) => record.date === today) ?? openOvernightRecord;
   const payslip = (payrollQuery.data ?? [])[0];
