@@ -310,6 +310,7 @@ class EmployeeProductCreate(BaseModel):
 
     name: str = Field(min_length=1, max_length=120)
     expiry_dates: list[str] = Field(min_length=1, max_length=50)
+    custom_reminder_days: int | None = Field(default=None, ge=1, le=365)
 
     @field_validator("name")
     @classmethod
@@ -334,6 +335,37 @@ class EmployeeProductCreate(BaseModel):
         return values
 
 
+class EmployeeProductUpdate(BaseModel):
+    """Editable fields for one employee-owned product."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    add_expiry_date: str | None = None
+    custom_reminder_days: int | None = Field(default=None, ge=1, le=365)
+
+    @field_validator("name")
+    @classmethod
+    def _updated_name_not_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("اسم المادة مطلوب")
+        return value
+
+    @field_validator("add_expiry_date")
+    @classmethod
+    def _added_expiry_date_valid(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not DATE_RE.match(value):
+            raise ValueError("تاريخ الانتهاء يجب أن يكون بصيغة YYYY-MM-DD")
+        try:
+            date.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError("تاريخ الانتهاء غير صالح") from exc
+        return value
+
+
 class ProductExpiryBatch(BaseModel):
     id: str = Field(default_factory=_uuid)
     expiry_date: str
@@ -344,6 +376,7 @@ class EmployeeProductRecord(BaseModel):
     employee_id: str
     name: str
     expiry_dates: list[ProductExpiryBatch]
+    custom_reminder_days: int | None = Field(default=None, ge=1, le=365)
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -358,6 +391,7 @@ class EmployeeProductView(BaseModel):
     id: str
     name: str
     expiry_dates: list[ProductExpiryBatchView]
+    custom_reminder_days: int | None = None
     created_at: datetime
 
 

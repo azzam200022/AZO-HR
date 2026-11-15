@@ -27,28 +27,58 @@ def one_calendar_month_before(expiry: date) -> date:
     return date(year, month, day)
 
 
-def expiry_reminder_targets(expiry: date) -> list[tuple[str, date]]:
-    """Return stable reminder keys and target local dates for an expiry."""
-    return [
+def expiry_reminder_targets(
+    expiry: date,
+    custom_reminder_days: int | None = None,
+) -> list[tuple[str, date]]:
+    """Return default and optional custom reminder dates without duplicate alerts."""
+    targets = [
         ("month", one_calendar_month_before(expiry)),
         ("15", expiry - timedelta(days=15)),
         ("10", expiry - timedelta(days=10)),
         ("7", expiry - timedelta(days=7)),
     ]
+    if (
+        isinstance(custom_reminder_days, int)
+        and not isinstance(custom_reminder_days, bool)
+        and 1 <= custom_reminder_days <= 365
+    ):
+        custom_target = expiry - timedelta(days=custom_reminder_days)
+        if not any(target == custom_target for _, target in targets):
+            targets.append((f"custom-{custom_reminder_days}", custom_target))
+    return targets
 
 
-def due_expiry_reminders(expiry_date: str, today: date) -> list[tuple[str, str]]:
+def due_expiry_reminders(
+    expiry_date: str,
+    today: date,
+    custom_reminder_days: int | None = None,
+) -> list[tuple[str, str]]:
     """Return reminder key/label pairs due on this local date."""
     try:
         expiry = date.fromisoformat(expiry_date)
     except (TypeError, ValueError):
         return []
 
-    return [
-        (key, REMINDER_LABELS[key])
-        for key, target in expiry_reminder_targets(expiry)
-        if target == today
-    ]
+    due = []
+    for key, target in expiry_reminder_targets(expiry, custom_reminder_days):
+        if target != today:
+            continue
+        if key in REMINDER_LABELS:
+            label = REMINDER_LABELS[key]
+        else:
+            days = custom_reminder_days or 0
+            label = (
+                "يوم واحد"
+                if days == 1
+                else "يومين"
+                if days == 2
+                else f"{days} أيام"
+                if 3 <= days <= 10
+                else f"{days} يومًا"
+            )
+        due.append((key, label))
+    return due
 
 
 def expiry_status(days_remaining: int) -> str:
@@ -101,7 +131,11 @@ async def run_product_expiry_reminder_cycle(
             expiry_date = batch.get("expiry_date")
             if not batch_id or not expiry_date:
                 continue
-            for reminder_key, reminder_label in due_expiry_reminders(expiry_date, current_date):
+            for reminder_key, reminder_label in due_expiry_reminders(
+                expiry_date,
+                current_date,
+                product.get("custom_reminder_days"),
+            ):
                 await reminder_sender(
                     employee=employee,
                     product_id=product_id,

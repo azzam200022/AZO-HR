@@ -1,10 +1,15 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { errorText, fmtDate, formatNumber } from "@/lib/format";
-import type { EmployeeProduct, ProductExpiryStatus } from "@/lib/types";
+import type {
+  DeleteResult,
+  EmployeeProduct,
+  EmployeeProductUpdate,
+  ProductExpiryStatus,
+} from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,11 +33,23 @@ function remainingLabel(days: number) {
   return `متبقي ${formatNumber(days)} يوم`;
 }
 
+function reminderDaysLabel(days: number) {
+  if (days === 1) return "يوم واحد";
+  if (days === 2) return "يومين";
+  if (days >= 3 && days <= 10) return `${formatNumber(days)} أيام`;
+  return `${formatNumber(days)} يومًا`;
+}
+
 /** An employee's own products, with each expiry date treated as a separate batch. */
 export default function MyProducts() {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [expiryDates, setExpiryDates] = useState([""]);
+  const [customReminderDays, setCustomReminderDays] = useState("");
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editReminderDays, setEditReminderDays] = useState("");
+  const [newExpiryDate, setNewExpiryDate] = useState("");
 
   const productsQuery = useQuery({
     queryKey: ["me", "products"],
@@ -40,13 +57,40 @@ export default function MyProducts() {
   });
 
   const addProductMutation = useMutation({
-    mutationFn: (payload: { name: string; expiry_dates: string[] }) =>
+    mutationFn: (payload: {
+      name: string;
+      expiry_dates: string[];
+      custom_reminder_days: number | null;
+    }) =>
       apiPost<EmployeeProduct>("/me/products", payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["me", "products"] });
       setName("");
       setExpiryDates([""]);
+      setCustomReminderDays("");
       toast.success("تمت إضافة المادة وتواريخ انتهائها");
+    },
+    onError: (error) => toast.error(errorText(error)),
+  });
+
+  const updateProductMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: EmployeeProductUpdate }) =>
+      apiPatch<EmployeeProduct>(`/me/products/${id}`, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["me", "products"] });
+      setEditingProductId(null);
+      setNewExpiryDate("");
+      toast.success("تم حفظ تعديلات المادة");
+    },
+    onError: (error) => toast.error(errorText(error)),
+  });
+
+  const deleteProductMutation = useMutation({
+    mutationFn: (id: string) => apiDelete<DeleteResult>(`/me/products/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["me", "products"] });
+      setEditingProductId(null);
+      toast.success("تم حذف المادة");
     },
     onError: (error) => toast.error(errorText(error)),
   });
@@ -84,7 +128,57 @@ export default function MyProducts() {
       toast.error("احذف تواريخ الانتهاء المكررة");
       return;
     }
-    addProductMutation.mutate({ name: cleanName, expiry_dates: expiryDates });
+    const reminderDays = customReminderDays ? Number(customReminderDays) : null;
+    if (
+      reminderDays !== null &&
+      (!Number.isInteger(reminderDays) || reminderDays < 1 || reminderDays > 365)
+    ) {
+      toast.error("اجعل التنبيه الإضافي بين يوم واحد و365 يومًا");
+      return;
+    }
+    addProductMutation.mutate({
+      name: cleanName,
+      expiry_dates: expiryDates,
+      custom_reminder_days: reminderDays,
+    });
+  };
+
+  const beginEdit = (product: EmployeeProduct) => {
+    setEditingProductId(product.id);
+    setEditName(product.name);
+    setEditReminderDays(product.custom_reminder_days?.toString() ?? "");
+    setNewExpiryDate("");
+  };
+
+  const submitEdit = (event: FormEvent<HTMLFormElement>, productId: string) => {
+    event.preventDefault();
+    const cleanName = editName.trim();
+    if (!cleanName) {
+      toast.error("أدخل اسم المادة");
+      return;
+    }
+
+    const reminderDays = editReminderDays ? Number(editReminderDays) : null;
+    if (
+      reminderDays !== null &&
+      (!Number.isInteger(reminderDays) || reminderDays < 1 || reminderDays > 365)
+    ) {
+      toast.error("اجعل التنبيه الإضافي بين يوم واحد و365 يومًا");
+      return;
+    }
+
+    const payload: EmployeeProductUpdate = {
+      name: cleanName,
+      custom_reminder_days: reminderDays,
+    };
+    if (newExpiryDate) payload.add_expiry_date = newExpiryDate;
+    updateProductMutation.mutate({ id: productId, payload });
+  };
+
+  const deleteProduct = (product: EmployeeProduct) => {
+    if (window.confirm(`هل تريد حذف «${product.name}» وكل تواريخ صلاحيتها؟`)) {
+      deleteProductMutation.mutate(product.id);
+    }
   };
 
   return (
@@ -118,6 +212,26 @@ export default function MyProducts() {
                 required
                 data-testid="product-name-input"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="product-reminder-days">تنبيه إضافي قبل الانتهاء</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="product-reminder-days"
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={customReminderDays}
+                  onChange={(event) => setCustomReminderDays(event.target.value)}
+                  placeholder="مثال: 5"
+                  data-testid="product-reminder-days-input"
+                />
+                <span className="shrink-0 text-sm text-slate-500">يومًا</span>
+              </div>
+              <p className="text-[11px] leading-5 text-slate-500">
+                اختياري، ويضاف إلى التذكيرات الافتراضية قبل شهر و15 و10 و7 أيام.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -202,7 +316,111 @@ export default function MyProducts() {
                   className="rounded-xl border border-slate-100 bg-slate-50/60 p-3.5"
                   data-testid={`my-product-${product.id}`}
                 >
-                  <h2 className="text-sm font-bold text-slate-900">{product.name}</h2>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-sm font-bold text-slate-900">{product.name}</h2>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        {product.custom_reminder_days
+                          ? `تنبيه إضافي قبل الانتهاء بـ ${reminderDaysLabel(product.custom_reminder_days)}`
+                          : "التذكيرات الافتراضية فقط"}
+                      </p>
+                    </div>
+                    {editingProductId !== product.id && (
+                      <div className="flex shrink-0 gap-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => beginEdit(product)}
+                          aria-label={`تعديل ${product.name}`}
+                          data-testid={`edit-product-${product.id}`}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          تعديل
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon-sm"
+                          onClick={() => deleteProduct(product)}
+                          disabled={deleteProductMutation.isPending}
+                          aria-label={`حذف ${product.name}`}
+                          data-testid={`delete-product-${product.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {editingProductId === product.id && (
+                    <form
+                      className="mt-3 space-y-3 rounded-lg border border-slate-200 bg-white p-3"
+                      onSubmit={(event) => submitEdit(event, product.id)}
+                      data-testid={`edit-product-form-${product.id}`}
+                    >
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`edit-product-name-${product.id}`}>اسم المادة</Label>
+                        <Input
+                          id={`edit-product-name-${product.id}`}
+                          value={editName}
+                          onChange={(event) => setEditName(event.target.value)}
+                          maxLength={120}
+                          required
+                          data-testid={`edit-product-name-${product.id}`}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`edit-expiry-date-${product.id}`}>إضافة تاريخ صلاحية</Label>
+                        <Input
+                          id={`edit-expiry-date-${product.id}`}
+                          type="date"
+                          value={newExpiryDate}
+                          onChange={(event) => setNewExpiryDate(event.target.value)}
+                          data-testid={`add-product-expiry-${product.id}`}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`edit-reminder-days-${product.id}`}>
+                          تنبيه إضافي قبل الانتهاء بعدد الأيام
+                        </Label>
+                        <Input
+                          id={`edit-reminder-days-${product.id}`}
+                          type="number"
+                          min={1}
+                          max={365}
+                          value={editReminderDays}
+                          onChange={(event) => setEditReminderDays(event.target.value)}
+                          placeholder="فارغ لإيقاف التنبيه الإضافي"
+                          data-testid={`edit-reminder-days-${product.id}`}
+                        />
+                        <p className="text-[11px] leading-5 text-slate-500">
+                          لا يؤثر ذلك في التذكيرات الافتراضية.
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          type="submit"
+                          size="sm"
+                          disabled={updateProductMutation.isPending}
+                          data-testid={`save-product-edit-${product.id}`}
+                        >
+                          حفظ التعديلات
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditingProductId(null)}
+                          data-testid={`cancel-product-edit-${product.id}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                          إلغاء
+                        </Button>
+                      </div>
+                    </form>
+                  )}
+
                   <div className="mt-3 space-y-2">
                     {[...product.expiry_dates]
                       .sort((a, b) => a.expiry_date.localeCompare(b.expiry_date))
