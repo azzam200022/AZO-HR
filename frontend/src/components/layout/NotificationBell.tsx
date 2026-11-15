@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlarmClock, Bell, BellRing, CalendarDays, CheckCheck, CircleDollarSign, Gift, MapPin, MapPinOff, MessageSquare } from "lucide-react";
+import { AlarmClock, Bell, BellRing, CalendarDays, CheckCheck, CircleDollarSign, Gift, MapPin, MapPinOff, MessageSquare, Package } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { browserPushSetupMessage } from "@/lib/browser-push-status";
 import { fmtDate, formatNumber } from "@/lib/format";
@@ -106,6 +106,7 @@ export default function NotificationBell({ audience }: Props) {
             leave_request: "طلب إجازة جديد",
             leave_status: "تحديث الإجازة",
             shift_reminder: "تذكير بموعد الدوام",
+            product_expiry: "تذكير بانتهاء صلاحية مادة",
           };
           const title = latest ? titleByKind[latest.kind] : "مواردي — تنبيه جديد";
           return showPush(
@@ -169,23 +170,33 @@ export default function NotificationBell({ audience }: Props) {
 
   const notifications = listQuery.data ?? [];
 
-  const iconFor = (kind: AppNotification["kind"]) =>
-    kind === "late" || kind === "attendance" || kind === "shift_reminder"
-      ? AlarmClock
-      : kind === "left_site"
-        ? MapPinOff
-        : kind === "returned_site"
-          ? MapPin
-          : kind === "leave_request" || kind === "leave_status"
-          ? CalendarDays
-          : kind === "bonus"
-            ? Gift
-            : kind === "deduction" || kind === "payroll"
-              ? CircleDollarSign
-              : MessageSquare;
+  const iconFor = (kind: AppNotification["kind"]) => {
+    switch (kind) {
+      case "late":
+      case "attendance":
+      case "shift_reminder":
+        return AlarmClock;
+      case "left_site":
+        return MapPinOff;
+      case "returned_site":
+        return MapPin;
+      case "leave_request":
+      case "leave_status":
+        return CalendarDays;
+      case "bonus":
+        return Gift;
+      case "product_expiry":
+        return Package;
+      case "deduction":
+      case "payroll":
+        return CircleDollarSign;
+      default:
+        return MessageSquare;
+    }
+  };
 
   const toneFor = (kind: AppNotification["kind"]) =>
-    kind === "late" || kind === "leave_request" || kind === "shift_reminder"
+    kind === "late" || kind === "leave_request" || kind === "shift_reminder" || kind === "product_expiry"
       ? "bg-amber-100 text-amber-700"
       : kind === "left_site" || kind === "deduction"
         ? "bg-rose-100 text-rose-700"

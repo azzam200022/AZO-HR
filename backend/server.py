@@ -19,6 +19,7 @@ load_dotenv(ROOT_DIR / '.env')
 # MongoDB connection
 from lib.db import client, db, ensure_indexes
 from lib.auth import ensure_manager_account
+from lib.product_expiry import run_product_expiry_reminder_scheduler
 from lib.shift_reminders import run_shift_reminder_scheduler
 
 
@@ -30,11 +31,16 @@ async def lifespan(app: FastAPI):
     app.state.shift_reminder_task = asyncio.create_task(
         run_shift_reminder_scheduler(app.state.index_task)
     )
+    app.state.product_expiry_reminder_task = asyncio.create_task(
+        run_product_expiry_reminder_scheduler(app.state.index_task)
+    )
     yield
     app.state.shift_reminder_task.cancel()
+    app.state.product_expiry_reminder_task.cancel()
     app.state.index_task.cancel()
     await asyncio.gather(
         app.state.shift_reminder_task,
+        app.state.product_expiry_reminder_task,
         app.state.index_task,
         return_exceptions=True,
     )

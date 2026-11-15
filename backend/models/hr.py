@@ -6,7 +6,7 @@ change its TS interface in the same edit.
 
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -305,6 +305,62 @@ class GenerateResult(BaseModel):
     updated: int = 0
 
 
+class EmployeeProductCreate(BaseModel):
+    """A product name with one or more independently expiring batches."""
+
+    name: str = Field(min_length=1, max_length=120)
+    expiry_dates: list[str] = Field(min_length=1, max_length=50)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("اسم المادة مطلوب")
+        return value
+
+    @field_validator("expiry_dates")
+    @classmethod
+    def _expiry_dates_valid(cls, values: list[str]) -> list[str]:
+        if len(set(values)) != len(values):
+            raise ValueError("لا يمكن تكرار تاريخ الانتهاء للمادة نفسها")
+        for value in values:
+            if not DATE_RE.match(value):
+                raise ValueError("تواريخ الانتهاء يجب أن تكون بصيغة YYYY-MM-DD")
+            try:
+                date.fromisoformat(value)
+            except ValueError as exc:
+                raise ValueError("أحد تواريخ الانتهاء غير صالح") from exc
+        return values
+
+
+class ProductExpiryBatch(BaseModel):
+    id: str = Field(default_factory=_uuid)
+    expiry_date: str
+
+
+class EmployeeProductRecord(BaseModel):
+    id: str = Field(default_factory=_uuid)
+    employee_id: str
+    name: str
+    expiry_dates: list[ProductExpiryBatch]
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class ProductExpiryBatchView(BaseModel):
+    id: str
+    expiry_date: str
+    days_remaining: int
+    status: Literal["far", "near", "expired"]
+
+
+class EmployeeProductView(BaseModel):
+    id: str
+    name: str
+    expiry_dates: list[ProductExpiryBatchView]
+    created_at: datetime
+
+
 class Notification(BaseModel):
     id: str = Field(default_factory=_uuid)
     kind: Literal[
@@ -319,6 +375,7 @@ class Notification(BaseModel):
         "leave_request",
         "leave_status",
         "shift_reminder",
+        "product_expiry",
     ]
     audience: Literal["manager", "employee"] = "manager"
     employee_id: str

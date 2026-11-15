@@ -5,7 +5,7 @@ that is what makes cross-employee access (IDOR/BOLA) structurally impossible rat
 merely checked.
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -19,13 +19,19 @@ from lib.adjustments import cycle_adjustment_query, to_model as adjustment_model
 from lib.messaging import GROUP_THREAD, mark_thread_read, send_message, to_model as message_model
 from lib.notify import notify_manager_event
 from lib.punch import punch_in, punch_out, record_presence, require_tracking_consent
+from lib.product_expiry import expiry_status
 from lib.reports import build_report, leave_balance
 from lib.shift import effective_away_minutes, employee_shift, is_working_day, late_minutes
 from models.hr import (
     Adjustment,
     AttendanceRecord,
     Employee,
+    EmployeeProductCreate,
+    EmployeeProductRecord,
+    EmployeeProductView,
     EmployeeReport,
+    ProductExpiryBatch,
+    ProductExpiryBatchView,
     LeaveBalance,
     LeaveRequest,
     MarkAllResult,
@@ -51,6 +57,30 @@ async def _my_employee(principal: Principal) -> dict:
     if not doc:
         raise HTTPException(status_code=404, detail="الموظف غير موجود")
     return doc
+
+
+def _product_view(doc: dict, today: date) -> EmployeeProductView:
+    expiry_dates = []
+    for batch in doc.get("expiry_dates") or []:
+        try:
+            expiry = date.fromisoformat(batch["expiry_date"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        days_remaining = (expiry - today).days
+        expiry_dates.append(
+            ProductExpiryBatchView(
+                id=batch["id"],
+                expiry_date=expiry.isoformat(),
+                days_remaining=days_remaining,
+                status=expiry_status(days_remaining),
+            )
+        )
+    return EmployeeProductView(
+        id=doc["id"],
+        name=doc["name"],
+        expiry_dates=expiry_dates,
+        created_at=aware(doc.get("created_at")),
+    )
 
 
 @router.get("/profile", response_model=Employee)
@@ -272,6 +302,38 @@ async def my_report(
     if month is not None and cycle is not None:
         raise HTTPException(status_code=400, detail="اختر دورة أو شهرًا واحدًا للتقرير")
     return await build_report(await _my_employee(principal), month, cycle)
+
+
+@router.get("/products", response_model=list[EmployeeProductView])
+async def my_products(principal: Principal = Depends(require_employee)):
+    """Only the signed-in employee's own products and expiry batches."""
+    docs = (
+        await db.employee_products.find({"employee_id": principal.employee_id})
+        .sort("created_at", -1)
+        .to_list(500)
+    )
+    today = date.fromisoformat(today_iso())
+    return [_product_view(doc, today) for doc in docs]
+
+
+@router.post("/products", response_model=EmployeeProductView, status_code=201)
+async def add_my_product(
+    payload: EmployeeProductCreate,
+    principal: Principal = Depends(require_employee),
+):
+    """The session owns the new product; clients cannot assign it to another employee."""
+    employee = await _my_employee(principal)
+    product = EmployeeProductRecord(
+        employee_id=employee["id"],
+        name=payload.name,
+        expiry_dates=[
+            ProductExpiryBatch(expiry_date=expiry_date)
+            for expiry_date in payload.expiry_dates
+        ],
+    )
+    document = product.model_dump()
+    await db.employee_products.insert_one(document)
+    return _product_view(document, date.fromisoformat(today_iso()))
 
 
 @router.post("/leaves", response_model=LeaveRequest, status_code=201)

@@ -231,3 +231,46 @@ async def notify_employee_shift_end_reminder(
     except Exception as exc:
         logger.warning("Could not send shift-end reminder (%s)", type(exc).__name__)
     return True
+
+
+async def notify_employee_product_expiry(
+    employee: dict,
+    *,
+    product_id: str,
+    product_name: str,
+    batch_id: str,
+    expiry_date: str,
+    reminder_key: str,
+    reminder_label: str,
+) -> bool:
+    """Persist and push one expiry alert, deduplicated by batch and lead time."""
+    note = Notification(
+        id=f"product-expiry:{product_id}:{batch_id}:{reminder_key}",
+        kind="product_expiry",
+        audience="employee",
+        employee_id=employee["id"],
+        employee_name=employee.get("name", ""),
+        date=today_iso(),
+        at_time=now_time(),
+        message=(
+            f"تذكير: تنتهي صلاحية «{product_name}» بعد {reminder_label} "
+            f"(تاريخ الانتهاء: {expiry_date})."
+        ),
+    )
+    try:
+        result = await db.notifications.update_one(
+            {"id": note.id},
+            {"$setOnInsert": note.model_dump()},
+            upsert=True,
+        )
+    except Exception as exc:
+        logger.warning("Could not save product expiry reminder (%s)", type(exc).__name__)
+        return False
+
+    if result.upserted_id is None:
+        return False
+    try:
+        await send_notification(note.model_dump())
+    except Exception as exc:
+        logger.warning("Could not send product expiry reminder (%s)", type(exc).__name__)
+    return True

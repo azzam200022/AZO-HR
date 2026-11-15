@@ -17,6 +17,7 @@ import MyMessages from "@/pages/portal/MyMessages";
 import MyAttendance from "@/pages/portal/MyAttendance";
 import MyLog from "@/pages/portal/MyLog";
 import MyLeaves from "@/pages/portal/MyLeaves";
+import MyProducts from "@/pages/portal/MyProducts";
 import MyProfile from "@/pages/portal/MyProfile";
 import Login from "@/pages/Login";
 import { AuthProvider, useAuth } from "@/lib/auth";
@@ -152,6 +153,14 @@ function Shell() {
             element={
               <EmployeeOnly>
                 <MyLeaves />
+              </EmployeeOnly>
+            }
+          />
+          <Route
+            path="/me/products"
+            element={
+              <EmployeeOnly>
+                <MyProducts />
               </EmployeeOnly>
             }
           />
