@@ -12,7 +12,7 @@ export default function BottomNav() {
       data-testid="portal-bottom-nav"
     >
       <div className="mx-auto grid max-w-md grid-cols-3 items-end px-5 pt-2 pb-2.5">
-        {/* right: leaves, messages, and expiry dates */}
+        {/* right: leaves and expiry dates */}
         <div className="grid grid-cols-2 items-end gap-0.5">
           <NavLink
             to="/me/leaves"
