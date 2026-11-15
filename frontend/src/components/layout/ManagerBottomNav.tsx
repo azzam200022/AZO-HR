@@ -9,7 +9,7 @@ export default function ManagerBottomNav() {
       aria-label="التنقل الرئيسي للإدارة"
       data-testid="manager-bottom-nav"
     >
-      <div className="mx-auto grid max-w-3xl grid-cols-4 items-end px-2 pt-2.5 pb-2 sm:px-5 sm:pt-3">
+      <div className="mx-auto grid max-w-3xl grid-cols-5 items-end px-2 pt-2.5 pb-2 sm:px-5 sm:pt-3">
         {MANAGER_BOTTOM_NAV.map(({ to, label, icon: Icon }) => {
           const isDashboard = to === "/";
           return (
