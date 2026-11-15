@@ -1,9 +1,9 @@
 import { NavLink } from "react-router-dom";
-import { CalendarDays, ClipboardList, Fingerprint, MessageSquare, Package, UserRound } from "lucide-react";
+import { CalendarDays, ClipboardList, Fingerprint, Package, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Employee bottom navigation (RTL): leaves/messages on the right, the raised punch button
-// in the middle, and the log/profile links together on the left.
+// Employee bottom navigation (RTL): leaves and materials on the right, the raised punch button
+// in the middle, and the log/profile links together on the left. Messages live in the header.
 
 export default function BottomNav() {
   return (
@@ -12,8 +12,8 @@ export default function BottomNav() {
       data-testid="portal-bottom-nav"
     >
       <div className="mx-auto grid max-w-md grid-cols-3 items-end px-5 pt-2 pb-2.5">
-        {/* right: leaves, messages, and expiry dates */}
-        <div className="grid grid-cols-3 items-end gap-0.5">
+        {/* right: leaves and expiry dates */}
+        <div className="grid grid-cols-2 items-end gap-0.5">
           <NavLink
             to="/me/leaves"
             data-testid="bottom-nav-leaves"
@@ -45,23 +45,6 @@ export default function BottomNav() {
               <>
                 <Package className={cn("h-5 w-5 transition-transform", isActive && "scale-110")} />
                 المواد
-              </>
-            )}
-          </NavLink>
-          <NavLink
-            to="/me/messages"
-            data-testid="bottom-nav-messages"
-            className={({ isActive }) =>
-              cn(
-                "flex flex-col items-center gap-1 rounded-xl py-1.5 text-[11px] font-semibold transition-colors",
-                isActive ? "text-teal-700" : "text-slate-400 hover:text-slate-600",
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <MessageSquare className={cn("h-5 w-5 transition-transform", isActive && "scale-110")} />
-                الرسائل
               </>
             )}
           </NavLink>

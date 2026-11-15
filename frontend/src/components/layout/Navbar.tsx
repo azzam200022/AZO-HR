@@ -6,6 +6,7 @@ import { arSA } from "date-fns/locale";
 import {
   LogOut,
   Menu,
+  MessageSquare,
   Moon,
   RefreshCw,
   Sun,
@@ -127,6 +128,20 @@ export default function Navbar() {
           >
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
+          <NavLink
+            to={role === "manager" ? "/messages" : "/me/messages"}
+            aria-label="الرسائل"
+            title="الرسائل"
+            data-testid="header-messages-link"
+            className={({ isActive }) =>
+              cn(
+                "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-teal-50 hover:text-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500",
+                isActive && "bg-teal-50 text-teal-700",
+              )
+            }
+          >
+            <MessageSquare className="h-4 w-4" aria-hidden="true" />
+          </NavLink>
           <NotificationBell audience={role === "manager" ? "manager" : "employee"} />
           <div className="flex min-w-0 shrink-0 items-center gap-1 rounded-full bg-slate-100 py-1 ps-1.5 pe-1 sm:gap-2 sm:ps-3">
             <span
