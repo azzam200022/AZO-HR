@@ -172,7 +172,14 @@ export interface EmployeeProduct {
   id: string;
   name: string;
   expiry_dates: ProductExpiryBatch[];
+  custom_reminder_days: number | null;
   created_at: string;
+}
+
+export interface EmployeeProductUpdate {
+  name?: string;
+  add_expiry_date?: string;
+  custom_reminder_days?: number | null;
 }
 
 export interface PayrollItem {

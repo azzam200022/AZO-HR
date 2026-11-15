@@ -25,9 +25,11 @@ from lib.shift import effective_away_minutes, employee_shift, is_working_day, la
 from models.hr import (
     Adjustment,
     AttendanceRecord,
+    DeleteResult,
     Employee,
     EmployeeProductCreate,
     EmployeeProductRecord,
+    EmployeeProductUpdate,
     EmployeeProductView,
     EmployeeReport,
     ProductExpiryBatch,
@@ -79,6 +81,7 @@ def _product_view(doc: dict, today: date) -> EmployeeProductView:
         id=doc["id"],
         name=doc["name"],
         expiry_dates=expiry_dates,
+        custom_reminder_days=doc.get("custom_reminder_days"),
         created_at=aware(doc.get("created_at")),
     )
 
@@ -330,10 +333,71 @@ async def add_my_product(
             ProductExpiryBatch(expiry_date=expiry_date)
             for expiry_date in payload.expiry_dates
         ],
+        custom_reminder_days=payload.custom_reminder_days,
     )
     document = product.model_dump()
     await db.employee_products.insert_one(document)
     return _product_view(document, date.fromisoformat(today_iso()))
+
+
+@router.patch("/products/{product_id}", response_model=EmployeeProductView)
+async def update_my_product(
+    product_id: str,
+    payload: EmployeeProductUpdate,
+    principal: Principal = Depends(require_employee),
+):
+    """Update only a product owned by the signed-in employee."""
+    await _my_employee(principal)
+    document = await db.employee_products.find_one(
+        {"id": product_id, "employee_id": principal.employee_id}
+    )
+    if not document:
+        raise HTTPException(status_code=404, detail="المادة غير موجودة")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="لا توجد تعديلات للحفظ")
+    if updates.get("name", "not-set") is None:
+        raise HTTPException(status_code=422, detail="اسم المادة مطلوب")
+
+    add_expiry_date = updates.pop("add_expiry_date", None)
+    if add_expiry_date:
+        batches = document.get("expiry_dates") or []
+        if len(batches) >= 50:
+            raise HTTPException(status_code=409, detail="وصلت المادة إلى الحد الأقصى للتواريخ")
+        if any(batch.get("expiry_date") == add_expiry_date for batch in batches):
+            raise HTTPException(status_code=409, detail="تاريخ الانتهاء مسجّل لهذه المادة مسبقًا")
+        updates["expiry_dates"] = [
+            *batches,
+            ProductExpiryBatch(expiry_date=add_expiry_date).model_dump(),
+        ]
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="لا توجد تعديلات للحفظ")
+
+    result = await db.employee_products.update_one(
+        {"id": product_id, "employee_id": principal.employee_id},
+        {"$set": updates},
+    )
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="المادة غير موجودة")
+    document.update(updates)
+    return _product_view(document, date.fromisoformat(today_iso()))
+
+
+@router.delete("/products/{product_id}", response_model=DeleteResult)
+async def delete_my_product(
+    product_id: str,
+    principal: Principal = Depends(require_employee),
+):
+    """Delete only a product owned by the signed-in employee."""
+    await _my_employee(principal)
+    result = await db.employee_products.delete_one(
+        {"id": product_id, "employee_id": principal.employee_id}
+    )
+    if not result.deleted_count:
+        raise HTTPException(status_code=404, detail="المادة غير موجودة")
+    return DeleteResult(id=product_id, deleted=True)
 
 
 @router.post("/leaves", response_model=LeaveRequest, status_code=201)

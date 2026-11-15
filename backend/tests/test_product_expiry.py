@@ -11,7 +11,7 @@ from lib.product_expiry import (
     one_calendar_month_before,
     run_product_expiry_reminder_cycle,
 )
-from models.hr import EmployeeProductCreate
+from models.hr import EmployeeProductCreate, EmployeeProductUpdate
 
 
 class _Cursor:
@@ -46,10 +46,24 @@ def test_employee_product_accepts_multiple_valid_expiry_dates():
     product = EmployeeProductCreate(
         name="  حليب  ",
         expiry_dates=["2026-12-15", "2027-01-10"],
+        custom_reminder_days=5,
     )
 
     assert product.name == "حليب"
     assert product.expiry_dates == ["2026-12-15", "2027-01-10"]
+    assert product.custom_reminder_days == 5
+
+
+def test_employee_product_update_accepts_name_new_date_and_custom_reminder():
+    update = EmployeeProductUpdate(
+        name="  لبن  ",
+        add_expiry_date="2026-12-20",
+        custom_reminder_days=4,
+    )
+
+    assert update.name == "لبن"
+    assert update.add_expiry_date == "2026-12-20"
+    assert update.custom_reminder_days == 4
 
 
 @pytest.mark.parametrize(
@@ -64,6 +78,22 @@ def test_employee_product_accepts_multiple_valid_expiry_dates():
 def test_employee_product_rejects_invalid_or_duplicate_expiry_dates(payload):
     with pytest.raises(ValidationError):
         EmployeeProductCreate(**payload)
+
+
+@pytest.mark.parametrize("days", [0, 366, -1])
+def test_employee_product_rejects_out_of_range_custom_reminder(days):
+    with pytest.raises(ValidationError):
+        EmployeeProductCreate(
+            name="حليب",
+            expiry_dates=["2026-12-15"],
+            custom_reminder_days=days,
+        )
+
+
+@pytest.mark.parametrize("expiry_date", ["2026-02-30", "15-12-2026", ""])
+def test_employee_product_update_rejects_invalid_added_expiry_date(expiry_date):
+    with pytest.raises(ValidationError):
+        EmployeeProductUpdate(add_expiry_date=expiry_date)
 
 
 def test_one_month_reminder_clamps_to_the_last_day_of_shorter_month():
@@ -83,6 +113,30 @@ def test_one_month_reminder_clamps_to_the_last_day_of_shorter_month():
 )
 def test_expiry_reminders_are_due_on_the_requested_lead_dates(expiry, today, expected):
     assert due_expiry_reminders(expiry, today) == expected
+
+
+def test_custom_expiry_reminder_is_added_alongside_default_reminders():
+    assert due_expiry_reminders(
+        "2026-12-15",
+        date(2026, 12, 11),
+        custom_reminder_days=4,
+    ) == [("custom-4", "4 أيام")]
+
+
+@pytest.mark.parametrize(
+    ("expiry", "custom_days", "today", "expected"),
+    [
+        ("2026-12-15", 7, date(2026, 12, 8), [("7", "7 أيام")]),
+        ("2026-12-15", 30, date(2026, 11, 15), [("month", "شهر")]),
+    ],
+)
+def test_custom_expiry_reminder_does_not_duplicate_a_default_date(
+    expiry,
+    custom_days,
+    today,
+    expected,
+):
+    assert due_expiry_reminders(expiry, today, custom_days) == expected
 
 
 @pytest.mark.parametrize(
@@ -136,4 +190,42 @@ async def test_reminder_cycle_targets_only_the_active_product_owner():
         expiry_date="2026-12-15",
         reminder_key="month",
         reminder_label="شهر",
+    )
+
+
+@pytest.mark.asyncio
+async def test_reminder_cycle_sends_a_custom_reminder_for_the_product():
+    database = SimpleNamespace(
+        employee_products=_Collection(
+            [
+                {
+                    "id": "product-1",
+                    "employee_id": "employee-1",
+                    "name": "لبن",
+                    "custom_reminder_days": 4,
+                    "expiry_dates": [{"id": "batch-1", "expiry_date": "2026-12-15"}],
+                }
+            ]
+        ),
+        employees=_Collection(
+            [{"id": "employee-1", "name": "موظف", "status": "active"}]
+        ),
+    )
+    send = AsyncMock()
+
+    attempted = await run_product_expiry_reminder_cycle(
+        date(2026, 12, 11),
+        database=database,
+        reminder_sender=send,
+    )
+
+    assert attempted == 1
+    send.assert_awaited_once_with(
+        employee={"id": "employee-1", "name": "موظف", "status": "active"},
+        product_id="product-1",
+        product_name="لبن",
+        batch_id="batch-1",
+        expiry_date="2026-12-15",
+        reminder_key="custom-4",
+        reminder_label="4 أيام",
     )
