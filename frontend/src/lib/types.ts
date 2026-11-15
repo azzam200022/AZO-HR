@@ -159,6 +159,22 @@ export interface LeaveWithEmployee extends LeaveRequest {
   employee_name: string;
 }
 
+export type ProductExpiryStatus = "far" | "near" | "expired";
+
+export interface ProductExpiryBatch {
+  id: string;
+  expiry_date: string;
+  days_remaining: number;
+  status: ProductExpiryStatus;
+}
+
+export interface EmployeeProduct {
+  id: string;
+  name: string;
+  expiry_dates: ProductExpiryBatch[];
+  created_at: string;
+}
+
 export interface PayrollItem {
   id: string;
   employee_id: string;
@@ -197,7 +213,7 @@ export interface Adjustment {
 
 export interface AppNotification {
   id: string;
-  kind: "late" | "left_site" | "returned_site" | "message" | "bonus" | "deduction" | "attendance" | "payroll" | "leave_request" | "leave_status" | "shift_reminder";
+  kind: "late" | "left_site" | "returned_site" | "message" | "bonus" | "deduction" | "attendance" | "payroll" | "leave_request" | "leave_status" | "shift_reminder" | "product_expiry";
   audience: "manager" | "employee";
   employee_id: string;
   employee_name: string;

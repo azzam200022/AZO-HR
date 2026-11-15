@@ -85,6 +85,7 @@ def _notification_content(note: dict[str, Any]) -> tuple[str, str, dict[str, str
         "leave_request": "طلب إجازة جديد",
         "leave_status": "تحديث الإجازة",
         "shift_reminder": "تذكير بموعد الدوام",
+        "product_expiry": "تذكير بانتهاء صلاحية مادة",
     }
     title = title_by_kind.get(kind, "مواردي")
     fallback = "لديك تحديث جديد في لوحة الإدارة." if audience == "manager" else "لديك إشعار جديد."
