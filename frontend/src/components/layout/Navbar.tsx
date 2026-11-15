@@ -24,7 +24,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { MANAGER_NAV } from "@/components/layout/manager-navigation";
+import { MANAGER_SIDEBAR_NAV } from "@/components/layout/manager-navigation";
 
 export default function Navbar() {
   const { session, role, logout, theme, setTheme } = useAuth();
@@ -128,20 +128,22 @@ export default function Navbar() {
           >
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
-          <NavLink
-            to={role === "manager" ? "/messages" : "/me/messages"}
-            aria-label="الرسائل"
-            title="الرسائل"
-            data-testid="header-messages-link"
-            className={({ isActive }) =>
-              cn(
-                "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-teal-50 hover:text-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500",
-                isActive && "bg-teal-50 text-teal-700",
-              )
-            }
-          >
-            <MessageSquare className="h-4 w-4" aria-hidden="true" />
-          </NavLink>
+          {role === "employee" && (
+            <NavLink
+              to="/me/messages"
+              aria-label="الرسائل"
+              title="الرسائل"
+              data-testid="header-messages-link"
+              className={({ isActive }) =>
+                cn(
+                  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-teal-50 hover:text-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500",
+                  isActive && "bg-teal-50 text-teal-700",
+                )
+              }
+            >
+              <MessageSquare className="h-4 w-4" aria-hidden="true" />
+            </NavLink>
+          )}
           <NotificationBell audience={role === "manager" ? "manager" : "employee"} />
           <div className="flex min-w-0 shrink-0 items-center gap-1 rounded-full bg-slate-100 py-1 ps-1.5 pe-1 sm:gap-2 sm:ps-3">
             <span
@@ -177,10 +179,10 @@ export default function Navbar() {
           >
             <SheetHeader className="border-b border-slate-100 px-5 pb-5 pt-10">
               <SheetTitle className="text-lg font-extrabold text-slate-900">قائمة التنقل</SheetTitle>
-              <SheetDescription>جميع أقسام لوحة الإدارة في مكان واحد.</SheetDescription>
+              <SheetDescription>التنقل بين أقسام الإدارة والرسائل.</SheetDescription>
             </SheetHeader>
             <nav className="flex-1 space-y-1 overflow-y-auto p-3" aria-label="أقسام الإدارة">
-              {MANAGER_NAV.map(({ to, label, icon: Icon, testid }) => (
+              {MANAGER_SIDEBAR_NAV.map(({ to, label, icon: Icon, testid }) => (
                 <NavLink
                   key={to}
                   to={to}
