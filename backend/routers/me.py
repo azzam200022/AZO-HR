@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
 from lib.auth import Principal, require_employee
-from lib.employee_photo import employee_photo_response
+from lib.employee_photo import employee_photo_response, product_photo_response
 from lib.attendance_calendar import daily_attendance_records
 from lib.cycle import report_cycle_bounds
 from lib.dates import aware, current_month, now_time, today_iso
@@ -84,6 +84,7 @@ def _product_view(doc: dict, today: date) -> EmployeeProductView:
         name=doc["name"],
         expiry_dates=expiry_dates,
         custom_reminder_days=doc.get("custom_reminder_days"),
+        has_photo=bool(doc.get("photo_data")),
         created_at=aware(doc.get("created_at")),
     )
 
@@ -344,8 +345,23 @@ async def add_my_product(
         custom_reminder_days=payload.custom_reminder_days,
     )
     document = product.model_dump()
+    document["photo_data"] = payload.photo_data
     await db.employee_products.insert_one(document)
     return _product_view(document, date.fromisoformat(today_iso()))
+
+
+@router.get("/products/{product_id}/photo", response_class=Response)
+async def my_product_photo(
+    product_id: str,
+    principal: Principal = Depends(require_employee),
+):
+    """Only the signed-in employee can view the photo of their own product."""
+    product = await db.employee_products.find_one(
+        {"id": product_id, "employee_id": principal.employee_id}
+    )
+    if not product:
+        raise HTTPException(status_code=404, detail="المادة غير موجودة")
+    return product_photo_response(product)
 
 
 @router.patch("/products/{product_id}", response_model=EmployeeProductView)

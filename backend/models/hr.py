@@ -319,6 +319,9 @@ class EmployeeProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     expiry_dates: list[str] = Field(min_length=1, max_length=50)
     custom_reminder_days: int | None = Field(default=None, ge=1, le=365)
+    photo_data: str = Field(
+        default="", max_length=420_000, pattern=EMPLOYEE_PHOTO_PATTERN
+    )
 
     @field_validator("name")
     @classmethod
@@ -349,6 +352,9 @@ class EmployeeProductUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     add_expiry_date: str | None = None
     custom_reminder_days: int | None = Field(default=None, ge=1, le=365)
+    photo_data: str | None = Field(
+        default=None, max_length=420_000, pattern=EMPLOYEE_PHOTO_PATTERN
+    )
 
     @field_validator("name")
     @classmethod
@@ -400,6 +406,7 @@ class EmployeeProductView(BaseModel):
     name: str
     expiry_dates: list[ProductExpiryBatchView]
     custom_reminder_days: int | None = None
+    has_photo: bool = False
     created_at: datetime
 
 

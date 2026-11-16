@@ -25,8 +25,8 @@ function encodeJpeg(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
   });
 }
 
-/** Shrink employee photos before storing them with the employee record. */
-export async function prepareEmployeePhoto(file: File): Promise<string> {
+/** Resize and compress an image before storing it with an app record. */
+export async function preparePhotoData(file: File): Promise<string> {
   if (!ALLOWED_TYPES.has(file.type)) {
     throw new Error("اختر صورة بصيغة JPG أو PNG أو WebP");
   }
