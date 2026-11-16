@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Megaphone, MessageSquare, Send, Users } from "lucide-react";
+import { ArrowRight, Megaphone, MessageSquare, Send, Users } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { errorText, fmtDate, formatNumber } from "@/lib/format";
 import type { BroadcastResult, MarkAllResult, Message, MessageThread } from "@/lib/types";
@@ -23,7 +23,8 @@ export default function Messages() {
   });
   const [draft, setDraft] = useState("");
   const [broadcastMode, setBroadcastMode] = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
+  const messageListRef = useRef<HTMLDivElement>(null);
+  const [mobileView, setMobileView] = useState<"threads" | "chat">("threads");
 
   const threadsQuery = useQuery({
     queryKey: ["message-threads"],
@@ -47,8 +48,10 @@ export default function Messages() {
   );
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+    const list = messageListRef.current;
+    if (!list) return;
+    list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+  }, [messages.length, active.thread, active.employeeId]);
 
   // Opening a thread clears its unread badge for the manager.
   const readMutation = useMutation({
@@ -104,7 +107,7 @@ export default function Messages() {
   const sending = sendMutation.isPending || broadcastMutation.isPending;
 
   return (
-    <FadeIn>
+    <FadeIn className="flex min-h-0 flex-col">
       <PageHeader
         title="الرسائل"
         description="محادثة خاصة مع كل موظف، ومجموعة عامة لإعلانات الفريق."
@@ -124,8 +127,11 @@ export default function Messages() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[18rem_minmax(0,1fr)] xl:gap-5">
-        <aside className="flex min-h-[18rem] max-h-[25rem] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs lg:max-h-[36rem] lg:min-h-[32rem]">
+      <div className="grid h-[clamp(18rem,calc(100dvh_-_25rem),42rem)] min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)] gap-3 overflow-hidden md:grid-cols-[18rem_minmax(0,1fr)] md:grid-rows-1 xl:gap-5" data-testid="messages-workspace">
+        <aside className={cn(
+          "min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs",
+          mobileView === "chat" ? "hidden md:flex" : "flex",
+        )}>
           <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-4 py-3.5">
             <div>
               <h2 className="text-sm font-bold text-slate-900">المحادثات</h2>
@@ -152,7 +158,10 @@ export default function Messages() {
                     <li key={`${t.thread}-${t.employee_id}`}>
                       <button
                         type="button"
-                        onClick={() => setActive({ thread: t.thread, employeeId: t.employee_id })}
+                        onClick={() => {
+                          setActive({ thread: t.thread, employeeId: t.employee_id });
+                          setMobileView("chat");
+                        }}
                         className={cn(
                           "flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-start transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500",
                           isActive
@@ -198,8 +207,22 @@ export default function Messages() {
           )}
         </aside>
 
-        <section className="flex min-h-[30rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+        <section className={cn(
+          "min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs",
+          mobileView === "threads" ? "hidden md:flex" : "flex",
+        )}>
           <header className="flex items-center gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-3.5 sm:px-5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => setMobileView("threads")}
+              aria-label="العودة إلى المحادثات"
+              data-testid="message-back-btn"
+              className="h-9 w-9 shrink-0 rounded-xl md:hidden"
+            >
+              <ArrowRight className="h-4 w-4" />
+            </Button>
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-teal-100 text-teal-700">
               {active.thread === "group" ? <Users className="h-4.5 w-4.5" /> : activeThread?.name.charAt(0) ?? <MessageSquare className="h-4 w-4" />}
             </span>
@@ -219,7 +242,7 @@ export default function Messages() {
             </div>
           </header>
 
-          <div className="flex-1 space-y-4 overflow-y-auto bg-slate-50/60 px-3 py-4 sm:px-5" data-testid="message-list">
+          <div ref={messageListRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain bg-slate-50/60 px-3 py-4 sm:px-5" data-testid="message-list">
             {messagesQuery.isLoading ? (
               <LoadingBlock className="h-40" />
             ) : messages.length === 0 ? (
@@ -259,10 +282,9 @@ export default function Messages() {
                 </div>
               ))
             )}
-            <div ref={endRef} />
           </div>
 
-          <footer className="border-t border-slate-100 bg-white p-3 sm:p-4">
+          <footer className="shrink-0 border-t border-slate-100 bg-white p-3 sm:p-4">
             {broadcastMode && (
               <div className="mb-3 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-xs text-amber-800">
                 <Megaphone className="mt-0.5 h-4 w-4 shrink-0" />
