@@ -252,6 +252,7 @@ export interface MessageThread {
   employee_id: string;
   name: string;
   job_title: string;
+  has_photo: boolean;
   messages: number;
   unread: number;
   last_body: string;
