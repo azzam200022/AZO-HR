@@ -147,8 +147,8 @@ export default function Dashboard() {
                         {employeeName(leave.employee_id)}
                       </p>
                       <p className="mt-0.5 text-xs text-slate-500">
-                        {LEAVE_TYPE_LABELS[leave.leave_type]} • {fmtDate(leave.start_date)} ←{" "}
-                        {fmtDate(leave.end_date)}
+                        {LEAVE_TYPE_LABELS[leave.leave_type]} • {fmtDate(leave.start_date)}
+                        {leave.start_date !== leave.end_date && <> ← {fmtDate(leave.end_date)}</>}
                       </p>
                     </div>
                     {employees.length > 0 && (

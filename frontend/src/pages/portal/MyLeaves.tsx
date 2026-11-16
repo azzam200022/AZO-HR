@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { CalendarPlus } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { errorText, fmtDate, formatNumber, todayStr } from "@/lib/format";
+import { leaveRequestDates, type LeaveDuration } from "@/lib/leave-date-range";
 import {
   LEAVE_STATUS_LABELS,
   LEAVE_TYPE_LABELS,
@@ -58,13 +59,34 @@ export default function MyLeaves() {
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [leaveForm, setLeaveForm] = useState<{
     leave_type: LeaveType;
+    duration: LeaveDuration;
+    single_date: string;
     start_date: string;
     end_date: string;
     reason: string;
-  }>({ leave_type: "annual", start_date: todayStr(), end_date: todayStr(), reason: "" });
+  }>({
+    leave_type: "annual",
+    duration: "range",
+    single_date: todayStr(),
+    start_date: todayStr(),
+    end_date: todayStr(),
+    reason: "",
+  });
 
   const leaveMutation = useMutation({
-    mutationFn: () => apiPost<LeaveRequest>("/me/leaves", leaveForm),
+    mutationFn: () => {
+      const dates = leaveRequestDates(
+        leaveForm.duration,
+        leaveForm.single_date,
+        leaveForm.start_date,
+        leaveForm.end_date,
+      );
+      return apiPost<LeaveRequest>("/me/leaves", {
+        leave_type: leaveForm.leave_type,
+        ...dates,
+        reason: leaveForm.reason,
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["me"] });
       setLeaveOpen(false);
@@ -74,7 +96,17 @@ export default function MyLeaves() {
   });
 
   const submitLeave = () => {
-    if (leaveForm.end_date < leaveForm.start_date) {
+    const { start_date, end_date } = leaveRequestDates(
+      leaveForm.duration,
+      leaveForm.single_date,
+      leaveForm.start_date,
+      leaveForm.end_date,
+    );
+    if (!start_date || !end_date) {
+      toast.error("اختر تاريخ الإجازة");
+      return;
+    }
+    if (end_date < start_date) {
       toast.error("تاريخ النهاية يجب أن يكون بعد تاريخ البداية");
       return;
     }
@@ -162,7 +194,9 @@ export default function MyLeaves() {
                     />
                   </div>
                   <p className="mt-1 text-xs tabular-nums text-slate-500">
-                    {fmtDate(leave.start_date)} ← {fmtDate(leave.end_date)}
+                    {leave.start_date === leave.end_date
+                      ? fmtDate(leave.start_date)
+                      : `${fmtDate(leave.start_date)} ← ${fmtDate(leave.end_date)}`}
                   </p>
                   {leave.reason && <p className="mt-1 text-xs text-slate-500">السبب: {leave.reason}</p>}
                   {leave.manager_note && (
@@ -202,28 +236,62 @@ export default function MyLeaves() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="leave-start">من تاريخ</Label>
-                <Input
-                  id="leave-start"
-                  type="date"
-                  value={leaveForm.start_date}
-                  onChange={(e) => setLeaveForm({ ...leaveForm, start_date: e.target.value })}
-                  data-testid="leave-start-input"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="leave-end">إلى تاريخ</Label>
-                <Input
-                  id="leave-end"
-                  type="date"
-                  value={leaveForm.end_date}
-                  onChange={(e) => setLeaveForm({ ...leaveForm, end_date: e.target.value })}
-                  data-testid="leave-end-input"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label>مدة الإجازة</Label>
+              <Select
+                value={leaveForm.duration}
+                onValueChange={(value: string) =>
+                  setLeaveForm({ ...leaveForm, duration: value as LeaveDuration })
+                }
+              >
+                <SelectTrigger data-testid="leave-duration-select">
+                  <SelectValue>
+                    {(value: string) =>
+                      value === "single" ? "إجازة يومية (يوم واحد)" : "عدة أيام"
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="range">عدة أيام</SelectItem>
+                  <SelectItem value="single">إجازة يومية (يوم واحد)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+            {leaveForm.duration === "single" ? (
+              <div className="space-y-2">
+                <Label htmlFor="leave-single-date">تاريخ الإجازة</Label>
+                <Input
+                  id="leave-single-date"
+                  type="date"
+                  value={leaveForm.single_date}
+                  onChange={(e) => setLeaveForm({ ...leaveForm, single_date: e.target.value })}
+                  data-testid="leave-single-date-input"
+                />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="leave-start">من تاريخ</Label>
+                  <Input
+                    id="leave-start"
+                    type="date"
+                    value={leaveForm.start_date}
+                    onChange={(e) => setLeaveForm({ ...leaveForm, start_date: e.target.value })}
+                    data-testid="leave-start-input"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="leave-end">إلى تاريخ</Label>
+                  <Input
+                    id="leave-end"
+                    type="date"
+                    value={leaveForm.end_date}
+                    onChange={(e) => setLeaveForm({ ...leaveForm, end_date: e.target.value })}
+                    data-testid="leave-end-input"
+                  />
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="leave-reason">السبب</Label>
               <Textarea
