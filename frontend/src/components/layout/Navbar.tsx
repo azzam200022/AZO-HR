@@ -149,19 +149,36 @@ export default function Navbar() {
           >
             <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
           </Button>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            aria-label={theme === "dark" ? "تفعيل الوضع النهاري" : "تفعيل الوضع الليلي"}
-            aria-pressed={theme === "dark"}
-            title={theme === "dark" ? "تفعيل الوضع النهاري" : "تفعيل الوضع الليلي"}
-            data-testid="theme-toggle-btn"
-            className="shrink-0"
-          >
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button>
+          {role === "manager" ? (
+            <NavLink
+              to="/messages"
+              aria-label="الرسائل"
+              title="الرسائل"
+              data-testid="header-manager-messages-link"
+              className={({ isActive }) =>
+                cn(
+                  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-teal-50 hover:text-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500",
+                  isActive && "bg-teal-50 text-teal-700",
+                )
+              }
+            >
+              <MessageSquare className="h-4 w-4" aria-hidden="true" />
+            </NavLink>
+          ) : (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              aria-label={theme === "dark" ? "تفعيل الوضع النهاري" : "تفعيل الوضع الليلي"}
+              aria-pressed={theme === "dark"}
+              title={theme === "dark" ? "تفعيل الوضع النهاري" : "تفعيل الوضع الليلي"}
+              data-testid="theme-toggle-btn"
+              className="shrink-0"
+            >
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
+          )}
           {role === "employee" && (
             <NavLink
               to="/me/messages"
@@ -211,9 +228,22 @@ export default function Navbar() {
             className="w-[min(22rem,88vw)] border-slate-200 bg-white p-0"
             data-testid="manager-navigation-drawer"
           >
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              aria-label={theme === "dark" ? "تفعيل الوضع النهاري" : "تفعيل الوضع الليلي"}
+              aria-pressed={theme === "dark"}
+              title={theme === "dark" ? "تفعيل الوضع النهاري" : "تفعيل الوضع الليلي"}
+              data-testid="manager-drawer-theme-toggle"
+              className="absolute left-4 top-4 z-10 h-9 w-9 rounded-xl border-slate-200 text-slate-700"
+            >
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
             <SheetHeader className="border-b border-slate-100 px-5 pb-5 pt-10">
               <SheetTitle className="text-lg font-extrabold text-slate-900">قائمة التنقل</SheetTitle>
-              <SheetDescription>التنقل بين أقسام الإدارة والرسائل.</SheetDescription>
+              <SheetDescription>التنقل بين أقسام الإدارة.</SheetDescription>
             </SheetHeader>
             <nav className="flex-1 space-y-1 overflow-y-auto p-3" aria-label="أقسام الإدارة">
               {MANAGER_SIDEBAR_NAV.map(({ to, label, icon: Icon, testid }) => (

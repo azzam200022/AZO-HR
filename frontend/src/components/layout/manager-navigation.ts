@@ -28,9 +28,8 @@ export const MANAGER_NAV: ManagerNavItem[] = [
   { to: "/locations", label: "المواقع", icon: MapPin, testid: "nav-locations" },
 ];
 
-// Sidebar order starts with messages, then lists the remaining manager sections.
+// Messages live in the manager's top bar; the sidebar lists the remaining sections.
 export const MANAGER_SIDEBAR_NAV: ManagerNavItem[] = [
-  MANAGER_NAV[6],
   MANAGER_NAV[0],
   MANAGER_NAV[2],
   MANAGER_NAV[3],
