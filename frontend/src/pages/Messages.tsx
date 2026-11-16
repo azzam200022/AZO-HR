@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowRight, Megaphone, MessageSquare, Send, Users } from "lucide-react";
-import { apiGet, apiPost } from "@/lib/api";
+import MessageAvatar from "@/components/MessageAvatar";
+import { apiGet, apiPost, getApiOrigin } from "@/lib/api";
 import { errorText, fmtDate, formatNumber } from "@/lib/format";
 import type { BroadcastResult, MarkAllResult, Message, MessageThread } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -110,7 +111,6 @@ export default function Messages() {
     <FadeIn className="flex min-h-0 flex-col">
       <PageHeader
         title="الرسائل"
-        description="محادثة خاصة مع كل موظف، ومجموعة عامة لإعلانات الفريق."
         testid="messages-title"
         action={
           <Button
@@ -127,7 +127,7 @@ export default function Messages() {
         }
       />
 
-      <div className="grid h-[clamp(18rem,calc(100dvh_-_25rem),42rem)] min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)] gap-3 overflow-hidden md:grid-cols-[18rem_minmax(0,1fr)] md:grid-rows-1 xl:gap-5" data-testid="messages-workspace">
+      <div className="grid h-[calc(100dvh_-_18rem)] min-h-[18rem] min-w-0 grid-cols-1 grid-rows-[minmax(0,1fr)] gap-3 overflow-hidden md:grid-cols-[18rem_minmax(0,1fr)] md:grid-rows-1 xl:gap-5" data-testid="messages-workspace">
         <aside className={cn(
           "min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs",
           mobileView === "chat" ? "hidden md:flex" : "flex",
@@ -170,16 +170,22 @@ export default function Messages() {
                         )}
                         data-testid={`message-thread-${t.thread === "group" ? "group" : t.employee_id}`}
                       >
-                        <span
-                          className={cn(
-                            "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-bold",
-                            t.thread === "group"
-                              ? "bg-teal-100 text-teal-700"
-                              : "bg-slate-100 text-slate-700",
-                          )}
-                        >
-                          {t.thread === "group" ? <Users className="h-4 w-4" /> : t.name.charAt(0)}
-                        </span>
+                        {t.thread === "group" ? (
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-teal-100 text-teal-700">
+                            <Users className="h-4 w-4" />
+                          </span>
+                        ) : (
+                          <MessageAvatar
+                            name={t.name}
+                            photoUrl={
+                              t.has_photo
+                                ? `${getApiOrigin()}/api/employees/${t.employee_id}/photo`
+                                : undefined
+                            }
+                            size="md"
+                            testId={`message-thread-avatar-${t.employee_id}`}
+                          />
+                        )}
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center justify-between gap-2">
                             <span className={cn("truncate text-sm font-semibold", isActive ? "text-teal-900" : "text-slate-900")}>
@@ -223,9 +229,22 @@ export default function Messages() {
             >
               <ArrowRight className="h-4 w-4" />
             </Button>
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-teal-100 text-teal-700">
-              {active.thread === "group" ? <Users className="h-4.5 w-4.5" /> : activeThread?.name.charAt(0) ?? <MessageSquare className="h-4 w-4" />}
-            </span>
+            {active.thread === "group" ? (
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-teal-100 text-teal-700">
+                <Users className="h-4 w-4" />
+              </span>
+            ) : (
+              <MessageAvatar
+                name={activeThread?.name ?? "الموظف"}
+                photoUrl={
+                  activeThread?.has_photo
+                    ? `${getApiOrigin()}/api/employees/${activeThread.employee_id}/photo`
+                    : undefined
+                }
+                size="md"
+                testId="active-thread-avatar"
+              />
+            )}
             <div className="min-w-0">
               <p className="truncate text-sm font-bold text-slate-900" data-testid="active-thread-name">
                 {activeThread?.name ?? "مجموعة الفريق"}
@@ -253,34 +272,61 @@ export default function Messages() {
                 />
               </div>
             ) : (
-              messages.map((m) => (
-                <div
-                  key={m.id}
-                  className={cn("flex", m.sender === "manager" ? "justify-start" : "justify-end")}
-                  data-testid={`message-${m.id}`}
-                >
-                  <div className="max-w-[88%] sm:max-w-[75%]">
+              messages.map((m) => {
+                const senderThread =
+                  m.sender === "employee"
+                    ? threads.find((t) => t.thread === "direct" && t.employee_id === m.employee_id)
+                    : undefined;
+                const senderPhotoUrl = senderThread?.has_photo
+                  ? `${getApiOrigin()}/api/employees/${m.employee_id}/photo`
+                  : undefined;
+                return (
+                  <div
+                    key={m.id}
+                    className={cn(
+                      "flex items-end gap-2",
+                      m.sender === "manager" ? "justify-start" : "justify-end",
+                    )}
+                    data-testid={`message-${m.id}`}
+                  >
+                    {m.sender === "employee" && (
+                      <MessageAvatar
+                        name={senderThread?.name || m.sender_name}
+                        photoUrl={senderPhotoUrl}
+                        testId={`message-avatar-${m.id}`}
+                      />
+                    )}
                     <div
                       className={cn(
-                        "rounded-2xl px-4 py-3 text-sm shadow-xs",
-                        m.sender === "manager"
-                          ? "rounded-ss-sm bg-teal-600 text-white"
-                          : "rounded-se-sm border border-slate-200 bg-white text-slate-800",
+                        "min-w-0",
+                        m.sender === "employee"
+                          ? "max-w-[calc(100%_-_3rem)] sm:max-w-[calc(75%_-_3rem)]"
+                          : "max-w-[88%] sm:max-w-[75%]",
                       )}
                     >
-                      <p className="whitespace-pre-wrap leading-relaxed">{m.body}</p>
+                      <div
+                        className={cn(
+                          "rounded-2xl px-4 py-3 text-sm shadow-xs",
+                          m.sender === "manager"
+                            ? "rounded-ss-sm bg-teal-600 text-white"
+                            : "rounded-se-sm border border-slate-200 bg-white text-slate-800",
+                        )}
+                      >
+                        <p className="whitespace-pre-wrap leading-relaxed">{m.body}</p>
+                      </div>
+                      <p
+                        className={cn(
+                          "mt-1.5 px-1 text-[10px] text-slate-500",
+                          m.sender === "manager" && "text-teal-700",
+                        )}
+                      >
+                        {m.sender === "manager" ? "الإدارة" : m.sender_name} ·{" "}
+                        {fmtDate(m.created_at.slice(0, 10))} {timeOf(m.created_at)}
+                      </p>
                     </div>
-                    <p
-                      className={cn(
-                        "mt-1.5 px-1 text-[10px] text-slate-500",
-                        m.sender === "manager" && "text-teal-700",
-                      )}
-                    >
-                      {m.sender === "manager" ? "الإدارة" : m.sender_name} · {fmtDate(m.created_at.slice(0, 10))} {timeOf(m.created_at)}
-                    </p>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 
