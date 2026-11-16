@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Send, Users } from "lucide-react";
+import { Send, Users, X } from "lucide-react";
 import MessageAvatar from "@/components/MessageAvatar";
 import { apiGet, apiPost, getApiOrigin } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -10,7 +11,7 @@ import type { Employee, MarkAllResult, Message } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { EmptyState, FadeIn, LoadingBlock, PageHeader } from "@/components/shared";
+import { EmptyState, FadeIn, LoadingBlock } from "@/components/shared";
 import { cn } from "@/lib/utils";
 
 const timeOf = (iso: string) => {
@@ -21,7 +22,13 @@ const timeOf = (iso: string) => {
 /** Employee side: a private thread with the manager plus the read/write team channel. */
 export default function MyMessages() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { session } = useAuth();
+  const closeMessages = () => {
+    const historyIndex = window.history.state?.idx;
+    if (typeof historyIndex === "number" && historyIndex > 0) navigate(-1);
+    else navigate("/me", { replace: true });
+  };
   const [thread, setThread] = useState<"direct" | "group">("direct");
   const [draft, setDraft] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
@@ -67,11 +74,14 @@ export default function MyMessages() {
   });
 
   return (
-    <FadeIn className="flex min-h-0 flex-col">
-      <PageHeader
-        title="الرسائل"
-        testid="my-messages-title"
-      />
+    <FadeIn className="flex h-full min-h-0 flex-col overflow-hidden bg-background pt-[env(safe-area-inset-top)]">
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-3 sm:px-5" data-testid="my-messages-app-header">
+        <Button type="button" variant="ghost" size="icon" onClick={closeMessages} aria-label="العودة إلى التطبيق" title="العودة إلى التطبيق" data-testid="my-messages-close-btn" className="h-10 w-10 shrink-0 rounded-xl">
+          <X className="h-5 w-5" />
+        </Button>
+        <h1 className="text-lg font-bold text-slate-900" data-testid="my-messages-title">الرسائل</h1>
+      </header>
+      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-3 pb-[env(safe-area-inset-bottom)] sm:px-4">
 
       <Tabs value={thread} onValueChange={(v) => setThread(v as "direct" | "group")}>
         <TabsList className="mb-3 w-full" data-testid="my-messages-tabs">
@@ -85,7 +95,7 @@ export default function MyMessages() {
         </TabsList>
       </Tabs>
 
-      <section className="flex h-[calc(100dvh_-_21rem)] min-h-[18rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
         <header className="flex shrink-0 items-center gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-3.5">
           {thread === "direct" ? (
             <MessageAvatar
@@ -190,6 +200,7 @@ export default function MyMessages() {
           </div>
         </footer>
       </section>
+      </div>
     </FadeIn>
   );
 }
