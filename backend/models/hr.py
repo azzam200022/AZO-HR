@@ -460,6 +460,7 @@ class MessageThread(BaseModel):
     employee_id: str = ""
     name: str
     job_title: str = ""
+    has_photo: bool = False
     messages: int = 0
     unread: int = 0
     last_body: str = ""
