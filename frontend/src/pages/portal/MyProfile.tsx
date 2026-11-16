@@ -118,7 +118,7 @@ export default function MyProfile() {
           showIdentity={false}
           showAttendanceLog={false}
           showMonthPicker={false}
-          showLeaveBalance
+          showLeaveBalance={false}
           reportLabel={`تقرير حضور الدورة ${activeAttendanceCycle === "current" ? "الحالية" : "السابقة"}`}
           adjustmentsCycleSelector={
             <CycleSelector
