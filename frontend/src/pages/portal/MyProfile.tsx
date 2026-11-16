@@ -16,10 +16,50 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type CycleSelection = "current" | "previous";
 
+function CycleSelector({
+  label,
+  value,
+  onChange,
+  hasPreviousCycle,
+  testidPrefix,
+}: {
+  label: string;
+  value: CycleSelection;
+  onChange: (value: CycleSelection) => void;
+  hasPreviousCycle: boolean;
+  testidPrefix: string;
+}) {
+  return (
+    <Tabs
+      value={value}
+      onValueChange={(next) => onChange(next as CycleSelection)}
+      className="w-full"
+    >
+      <TabsList
+        className="grid w-full grid-cols-2"
+        aria-label={label}
+        data-testid={`${testidPrefix}-cycle-tabs`}
+      >
+        <TabsTrigger value="current" data-testid={`${testidPrefix}-current-cycle`}>
+          الدورة الحالية
+        </TabsTrigger>
+        <TabsTrigger
+          value="previous"
+          disabled={!hasPreviousCycle}
+          data-testid={`${testidPrefix}-previous-cycle`}
+        >
+          الدورة السابقة
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  );
+}
+
 /** The employee's own profile and cycle-by-cycle reports. */
 export default function MyProfile() {
   const queryClient = useQueryClient();
-  const [selectedCycle, setSelectedCycle] = useState<CycleSelection>("current");
+  const [selectedAdjustmentsCycle, setSelectedAdjustmentsCycle] = useState<CycleSelection>("current");
+  const [selectedAttendanceCycle, setSelectedAttendanceCycle] = useState<CycleSelection>("current");
   const currentReportQuery = useQuery({
     queryKey: ["me", "report", "cycle", "current"],
     queryFn: () => apiGet<EmployeeReport>("/me/report?cycle=current"),
@@ -36,20 +76,10 @@ export default function MyProfile() {
       previousAttendance.cycle_start !== currentAttendance.cycle_start &&
       previousAttendance.cycle_end >= (currentReportQuery.data?.employee.hire_date ?? ""),
   );
-  const activeCycle =
-    selectedCycle === "previous" && hasPreviousCycle ? "previous" : "current";
-  const cycleReports = [
-    {
-      value: "current" as const,
-      label: "الدورة الحالية",
-      query: currentReportQuery,
-    },
-    {
-      value: "previous" as const,
-      label: "الدورة السابقة",
-      query: previousReportQuery,
-    },
-  ];
+  const activeAdjustmentsCycle =
+    selectedAdjustmentsCycle === "previous" && hasPreviousCycle ? "previous" : "current";
+  const activeAttendanceCycle =
+    selectedAttendanceCycle === "previous" && hasPreviousCycle ? "previous" : "current";
   const trackingConsentQuery = useQuery({
     queryKey: ["me", "tracking-consent"],
     queryFn: () => apiGet<TrackingConsent>("/me/tracking-consent"),
@@ -73,61 +103,43 @@ export default function MyProfile() {
     <FadeIn>
       <PageHeader
         title="ملفي الشخصي"
-        description="اختر الدورة لعرض حضورك والحوافز والخصومات المسجّلة خلالها."
         testid="my-profile-title"
       />
-      <Tabs
-        value={activeCycle}
-        onValueChange={(value) => setSelectedCycle(value as CycleSelection)}
-        className="mt-4"
-      >
-        <TabsList className="grid w-full grid-cols-2" data-testid="my-profile-cycle-tabs">
-          <TabsTrigger value="current" data-testid="my-profile-current-cycle">
-            الدورة الحالية
-          </TabsTrigger>
-          <TabsTrigger
-            value="previous"
-            disabled={!hasPreviousCycle}
-            data-testid="my-profile-previous-cycle"
-          >
-            الدورة السابقة
-          </TabsTrigger>
-        </TabsList>
-        {previousReportQuery.isError ? (
-          <p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">
-            تعذّر تحميل تقرير الدورة السابقة.
-          </p>
-        ) : (
-          !previousReportQuery.isLoading &&
-          currentAttendance &&
-          previousAttendance &&
-          !hasPreviousCycle && (
-            <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
-              لا توجد دورة سابقة ضمن فترة عملك بعد.
-            </p>
-          )
-        )}
-        {cycleReports.map(({ value, label, query }) => (
-          <TabsContent key={value} value={value} className="mt-3">
-            {value === "previous" && !hasPreviousCycle ? (
-              null
-            ) : (
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
-                <EmployeeReportPanel
-                  report={query.data}
-                  isLoading={query.isLoading}
-                  adjustmentsPath={`/me/adjustments?cycle=${value}`}
-                  showAttendanceLog={false}
-                  showMonthPicker={false}
-                  showLeaveBalance={value === "current"}
-                  reportLabel={`تقرير حضور ${label}`}
-                  testidPrefix={`my-report-${value}`}
-                />
-              </div>
-            )}
-          </TabsContent>
-        ))}
-      </Tabs>
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+        <EmployeeReportPanel
+          report={currentReportQuery.data}
+          attendanceReport={
+            activeAttendanceCycle === "previous"
+              ? previousReportQuery.data?.attendance
+              : undefined
+          }
+          isLoading={currentReportQuery.isLoading}
+          adjustmentsPath={`/me/adjustments?cycle=${activeAdjustmentsCycle}`}
+          showIdentity={false}
+          showAttendanceLog={false}
+          showMonthPicker={false}
+          showLeaveBalance
+          reportLabel={`تقرير حضور الدورة ${activeAttendanceCycle === "current" ? "الحالية" : "السابقة"}`}
+          adjustmentsCycleSelector={
+            <CycleSelector
+              label="دورة الحوافز والخصومات"
+              value={activeAdjustmentsCycle}
+              onChange={setSelectedAdjustmentsCycle}
+              hasPreviousCycle={hasPreviousCycle}
+              testidPrefix="my-profile-adjustments"
+            />
+          }
+          attendanceCycleSelector={
+            <CycleSelector
+              label="دورة الحضور"
+              value={activeAttendanceCycle}
+              onChange={setSelectedAttendanceCycle}
+              hasPreviousCycle={hasPreviousCycle}
+              testidPrefix="my-profile-attendance"
+            />
+          }
+        />
+      </div>
       <div
         className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-xs"
         data-testid="tracking-consent-card"

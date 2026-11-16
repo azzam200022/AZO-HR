@@ -38,6 +38,7 @@ import {
   type Adjustment,
   type EmployeeReport,
   type LeaveStatus,
+  type MonthlyAttendanceReport,
 } from "@/lib/types";
 import { EmptyState, LoadingBlock, StatusBadge } from "@/components/shared";
 import { Input } from "@/components/ui/input";
@@ -86,6 +87,10 @@ export default function EmployeeReportPanel({
   showLeaveBalance = true,
   reportLabel,
   testidPrefix = "report",
+  attendanceReport,
+  adjustmentsCycleSelector,
+  attendanceCycleSelector,
+  showIdentity = true,
 }: {
   report: EmployeeReport | undefined;
   isLoading: boolean;
@@ -98,6 +103,10 @@ export default function EmployeeReportPanel({
   showLeaveBalance?: boolean;
   reportLabel?: string;
   testidPrefix?: string;
+  attendanceReport?: MonthlyAttendanceReport;
+  adjustmentsCycleSelector?: React.ReactNode;
+  attendanceCycleSelector?: React.ReactNode;
+  showIdentity?: boolean;
 }) {
   const adjustmentsQuery = useQuery({
     queryKey: ["employee-adjustments", adjustmentsPath],
@@ -109,6 +118,7 @@ export default function EmployeeReportPanel({
   if (!report) return <EmptyState title="لا يوجد تقرير" />;
 
   const { employee, attendance, leaves, balance, location_name } = report;
+  const selectedAttendanceReport = attendanceReport ?? attendance;
   const takenLeaves = leaves.filter((l) => l.status !== "rejected");
   const adjustmentItems = adjustmentsQuery.data ?? [];
   const bonusTotal = adjustmentItems
@@ -121,26 +131,28 @@ export default function EmployeeReportPanel({
   return (
     <div className="space-y-5" data-testid={`${testidPrefix}-panel`}>
       {/* Identity */}
-      <div className="flex items-center gap-3">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500 to-teal-700 text-lg font-bold text-white">
-          {employee.name.slice(0, 1)}
-        </span>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-bold text-slate-900" data-testid={`${testidPrefix}-name`}>
-            {employee.name}
-          </p>
-          <p className="truncate text-xs text-slate-500">{employee.job_title}</p>
-          <p className="mt-0.5 text-[11px] tabular-nums text-slate-400">
-            مباشرة العمل: {fmtDate(employee.hire_date)}
-          </p>
+      {showIdentity && (
+        <div className="flex items-center gap-3">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500 to-teal-700 text-lg font-bold text-white">
+            {employee.name.slice(0, 1)}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-slate-900" data-testid={`${testidPrefix}-name`}>
+              {employee.name}
+            </p>
+            <p className="truncate text-xs text-slate-500">{employee.job_title}</p>
+            <p className="mt-0.5 text-[11px] tabular-nums text-slate-400">
+              مباشرة العمل: {fmtDate(employee.hire_date)}
+            </p>
+          </div>
         </div>
-      </div>
-
+      )}
       {/* Bonuses and deductions */}
       <section
         className="rounded-xl border border-slate-200 bg-white p-3.5"
         data-testid={testidPrefix + "-adjustments"}
       >
+        {adjustmentsCycleSelector}
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-bold text-slate-800">الحوافز والخصومات</p>
           {adjustmentsQuery.data && (
@@ -290,9 +302,10 @@ export default function EmployeeReportPanel({
 
       {/* Attendance-cycle report */}
       <div>
+        {attendanceCycleSelector}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-bold text-slate-800">
-            {reportLabel ?? `تقرير حضور ${monthLabel(month ?? attendance.month)}`}
+            {reportLabel ?? `تقرير حضور ${monthLabel(month ?? selectedAttendanceReport.month)}`}
           </p>
           {showMonthPicker && month && onMonthChange && (
             <Input
@@ -307,46 +320,46 @@ export default function EmployeeReportPanel({
         <div className="mt-2.5 grid grid-cols-2 gap-2">
           <Stat
             label="أيام الحضور"
-            value={formatNumber(attendance.days_present)}
+            value={formatNumber(selectedAttendanceReport.days_present)}
             icon={<CalendarCheck className="h-3 w-3" />}
           />
           <Stat
             label="أيام الغياب"
-            value={formatNumber(attendance.days_absent)}
+            value={formatNumber(selectedAttendanceReport.days_absent)}
             icon={<CalendarCheck className="h-3 w-3" />}
           />
           <Stat
             label="أيام مكتملة"
-            value={formatNumber(attendance.days_complete)}
+            value={formatNumber(selectedAttendanceReport.days_complete)}
             icon={<TrendingUp className="h-3 w-3" />}
           />
           <Stat
             label="إجمالي ساعات العمل"
-            value={hours(attendance.total_minutes)}
+            value={hours(selectedAttendanceReport.total_minutes)}
             icon={<Clock3 className="h-3 w-3" />}
           />
           <Stat
             label="متوسط وقت الحضور"
-            value={attendance.avg_check_in || "—"}
+            value={selectedAttendanceReport.avg_check_in || "—"}
             icon={<CalendarClock className="h-3 w-3" />}
           />
           <Stat
             label="أيام التأخير"
-            value={formatNumber(attendance.late_days)}
+            value={formatNumber(selectedAttendanceReport.late_days)}
             icon={<AlarmClock className="h-3 w-3" />}
           />
           <Stat
             label="إجمالي التأخير"
-            value={lateLabel(attendance.total_late_minutes)}
+            value={lateLabel(selectedAttendanceReport.total_late_minutes)}
             icon={<AlarmClock className="h-3 w-3" />}
           />
         </div>
-        {attendance.total_away_minutes > 0 && (
+        {selectedAttendanceReport.total_away_minutes > 0 && (
           <p
             className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800"
             data-testid={`${testidPrefix}-away-note`}
           >
-            يشمل الإجمالي {lateLabel(attendance.total_away_minutes)} احتُسبت نتيجة مغادرة موقع
+            يشمل الإجمالي {lateLabel(selectedAttendanceReport.total_away_minutes)} احتُسبت نتيجة مغادرة موقع
             العمل أثناء الدوام.
           </p>
         )}
@@ -354,9 +367,9 @@ export default function EmployeeReportPanel({
           <>
             {/* The employee portal has a dedicated "My Log" tab for daily records. */}
             <p className="mt-3 text-[11px] font-bold text-slate-700">
-              السجل اليومي الكامل ({formatNumber(attendance.records.length)} يوم)
+              السجل اليومي الكامل ({formatNumber(selectedAttendanceReport.records.length)} يوم)
             </p>
-            {attendance.records.length === 0 ? (
+            {selectedAttendanceReport.records.length === 0 ? (
               <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
                 لا توجد سجلات حضور في هذه الدورة.
               </p>
@@ -378,7 +391,7 @@ export default function EmployeeReportPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {[...attendance.records]
+                    {[...selectedAttendanceReport.records]
                       .sort((a, b) => a.date.localeCompare(b.date))
                       .map((rec) => (
                         <tr
