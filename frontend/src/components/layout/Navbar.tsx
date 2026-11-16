@@ -95,9 +95,14 @@ export default function Navbar() {
                 <Users className="h-5 w-5" />
               </span>
             )}
-            <Link to="/me" data-testid="brand-link" className="min-w-0 leading-tight">
-              <span className="block text-base font-extrabold tracking-tight text-slate-900">مواردي</span>
-              <span className="block text-[11px] font-medium text-slate-500 max-[500px]:hidden">إدارة الموارد البشرية</span>
+            <Link to="/me" data-testid="brand-link" className="min-w-0 truncate leading-tight">
+              <span
+                className="block max-w-32 truncate text-base font-extrabold tracking-tight text-slate-900 sm:max-w-48"
+                data-testid="employee-header-name"
+                title={employeeProfileQuery.data?.name || session?.name || "الموظف"}
+              >
+                {employeeProfileQuery.data?.name || session?.name || "الموظف"}
+              </span>
             </Link>
           </div>
         ) : (
