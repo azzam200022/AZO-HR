@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { DEFAULT_WORK_DAYS, WORK_DAYS, workDaysLabel } from "@/lib/work-days";
 import { EMPLOYEE_STATUS_LABELS, type AccessCodeResult, type Employee, type EmployeeReport, type EmployeeStatus, type WorkLocation } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import EmployeeAvatar from "@/components/EmployeeAvatar";
 import {
   Dialog,
@@ -44,6 +45,47 @@ import {
   StatusBadge,
 } from "@/components/shared";
 import EmployeeReportPanel from "@/components/EmployeeReportPanel";
+
+type CycleSelection = "current" | "previous";
+
+function CycleSelector({
+  label,
+  value,
+  onChange,
+  hasPreviousCycle,
+  testidPrefix,
+}: {
+  label: string;
+  value: CycleSelection;
+  onChange: (value: CycleSelection) => void;
+  hasPreviousCycle: boolean;
+  testidPrefix: string;
+}) {
+  return (
+    <Tabs
+      value={value}
+      onValueChange={(next) => onChange(next as CycleSelection)}
+      className="w-full"
+    >
+      <TabsList
+        className="grid w-full grid-cols-2"
+        aria-label={label}
+        data-testid={`${testidPrefix}-cycle-tabs`}
+      >
+        <TabsTrigger value="current" data-testid={`${testidPrefix}-current-cycle`}>
+          الدورة الحالية
+        </TabsTrigger>
+        <TabsTrigger
+          value="previous"
+          disabled={!hasPreviousCycle}
+          data-testid={`${testidPrefix}-previous-cycle`}
+        >
+          الدورة السابقة
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  );
+}
 
 interface EmployeeForm {
   name: string;
@@ -104,12 +146,51 @@ export default function Employees() {
   const [deleting, setDeleting] = useState<Employee | null>(null);
   const [reportFor, setReportFor] = useState<Employee | null>(null);
   const [reportMonth, setReportMonth] = useState(currentMonthStr());
+  const [selectedAdjustmentsCycle, setSelectedAdjustmentsCycle] =
+    useState<CycleSelection>("current");
 
   const reportQuery = useQuery({
     queryKey: ["employee-report", reportFor?.id, reportMonth],
     queryFn: () => apiGet<EmployeeReport>(`/employees/${reportFor!.id}/report?month=${reportMonth}`),
     enabled: !!reportFor,
   });
+  const currentCycleReportQuery = useQuery({
+    queryKey: ["employee-report-cycle", reportFor?.id, "current"],
+    queryFn: () =>
+      apiGet<EmployeeReport>(
+        `/employees/${encodeURIComponent(reportFor!.id)}/report?cycle=current`,
+      ),
+    enabled: !!reportFor,
+  });
+  const previousCycleReportQuery = useQuery({
+    queryKey: ["employee-report-cycle", reportFor?.id, "previous"],
+    queryFn: () =>
+      apiGet<EmployeeReport>(
+        `/employees/${encodeURIComponent(reportFor!.id)}/report?cycle=previous`,
+      ),
+    enabled: !!reportFor,
+  });
+  const currentCycleAttendance = currentCycleReportQuery.data?.attendance;
+  const previousCycleAttendance = previousCycleReportQuery.data?.attendance;
+  const hasPreviousCycle = Boolean(
+    currentCycleAttendance &&
+      previousCycleAttendance &&
+      previousCycleAttendance.cycle_start !== currentCycleAttendance.cycle_start &&
+      previousCycleAttendance.cycle_end >=
+        (currentCycleReportQuery.data?.employee.hire_date ?? ""),
+  );
+  const activeAdjustmentsCycle =
+    selectedAdjustmentsCycle === "previous" && hasPreviousCycle ? "previous" : "current";
+  const activeAdjustmentsAttendance =
+    activeAdjustmentsCycle === "previous"
+      ? previousCycleAttendance
+      : currentCycleAttendance;
+  const adjustmentsPath =
+    reportFor &&
+    activeAdjustmentsAttendance?.cycle_start &&
+    activeAdjustmentsAttendance.cycle_end
+      ? `/adjustments?employee_id=${encodeURIComponent(reportFor.id)}&cycle_start=${activeAdjustmentsAttendance.cycle_start}&cycle_end=${activeAdjustmentsAttendance.cycle_end}`
+      : "";
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["employees"] });
@@ -449,6 +530,7 @@ export default function Employees() {
                         variant="ghost"
                         onClick={() => {
                           setReportMonth(currentMonthStr());
+                          setSelectedAdjustmentsCycle("current");
                           setReportFor(emp);
                         }}
                         data-testid={`employee-report-btn-${emp.id}`}
@@ -798,13 +880,36 @@ export default function Employees() {
           </DialogHeader>
           <EmployeeReportPanel
             report={reportQuery.data}
-            isLoading={reportQuery.isLoading}
+            isLoading={
+              reportQuery.isLoading ||
+              currentCycleReportQuery.isLoading ||
+              previousCycleReportQuery.isLoading
+            }
             month={reportMonth}
             onMonthChange={setReportMonth}
-            adjustmentsPath={
-              reportQuery.data?.attendance.cycle_start
-                ? `/adjustments?employee_id=${reportFor?.id ?? ""}&cycle_start=${reportQuery.data.attendance.cycle_start}&cycle_end=${reportQuery.data.attendance.cycle_end}`
-                : `/adjustments?employee_id=${reportFor?.id ?? ""}`
+            adjustmentsPath={adjustmentsPath}
+            adjustmentsCycleSelector={
+              <div className="space-y-1">
+                <CycleSelector
+                  label="دورة الحوافز والخصومات"
+                  value={activeAdjustmentsCycle}
+                  onChange={setSelectedAdjustmentsCycle}
+                  hasPreviousCycle={hasPreviousCycle}
+                  testidPrefix="manager-adjustments"
+                />
+                {(currentCycleReportQuery.isError || previousCycleReportQuery.isError) && (
+                  <p className="text-[11px] text-rose-700">
+                    تعذّر تحميل بيانات الدورة. تحقق من الاتصال ثم أعد المحاولة.
+                  </p>
+                )}
+                {currentCycleReportQuery.isSuccess &&
+                  previousCycleReportQuery.isSuccess &&
+                  !hasPreviousCycle && (
+                    <p className="text-[11px] text-slate-500">
+                      لا توجد دورة سابقة لهذا الموظف.
+                    </p>
+                  )}
+              </div>
             }
             showSalary
             testidPrefix="manager-report"
