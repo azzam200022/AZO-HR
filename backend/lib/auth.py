@@ -86,16 +86,24 @@ class Principal(BaseModel):
 
 async def create_session(role: str, *, email: str = "", employee_id: str = "") -> str:
     token = secrets.token_urlsafe(32)
-    await db.sessions.insert_one(
-        {
-            "token": token,
-            "role": role,
-            "email": email,
-            "employee_id": employee_id,
-            "created_at": datetime.now(timezone.utc),
-            "expires_at": datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS),
-        }
-    )
+    session = {
+        "token": token,
+        "role": role,
+        "email": email,
+        "employee_id": employee_id,
+        "created_at": datetime.now(timezone.utc),
+        "expires_at": datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS),
+    }
+    if role == "employee":
+        employee_identity = {"role": role, "employee_id": employee_id}
+        # A new employee login takes over the account. Remove old sessions and device
+        # notification registrations, then atomically keep one current session.
+        await db.push_tokens.delete_many(employee_identity)
+        await db.web_push_subscriptions.delete_many(employee_identity)
+        await db.sessions.delete_many(employee_identity)
+        await db.sessions.replace_one(employee_identity, session, upsert=True)
+    else:
+        await db.sessions.insert_one(session)
     return token
 
 
