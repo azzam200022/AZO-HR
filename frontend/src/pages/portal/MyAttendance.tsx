@@ -13,6 +13,7 @@ import {
 } from "@/lib/background-location";
 import {
   errorText,
+  fmtDate,
   formatIQD,
   formatNumber,
   lateLabel,
@@ -62,6 +63,10 @@ export default function MyAttendance() {
     queryKey: ["me", "report", "cycle", "current"],
     queryFn: () => apiGet<EmployeeReport>("/me/report?cycle=current"),
   });
+  const previousProfileQuery = useQuery({
+    queryKey: ["me", "report", "cycle", "previous"],
+    queryFn: () => apiGet<EmployeeReport>("/me/report?cycle=previous"),
+  });
   const [payslipCycle, setPayslipCycle] = useState<"current" | "previous">("current");
   const payrollQuery = useQuery({
     queryKey: ["me", "payroll", "cycle", payslipCycle],
@@ -89,6 +94,30 @@ export default function MyAttendance() {
     : undefined;
   const todayRecord = records.find((record) => record.date === today) ?? openOvernightRecord;
   const payslip = (payrollQuery.data ?? [])[0];
+  const currentReportCycle = profileQuery.data?.attendance;
+  const previousReportCycle = previousProfileQuery.data?.attendance;
+  const hasPreviousCycle = Boolean(
+    currentReportCycle &&
+      previousReportCycle &&
+      previousReportCycle.cycle_start !== currentReportCycle.cycle_start &&
+      previousReportCycle.cycle_end >= (profileQuery.data?.employee.hire_date ?? ""),
+  );
+  const selectedReportCycle = payslipCycle === "previous" ? previousReportCycle : currentReportCycle;
+  const selectedCycleReportLoading =
+    profileQuery.isFetching || (payslipCycle === "previous" && previousProfileQuery.isFetching);
+  const selectedCycleReportError =
+    profileQuery.isError || (payslipCycle === "previous" && previousProfileQuery.isError);
+  const noPreviousCycle =
+    payslipCycle === "previous" &&
+    profileQuery.isSuccess &&
+    previousProfileQuery.isSuccess &&
+    !hasPreviousCycle;
+  const payslipMatchesSelectedCycle = Boolean(
+    payslip &&
+      selectedReportCycle &&
+      payslip.cycle_start === selectedReportCycle.cycle_start &&
+      payslip.cycle_end === selectedReportCycle.cycle_end,
+  );
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -432,6 +461,7 @@ export default function MyAttendance() {
               size="sm"
               variant={payslipCycle === "previous" ? "default" : "outline"}
               aria-pressed={payslipCycle === "previous"}
+              disabled={profileQuery.isFetching || previousProfileQuery.isFetching}
               onClick={() => setPayslipCycle("previous")}
               data-testid="payslip-cycle-previous"
             >
@@ -440,15 +470,37 @@ export default function MyAttendance() {
           </div>
         }
       >
-        {payrollQuery.isLoading ? (
+        {selectedCycleReportLoading || payrollQuery.isLoading ? (
           <LoadingBlock className="h-24" />
-        ) : !payslip ? (
+        ) : selectedCycleReportError ? (
+          <EmptyState
+            title="تعذّر التحقق من الدورة المحددة"
+            description="تحقق من الاتصال ثم أعد المحاولة."
+          />
+        ) : noPreviousCycle ? (
+          <EmptyState
+            title="هذا الموظف لا يملك دورة سابقة"
+            description="لا توجد دورة سابقة لعرض مسير الراتب."
+          />
+        ) : payrollQuery.isError ? (
+          <EmptyState
+            title="تعذّر تحميل مسير الراتب"
+            description="تحقق من الاتصال ثم أعد المحاولة."
+          />
+        ) : !payslip || !payslipMatchesSelectedCycle ? (
           <EmptyState
             title={`لا يوجد مسير للدورة ${payslipCycle === "current" ? "الحالية" : "السابقة"}`}
-            description="سيظهر المسير هنا بعد اعتماده من الإدارة."
+            description={
+              payslip
+                ? "المسير المستلم لا يطابق نطاق الدورة المختارة."
+                : "سيظهر المسير هنا بعد اعتماده من الإدارة."
+            }
           />
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7" data-testid="payslip-breakdown">
+            <p className="col-span-full rounded-xl bg-slate-50 px-3 py-2 text-center text-[11px] text-slate-500" data-testid="payslip-cycle-range">
+              دورة المسير: <span dir="ltr" className="tabular-nums">{fmtDate(payslip.cycle_start)} ← {fmtDate(payslip.cycle_end)}</span>
+            </p>
             <div className="rounded-xl bg-slate-50 p-3 text-center">
               <p className="text-[11px] text-slate-500">الأساسي</p>
               <p className="mt-1 text-xs font-bold tabular-nums text-slate-900">{formatIQD(payslip.base_salary)}</p>
