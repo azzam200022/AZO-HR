@@ -1,11 +1,12 @@
-"""Read-time daily attendance statuses derived from punches, shifts, and approved leave.
+"""Read-time attendance statuses derived from punches, registration, shifts, and leave.
 
-Synthetic absence/holiday rows are never persisted as punches and do not add payroll deductions.
+Synthetic calendar rows are never persisted as punches. Pre-registration days appear as
+holidays, while only synthetic absences contribute to payroll deductions.
 """
 
 from datetime import date as date_type, datetime, time as time_type, timedelta
 
-from lib.dates import aware, now_utc
+from lib.dates import aware, local_date, now_utc
 from lib.shift import (
     effective_away_minutes,
     employee_shift,
@@ -79,6 +80,8 @@ def daily_attendance_records(
     start_day = max(start_day, hire_day)
     if end_day < start_day:
         return []
+    registered_day = local_date(employee.get("created_at"))
+    registration_day = date_type.fromisoformat(registered_day) if registered_day else None
 
     rows: dict[str, AttendanceRecord] = {}
     for doc in attendance_docs:
@@ -95,6 +98,8 @@ def daily_attendance_records(
             day_iso = day.isoformat()
             if day_iso not in rows:
                 if not is_working_day(day_iso, employee.get("work_days")):
+                    status = "holiday"
+                elif registration_day and day < registration_day:
                     status = "holiday"
                 elif any(
                     (leave.get("start_date", "") <= day_iso <= leave.get("end_date", ""))

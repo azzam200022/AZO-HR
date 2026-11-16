@@ -45,3 +45,10 @@ def aware(value):
     if isinstance(value, datetime) and value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value
+
+
+def local_date(value: datetime | None, tz: str | None = None) -> str | None:
+    """Return a timestamp's business date in the app timezone."""
+    if not isinstance(value, datetime):
+        return None
+    return aware(value).astimezone(_zone(tz)).date().isoformat()
