@@ -25,11 +25,11 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>يستخدم مواردي موقعك أثناء الدوام لتسجيل الحضور والتحقق من وجودك ضمن موقع العمل، حتى عند انتقال التطبيق إلى الخلفية.</string>
+	<string>يستخدم AZO HR موقعك أثناء الدوام لتسجيل الحضور والتحقق من وجودك ضمن موقع العمل، حتى عند انتقال التطبيق إلى الخلفية.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>يستخدم مواردي موقعك أثناء الدوام لتسجيل الحضور والتحقق من موقع العمل.</string>
+	<string>يستخدم AZO HR موقعك أثناء الدوام لتسجيل الحضور والتحقق من موقع العمل.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>يستخدم مواردي موقعك لتسجيل الحضور والتحقق من موقع العمل. لا يبدأ التتبع الخلفي إلا بعد موافقتك.</string>
+	<string>يستخدم AZO HR موقعك لتسجيل الحضور والتحقق من موقع العمل. لا يبدأ التتبع الخلفي إلا بعد موافقتك.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

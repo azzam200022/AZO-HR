@@ -106,7 +106,7 @@ public class BackgroundTrackingPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
             return
         }
         guard locationManager.authorizationStatus == .authorizedAlways else {
-            call.reject("يلزم السماح لمواردي بالوصول إلى الموقع دائماً.")
+            call.reject("يلزم السماح لAZO HR بالوصول إلى الموقع دائماً.")
             return
         }
         guard CLLocationManager.locationServicesEnabled() else {

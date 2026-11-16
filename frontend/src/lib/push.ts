@@ -243,7 +243,7 @@ async function ensureNativeListeners() {
       await FirebaseMessaging.addListener("notificationReceived", ({ notification }) => {
         const body = notification.body?.trim();
         if (body) {
-          void showPush(notification.title?.trim() || "مواردي", body);
+          void showPush(notification.title?.trim() || "AZO HR", body);
         }
       });
     })().catch((error) => {

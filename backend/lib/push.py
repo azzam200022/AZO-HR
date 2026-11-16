@@ -87,7 +87,7 @@ def _notification_content(note: dict[str, Any]) -> tuple[str, str, dict[str, str
         "shift_reminder": "تذكير بموعد الدوام",
         "product_expiry": "تذكير بانتهاء صلاحية مادة",
     }
-    title = title_by_kind.get(kind, "مواردي")
+    title = title_by_kind.get(kind, "AZO HR")
     fallback = "لديك تحديث جديد في لوحة الإدارة." if audience == "manager" else "لديك إشعار جديد."
     body = str(note.get("message") or fallback).strip()
     if len(body) > 240:

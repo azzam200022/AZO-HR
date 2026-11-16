@@ -1,11 +1,29 @@
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { NavLink } from "react-router-dom";
 import { CalendarDays, ClipboardList, Fingerprint, Package, UserRound } from "lucide-react";
+import { apiGet, getApiOrigin } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import type { Employee } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // Employee bottom navigation (RTL): leaves and materials on the right, the raised punch button
 // in the middle, and the log/profile links together on the left. Messages live in the header.
 
 export default function BottomNav() {
+  const { session, role } = useAuth();
+  const employeeProfileQuery = useQuery({
+    queryKey: ["me", "profile", session?.employee_id],
+    queryFn: () => apiGet<Employee>("/me/profile"),
+    enabled: role === "employee" && Boolean(session?.employee_id),
+  });
+  const photoUrl = employeeProfileQuery.data?.has_photo
+    ? `${getApiOrigin()}/api/me/photo`
+    : undefined;
+  const [photoError, setPhotoError] = useState(false);
+
+  useEffect(() => setPhotoError(false), [photoUrl]);
+
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_-6px_rgba(15,23,42,0.18)] backdrop-blur-md"
@@ -107,7 +125,21 @@ export default function BottomNav() {
           >
             {({ isActive }) => (
               <>
-                <UserRound className={cn("h-5 w-5 transition-transform", isActive && "scale-110")} />
+                {photoUrl && !photoError ? (
+                  <img
+                    src={photoUrl}
+                    alt=""
+                    aria-hidden="true"
+                    className={cn("h-6 w-6 rounded-full object-cover ring-1 ring-slate-200 transition-transform", isActive && "scale-110")}
+                    onError={() => setPhotoError(true)}
+                    data-testid="bottom-nav-profile-photo"
+                  />
+                ) : (
+                  <UserRound
+                    className={cn("h-5 w-5 transition-transform", isActive && "scale-110")}
+                    data-testid="bottom-nav-profile-icon"
+                  />
+                )}
                 ملفي
               </>
             )}

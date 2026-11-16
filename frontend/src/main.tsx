@@ -27,7 +27,7 @@ function renderApplication() {
           scope: import.meta.env.BASE_URL,
         })
         .catch((error: unknown) => {
-          console.warn('مواردي: تعذر تسجيل عامل الخدمة.', error)
+          console.warn('AZO HR: تعذر تسجيل عامل الخدمة.', error)
         })
     }
 
@@ -84,7 +84,7 @@ async function redirectPagesToSameOrigin(): Promise<boolean> {
 if (import.meta.env.PROD && window.location.hostname === 'azzam200022.github.io' && API_ORIGIN) {
   root.render(
     <div className="flex min-h-svh items-center justify-center bg-slate-50 text-sm text-slate-600" dir="rtl">
-      جارٍ فتح مواردي…
+      جارٍ فتح AZO HR…
     </div>,
   )
   void redirectPagesToSameOrigin().then((redirected) => {

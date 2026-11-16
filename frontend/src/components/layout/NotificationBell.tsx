@@ -108,14 +108,14 @@ export default function NotificationBell({ audience }: Props) {
             shift_reminder: "تذكير بموعد الدوام",
             product_expiry: "تذكير بانتهاء صلاحية مادة",
           };
-          const title = latest ? titleByKind[latest.kind] : "مواردي — تنبيه جديد";
+          const title = latest ? titleByKind[latest.kind] : "AZO HR — تنبيه جديد";
           return showPush(
             title,
             latest?.message ?? fallback,
             latest?.id ? `mawaridi-${latest.id}` : "mawaridi",
           );
         })
-        .catch(() => showPush("مواردي — تنبيه جديد", fallback));
+        .catch(() => showPush("AZO HR — تنبيه جديد", fallback));
     }
     lastUnread.current = unread;
   }, [unread, base]);

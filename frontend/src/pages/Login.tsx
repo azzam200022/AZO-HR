@@ -51,7 +51,7 @@ export default function Login() {
             <Users className="h-6 w-6" />
           </span>
           <div>
-            <p className="text-lg font-extrabold">مواردي</p>
+            <p className="text-lg font-extrabold">AZO HR</p>
             <p className="text-xs text-teal-200">إدارة الموارد البشرية</p>
           </div>
         </div>
@@ -78,7 +78,7 @@ export default function Login() {
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500 to-teal-700 text-white">
               <Users className="h-6 w-6" />
             </span>
-            <p className="mt-3 text-xl font-extrabold text-slate-900">مواردي</p>
+            <p className="mt-3 text-xl font-extrabold text-slate-900">AZO HR</p>
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-slate-900" data-testid="login-title">
             تسجيل الدخول

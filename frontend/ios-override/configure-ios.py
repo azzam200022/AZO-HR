@@ -11,15 +11,15 @@ with INFO_PLIST.open("rb") as source:
     info = plistlib.load(source)
 
 info["NSLocationWhenInUseUsageDescription"] = (
-    "يستخدم مواردي موقعك لتسجيل الحضور والتحقق من موقع العمل. "
+    "يستخدم AZO HR موقعك لتسجيل الحضور والتحقق من موقع العمل. "
     "لا يبدأ التتبع الخلفي إلا بعد موافقتك."
 )
 info["NSLocationAlwaysAndWhenInUseUsageDescription"] = (
-    "يستخدم مواردي موقعك أثناء الدوام لتسجيل الحضور والتحقق من وجودك ضمن موقع العمل، "
+    "يستخدم AZO HR موقعك أثناء الدوام لتسجيل الحضور والتحقق من وجودك ضمن موقع العمل، "
     "حتى عند انتقال التطبيق إلى الخلفية."
 )
 info["NSLocationAlwaysUsageDescription"] = (
-    "يستخدم مواردي موقعك أثناء الدوام لتسجيل الحضور والتحقق من موقع العمل."
+    "يستخدم AZO HR موقعك أثناء الدوام لتسجيل الحضور والتحقق من موقع العمل."
 )
 info["UIBackgroundModes"] = sorted(set(info.get("UIBackgroundModes", [])) | {"location"})
 

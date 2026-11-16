@@ -205,7 +205,7 @@ export default function MyAttendance() {
       let coords: { lat: number; lng: number } | null = null;
       if (myLocation) {
         if (!window.isSecureContext) {
-          throw new Error("تحديد الموقع يتطلب فتح مواردي عبر اتصال آمن HTTPS.");
+          throw new Error("تحديد الموقع يتطلب فتح AZO HR عبر اتصال آمن HTTPS.");
         }
         if (!navigator.geolocation) {
           throw new Error("المتصفح لا يدعم تحديد الموقع — لا يمكن تسجيل الحضور في موقع مقيّد");

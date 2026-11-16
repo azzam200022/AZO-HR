@@ -304,7 +304,7 @@ public class BackgroundLocationService extends Service implements LocationListen
             ? new Notification.Builder(this, CHANNEL_ID)
             : new Notification.Builder(this);
         builder.setSmallIcon(android.R.drawable.ic_menu_mylocation)
-            .setContentTitle("مواردي — تتبع موقع الدوام")
+            .setContentTitle("AZO HR — تتبع موقع الدوام")
             .setContentText("تُحفظ النقاط عند انقطاع الإنترنت وتُرسل عند عودته.")
             .setOngoing(true)
             .setOnlyAlertOnce(true)

@@ -42,7 +42,7 @@ async function ensureBackgroundLocationPermissions(requestMissingPermissions: bo
   if (Capacitor.getPlatform() === "ios" && requestMissingPermissions) {
     const permission = await BackgroundTracking.requestBackgroundPermissions();
     if (!permission.granted) {
-      throw new Error("اسمح لمواردي بالوصول إلى الموقع دائماً لتتبّع الدوام عند إغلاق التطبيق.");
+      throw new Error("اسمح لAZO HR بالوصول إلى الموقع دائماً لتتبّع الدوام عند إغلاق التطبيق.");
     }
   }
 }

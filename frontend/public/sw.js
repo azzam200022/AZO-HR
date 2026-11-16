@@ -62,7 +62,7 @@ self.addEventListener('push', (event) => {
       if (visibleAppIsOpen) return
 
       const notification = payload.notification ?? payload
-      const title = notification.title ?? payload.title ?? 'مواردي — إشعار جديد'
+      const title = notification.title ?? payload.title ?? 'AZO HR — إشعار جديد'
       const body =
         notification.body ?? payload.body ?? 'لديك تحديث جديد. افتح التطبيق للاطلاع على التفاصيل.'
       const notificationData = payload.data ?? {}
