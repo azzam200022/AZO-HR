@@ -118,6 +118,38 @@ def test_hire_date_limits_synthetic_records():
     assert records("2026-11-05", employee=new_hire) == []
 
 
+def test_pre_registration_workday_is_holiday_in_baghdad_timezone(monkeypatch):
+    monkeypatch.setenv("APP_TZ", "Asia/Baghdad")
+    new_employee = staff(created_at=datetime(2026, 11, 4, 22, 0))
+
+    # Mongo stores naive timestamps as UTC; 22:00 UTC is 01:00 the next day in Baghdad.
+    before_registration = records("2026-11-04", employee=new_employee)
+    assert len(before_registration) == 1
+    assert before_registration[0].status == "holiday"
+    assert before_registration[0].is_synthetic is True
+
+    result = records("2026-11-05", employee=new_employee)
+    assert len(result) == 1
+    assert result[0].status == "absent"
+
+
+def test_historical_punch_before_registration_is_preserved():
+    new_employee = staff(created_at=datetime(2026, 11, 5, 6, tzinfo=timezone.utc))
+    punch = {
+        "id": "attendance-before-registration",
+        "employee_id": "employee-1",
+        "date": "2026-11-04",
+        "check_in": "09:00",
+        "check_out": "17:00",
+    }
+
+    result = records("2026-11-04", employee=new_employee, punches=[punch])
+
+    assert len(result) == 1
+    assert result[0].status == "present"
+    assert result[0].is_synthetic is False
+
+
 def test_open_departure_counts_until_shift_end_for_payroll():
     punch = {"date": "2026-11-05", "outside_since": "15:55", "away_minutes": 0}
     assert effective_away_minutes(punch, "17:05", "2026-11-05", "08:00", "16:00") == 5
