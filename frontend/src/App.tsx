@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import Navbar from "@/components/layout/Navbar";
 import BottomNav from "@/components/layout/BottomNav";
@@ -48,21 +48,25 @@ function EmployeeOnly({ children }: { children: ReactNode }) {
 
 function Shell() {
   const { session, isLoading, role } = useAuth();
+  const location = useLocation();
 
   if (isLoading) return <Splash />;
   if (!session?.authenticated) return <Login />;
 
   const isEmployee = role === "employee";
+  const isMessagingScreen = location.pathname === "/messages" || location.pathname === "/me/messages";
 
   return (
-    <div className="min-h-svh bg-background text-foreground">
-      <Navbar />
-      {isEmployee && <PresenceTracker />}
+    <div className={isMessagingScreen ? "h-dvh overflow-hidden bg-background text-foreground" : "min-h-svh bg-background text-foreground"}>
+      {!isMessagingScreen && <Navbar />}
+      {isEmployee && !isMessagingScreen && <PresenceTracker />}
       <main
         className={
-          isEmployee
-            ? "mx-auto min-w-0 w-full max-w-2xl px-3 pt-6 pb-32 sm:px-4 md:px-6"
-            : "mx-auto min-w-0 w-full max-w-7xl px-3 pt-6 pb-32 sm:px-4 md:px-8"
+          isMessagingScreen
+            ? "h-full min-h-0 w-full overflow-hidden"
+            : isEmployee
+              ? "mx-auto min-w-0 w-full max-w-2xl px-3 pt-6 pb-32 sm:px-4 md:px-6"
+              : "mx-auto min-w-0 w-full max-w-7xl px-3 pt-6 pb-32 sm:px-4 md:px-8"
         }
       >
         <Routes>
@@ -175,8 +179,8 @@ function Shell() {
           <Route path="*" element={<Navigate to={role === "manager" ? "/" : "/me"} replace />} />
         </Routes>
       </main>
-      {isEmployee && <BottomNav />}
-      {!isEmployee && <ManagerBottomNav />}
+      {!isMessagingScreen && isEmployee && <BottomNav />}
+      {!isMessagingScreen && !isEmployee && <ManagerBottomNav />}
     </div>
   );
 }

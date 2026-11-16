@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowRight, Megaphone, MessageSquare, Send, Users } from "lucide-react";
+import { ArrowRight, Megaphone, MessageSquare, Send, Users, X } from "lucide-react";
 import MessageAvatar from "@/components/MessageAvatar";
 import { apiGet, apiPost, getApiOrigin } from "@/lib/api";
 import { errorText, fmtDate, formatNumber } from "@/lib/format";
 import type { BroadcastResult, MarkAllResult, Message, MessageThread } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { EmptyState, FadeIn, LoadingBlock, PageHeader, StatusBadge } from "@/components/shared";
+import { EmptyState, FadeIn, LoadingBlock, StatusBadge } from "@/components/shared";
 import { cn } from "@/lib/utils";
 
 const timeOf = (iso: string) => {
@@ -18,6 +19,12 @@ const timeOf = (iso: string) => {
 
 export default function Messages() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const closeMessages = () => {
+    const historyIndex = window.history.state?.idx;
+    if (typeof historyIndex === "number" && historyIndex > 0) navigate(-1);
+    else navigate("/", { replace: true });
+  };
   const [active, setActive] = useState<{ thread: "direct" | "group"; employeeId: string }>({
     thread: "group",
     employeeId: "",
@@ -108,34 +115,34 @@ export default function Messages() {
   const sending = sendMutation.isPending || broadcastMutation.isPending;
 
   return (
-    <FadeIn className="flex min-h-0 flex-col">
-      <PageHeader
-        title="الرسائل"
-        testid="messages-title"
-        action={
-          <Button
-            type="button"
-            variant={broadcastMode ? "default" : "outline"}
-            aria-pressed={broadcastMode}
-            onClick={() => setBroadcastMode((v) => !v)}
-            className="rounded-xl"
-            data-testid="broadcast-toggle-btn"
-          >
-            <Megaphone className="h-4 w-4" />
-            {broadcastMode ? "وضع الإرسال للجميع مفعّل" : "إرسال للجميع"}
-          </Button>
-        }
-      />
+    <FadeIn className="flex h-full min-h-0 flex-col overflow-hidden bg-background pt-[env(safe-area-inset-top)]">
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 sm:gap-3 sm:px-5" data-testid="messages-app-header">
+        <Button type="button" variant="ghost" size="icon" onClick={closeMessages} aria-label="العودة إلى التطبيق" title="العودة إلى التطبيق" data-testid="messages-close-btn" className="h-10 w-10 shrink-0 rounded-xl">
+          <X className="h-5 w-5" />
+        </Button>
+        <h1 className="min-w-0 flex-1 truncate text-lg font-bold text-slate-900" data-testid="messages-title">الرسائل</h1>
+        <Button
+          type="button"
+          variant={broadcastMode ? "default" : "outline"}
+          aria-pressed={broadcastMode}
+          onClick={() => setBroadcastMode((v) => !v)}
+          className="shrink-0 rounded-xl px-3 text-xs sm:text-sm"
+          data-testid="broadcast-toggle-btn"
+        >
+          <Megaphone className="h-4 w-4" />
+          {broadcastMode ? "وضع الإرسال للجميع مفعّل" : "إرسال للجميع"}
+        </Button>
+      </header>
 
-      <div className="grid h-[calc(100dvh_-_18rem)] min-h-[18rem] min-w-0 grid-cols-1 grid-rows-[minmax(0,1fr)] gap-3 overflow-hidden md:grid-cols-[18rem_minmax(0,1fr)] md:grid-rows-1 xl:gap-5" data-testid="messages-workspace">
+      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden md:grid-cols-[20rem_minmax(0,1fr)] md:grid-rows-1" data-testid="messages-workspace">
         <aside className={cn(
-          "min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs",
+          "min-h-0 min-w-0 flex-col overflow-hidden border-slate-200 bg-white md:w-80 md:shrink-0 md:border-e",
           mobileView === "chat" ? "hidden md:flex" : "flex",
         )}>
           <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-4 py-3.5">
             <div>
-              <h2 className="text-sm font-bold text-slate-900">المحادثات</h2>
-              <p className="mt-0.5 text-xs text-slate-500">اختر محادثة لعرض الرسائل</p>
+              <h2 className="text-sm font-bold text-slate-900">الأشخاص</h2>
+              <p className="mt-0.5 text-xs text-slate-500">اختر شخصًا أو مجموعة الفريق</p>
             </div>
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-50 text-teal-700">
               <MessageSquare className="h-4 w-4" />
@@ -214,7 +221,7 @@ export default function Messages() {
         </aside>
 
         <section className={cn(
-          "min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs",
+          "min-h-0 min-w-0 flex-col overflow-hidden bg-white",
           mobileView === "threads" ? "hidden md:flex" : "flex",
         )}>
           <header className="flex items-center gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-3.5 sm:px-5">
