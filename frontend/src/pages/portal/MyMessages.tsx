@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Send, Users } from "lucide-react";
-import { apiGet, apiPost } from "@/lib/api";
+import MessageAvatar from "@/components/MessageAvatar";
+import { apiGet, apiPost, getApiOrigin } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { errorText, fmtDate } from "@/lib/format";
-import type { MarkAllResult, Message } from "@/lib/types";
+import type { Employee, MarkAllResult, Message } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -19,9 +21,20 @@ const timeOf = (iso: string) => {
 /** Employee side: a private thread with the manager plus the read/write team channel. */
 export default function MyMessages() {
   const queryClient = useQueryClient();
+  const { session } = useAuth();
   const [thread, setThread] = useState<"direct" | "group">("direct");
   const [draft, setDraft] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
+
+  const profileQuery = useQuery({
+    queryKey: ["me", "profile", session?.employee_id],
+    queryFn: () => apiGet<Employee>("/me/profile"),
+    enabled: Boolean(session?.employee_id),
+  });
+  const employeeName = profileQuery.data?.name || session?.name || "الموظف";
+  const employeePhotoUrl = profileQuery.data?.has_photo
+    ? `${getApiOrigin()}/api/me/photo`
+    : undefined;
 
   const messagesQuery = useQuery({
     queryKey: ["me", "messages", thread],
@@ -54,10 +67,9 @@ export default function MyMessages() {
   });
 
   return (
-    <FadeIn>
+    <FadeIn className="flex min-h-0 flex-col">
       <PageHeader
         title="الرسائل"
-        description="راسل الإدارة مباشرة، وتابع إعلانات الفريق."
         testid="my-messages-title"
       />
 
@@ -73,8 +85,26 @@ export default function MyMessages() {
         </TabsList>
       </Tabs>
 
-      <section className="flex min-h-[24rem] flex-col rounded-2xl border border-slate-200 bg-white shadow-xs">
-        <div className="flex-1 space-y-3 overflow-y-auto px-3 py-4" data-testid="my-message-list">
+      <section className="flex h-[calc(100dvh_-_21rem)] min-h-[18rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+        <header className="flex shrink-0 items-center gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-3.5">
+          {thread === "direct" ? (
+            <MessageAvatar
+              name={employeeName}
+              photoUrl={employeePhotoUrl}
+              size="md"
+              testId="my-messages-avatar"
+            />
+          ) : (
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-teal-100 text-teal-700">
+              <Users className="h-4 w-4" />
+            </span>
+          )}
+          <p className="truncate text-sm font-bold text-slate-900">
+            {thread === "direct" ? "محادثتي مع الإدارة" : "مجموعة الفريق"}
+          </p>
+        </header>
+
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain bg-slate-50/60 px-3 py-4" data-testid="my-message-list">
           {messagesQuery.isLoading ? (
             <LoadingBlock className="h-40" />
           ) : messages.length === 0 ? (
@@ -87,49 +117,71 @@ export default function MyMessages() {
               }
             />
           ) : (
-            messages.map((m) => (
-              <div
-                key={m.id}
-                className={cn("flex", m.sender === "employee" ? "justify-end" : "justify-start")}
-                data-testid={`my-message-${m.id}`}
-              >
+            messages.map((m) => {
+              const isCurrentEmployee =
+                m.sender === "employee" && m.employee_id === session?.employee_id;
+              return (
                 <div
-                  className={cn(
-                    "max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm shadow-xs",
-                    m.sender === "employee"
-                      ? "rounded-se-sm bg-teal-600 text-white"
-                      : "rounded-ss-sm bg-slate-100 text-slate-800",
-                  )}
+                  key={m.id}
+                  className={cn("flex items-end gap-2", m.sender === "employee" ? "justify-end" : "justify-start")}
+                  data-testid={`my-message-${m.id}`}
                 >
-                  <p className="whitespace-pre-wrap leading-relaxed">{m.body}</p>
-                  <p
+                  {m.sender === "employee" && (
+                    <MessageAvatar
+                      name={isCurrentEmployee ? employeeName : m.sender_name}
+                      photoUrl={isCurrentEmployee ? employeePhotoUrl : undefined}
+                      testId={`my-message-avatar-${m.id}`}
+                    />
+                  )}
+                  <div
                     className={cn(
-                      "mt-1 text-[10px]",
-                      m.sender === "employee" ? "text-teal-100" : "text-slate-500",
+                      "min-w-0",
+                      m.sender === "employee"
+                        ? "max-w-[calc(100%_-_3rem)] sm:max-w-[calc(75%_-_3rem)]"
+                        : "max-w-[88%] sm:max-w-[75%]",
                     )}
                   >
-                    {m.sender === "manager" ? "الإدارة" : m.sender_name} • {fmtDate(m.created_at.slice(0, 10))} {timeOf(m.created_at)}
-                  </p>
+                    <div
+                      className={cn(
+                        "rounded-2xl px-3.5 py-2.5 text-sm shadow-xs",
+                        m.sender === "employee"
+                          ? "rounded-se-sm bg-teal-600 text-white"
+                          : "rounded-ss-sm bg-slate-100 text-slate-800",
+                      )}
+                    >
+                      <p className="whitespace-pre-wrap leading-relaxed">{m.body}</p>
+                      <p
+                        className={cn(
+                          "mt-1 text-[10px]",
+                          m.sender === "employee" ? "text-teal-100" : "text-slate-500",
+                        )}
+                      >
+                        {m.sender === "manager" ? "الإدارة" : m.sender_name} • {fmtDate(m.created_at.slice(0, 10))} {timeOf(m.created_at)}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
           <div ref={endRef} />
         </div>
 
-        <footer className="border-t border-slate-100 p-3">
-          <div className="flex items-end gap-2">
+        <footer className="shrink-0 border-t border-slate-100 bg-white p-3 sm:p-4">
+          <div className="flex items-end gap-2 sm:gap-3">
             <Textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               placeholder={thread === "direct" ? "اكتب رسالتك للإدارة..." : "شارك الفريق..."}
               rows={2}
-              className="flex-1 resize-none"
+              className="min-h-[4.5rem] flex-1 resize-none rounded-xl bg-slate-50/60 text-sm"
               data-testid="my-message-input"
             />
             <Button
               onClick={() => draft.trim() && sendMutation.mutate()}
               disabled={sendMutation.isPending || !draft.trim()}
+              className="h-10 shrink-0 rounded-xl px-4 sm:h-11"
+              aria-label="إرسال الرسالة"
               data-testid="my-message-send-btn"
             >
               <Send className="h-4 w-4" />
