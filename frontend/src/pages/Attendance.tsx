@@ -258,8 +258,20 @@ export default function Attendance() {
                 size="sm"
                 variant={activeCycle === "previous" ? "default" : "outline"}
                 aria-pressed={activeCycle === "previous"}
-                disabled={!hasPreviousCycle}
-                onClick={() => setCycleFilter("previous")}
+                disabled={currentCycleQuery.isFetching || previousCycleQuery.isFetching}
+                onClick={() => {
+                  if (currentCycleQuery.isError || previousCycleQuery.isError) {
+                    toast.error(
+                      "تعذّر التحقق من الدورة السابقة. تحقق من الاتصال وحاول مرة أخرى.",
+                    );
+                    return;
+                  }
+                  if (!hasPreviousCycle) {
+                    toast.info("هذا الموظف لا يملك دورة سابقة");
+                    return;
+                  }
+                  setCycleFilter("previous");
+                }}
                 data-testid="attendance-cycle-previous"
               >
                 الدورة السابقة
