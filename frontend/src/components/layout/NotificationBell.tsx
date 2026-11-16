@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlarmClock, Bell, BellRing, CalendarDays, Check, CheckCheck, CircleDollarSign, Gift, MapPin, MapPinOff, MessageSquare, Package, Smartphone, X } from "lucide-react";
@@ -19,7 +20,6 @@ import {
 } from "@/lib/push";
 import type { AppNotification, DeviceChangeRequest, MarkAllResult, NotificationSummary } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 type Props = { audience: "manager" | "employee" };
@@ -36,6 +36,21 @@ export default function NotificationBell({ audience }: Props) {
   );
   const [browserPushEnabled, setBrowserPushEnabled] = useState(false);
   const lastUnread = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
 
   useEffect(() => {
     let active = true;
@@ -238,11 +253,16 @@ export default function NotificationBell({ audience }: Props) {
     permission !== "granted" || (!isNativePushPlatform() && !browserPushEnabled);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={() => setOpen(true)}
+        aria-label="الإشعارات"
         title="الإشعارات"
         data-testid="notifications-bell"
+        className="relative h-9 w-9 shrink-0 rounded-full text-slate-600 hover:bg-slate-100 hover:text-slate-900"
       >
         <Bell className="h-4.5 w-4.5" />
         {unread > 0 && (
@@ -253,56 +273,84 @@ export default function NotificationBell({ audience }: Props) {
             {unread > 9 ? "9+" : formatNumber(unread)}
           </span>
         )}
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-[21rem] p-0" data-testid="notifications-panel">
-        <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2.5">
-          <p className="text-sm font-bold text-slate-900">الإشعارات</p>
-          {unread > 0 && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => readAll.mutate()}
-              disabled={readAll.isPending}
-              data-testid="notifications-read-all-btn"
-            >
-              <CheckCheck className="h-3.5 w-3.5" />
-              تعليم الكل كمقروء
-            </Button>
-          )}
-        </div>
+      </Button>
+      {open &&
+        createPortal(
+          <section
+            className="fixed inset-0 z-[100] flex h-[100dvh] w-full flex-col bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-foreground"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="notifications-title"
+            dir="rtl"
+            data-testid="notifications-panel"
+          >
+            <header className="flex shrink-0 items-center gap-3 border-b border-slate-200 bg-background px-3 py-2.5 sm:px-5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => setOpen(false)}
+                aria-label="إغلاق الإشعارات والعودة"
+                title="إغلاق"
+                data-testid="notifications-close-btn"
+                className="h-10 w-10 shrink-0 rounded-xl"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+              <h1
+                id="notifications-title"
+                className="min-w-0 flex-1 text-lg font-bold text-slate-900"
+              >
+                الإشعارات
+              </h1>
+              {unread > 0 && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => readAll.mutate()}
+                  disabled={readAll.isPending}
+                  data-testid="notifications-read-all-btn"
+                  className="shrink-0 px-2 text-xs sm:px-3 sm:text-sm"
+                >
+                  <CheckCheck className="h-4 w-4" />
+                  تعليم الكل كمقروء
+                </Button>
+              )}
+            </header>
 
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {needsPushAction && (
-          <div className="border-b border-slate-100 bg-teal-50/70 px-3 py-2.5">
+          <div className="shrink-0 border-b border-slate-100 bg-teal-50/70 px-4 py-3 sm:px-6">
             {permission === "unsupported" ? (
-              <p className="text-[11px] text-slate-600">
+              <p className="text-xs text-slate-600">
                 {isNativePushPlatform()
                   ? "تعذر تفعيل إشعارات الجهاز."
                   : "متصفحك لا يدعم الإشعارات المنبثقة."}
               </p>
             ) : permission === "denied" ? (
-              <p className="text-[11px] text-slate-600" data-testid="push-denied-note">
+              <p className="text-xs text-slate-600" data-testid="push-denied-note">
                 {isNativePushPlatform()
                   ? "الإشعارات محظورة — فعّلها من إعدادات التطبيق في الجهاز."
                   : "الإشعارات محظورة من إعدادات المتصفح — فعّلها من إعدادات الموقع."}
               </p>
             ) : !isNativePushPlatform() && !browserPushChecked ? (
-              <p className="text-[11px] text-slate-600">
+              <p className="text-xs text-slate-600">
                 جارٍ التحقق من إعداد إشعارات المتصفح...
               </p>
             ) : permission === "setup-required" ||
               (!isNativePushPlatform() && !browserPushReady) ||
               (!isNativePushPlatform() && browserPushIssue !== null) ? (
               <div className="space-y-1.5">
-                <p className="text-[11px] text-slate-600">
+                <p className="text-xs text-slate-600">
                   {browserPushSetupMessage(browserPushIssue)}
                 </p>
                 <button
                   type="button"
                   onClick={retryBrowserPushSetup}
-                  className="flex w-full items-center gap-2 text-start text-[11px] font-semibold text-teal-800"
+                  className="flex w-full items-center gap-2 text-start text-xs font-semibold text-teal-800"
                   data-testid="retry-browser-push-btn"
                 >
-                  <BellRing className="h-3.5 w-3.5" />
+                  <BellRing className="h-4 w-4" />
                   إعادة فحص إعداد الإشعارات
                 </button>
               </div>
@@ -310,10 +358,10 @@ export default function NotificationBell({ audience }: Props) {
               <button
                 type="button"
                 onClick={enablePush}
-                className="flex w-full items-center gap-2 text-start text-[11px] font-semibold text-teal-800"
+                className="flex w-full items-center gap-2 text-start text-xs font-semibold text-teal-800"
                 data-testid="enable-push-btn"
               >
-                <BellRing className="h-3.5 w-3.5" />
+                <BellRing className="h-4 w-4" />
                 {isNativePushPlatform()
                   ? "تمكين إشعارات التطبيق"
                   : permission === "granted"
@@ -324,22 +372,22 @@ export default function NotificationBell({ audience }: Props) {
           </div>
         )}
 
-        <div className="max-h-80 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {deviceRequests.length > 0 && (
-            <section className="border-b border-slate-100 bg-amber-50/70 px-3 py-2.5" data-testid="device-change-requests">
-              <p className="mb-2 text-xs font-bold text-slate-800">طلبات دخول من جهاز جديد</p>
+            <section className="border-b border-slate-100 bg-amber-50/70 px-4 py-4 sm:px-6" data-testid="device-change-requests">
+              <p className="mb-3 text-sm font-bold text-slate-800">طلبات دخول من جهاز جديد</p>
               <div className="space-y-2">
                 {deviceRequests.map((request) => (
                   <div
                     key={request.id}
-                    className="rounded-xl border border-amber-200 bg-white p-2.5"
+                    className="rounded-xl border border-amber-200 bg-white p-3"
                     data-testid={`device-change-request-${request.id}`}
                   >
-                    <p className="text-xs font-semibold text-slate-800">{request.employee_name}</p>
-                    <p className="mt-1 text-[10px] text-slate-500" dir="ltr">
+                    <p className="text-sm font-semibold text-slate-800">{request.employee_name}</p>
+                    <p className="mt-1 text-xs text-slate-500" dir="ltr">
                       جهاز جديد · …{request.device_hint}
                     </p>
-                    <p className="mt-1 text-[10px] text-slate-400">
+                    <p className="mt-1 text-xs text-slate-400">
                       {fmtDate(request.created_at.slice(0, 10))} ·{" "}
                       {new Date(request.created_at).toLocaleTimeString("ar-IQ", {
                         hour: "2-digit",
@@ -376,9 +424,11 @@ export default function NotificationBell({ audience }: Props) {
           )}
           {notifications.length === 0 ? (
             deviceRequests.length === 0 ? (
-              <p className="px-3 py-8 text-center text-xs text-slate-500" data-testid="notifications-empty">
-                لا توجد إشعارات حالياً.
-              </p>
+              <div className="flex min-h-full items-center justify-center px-4 py-12">
+                <p className="text-center text-sm text-slate-500" data-testid="notifications-empty">
+                  لا توجد إشعارات حالياً.
+                </p>
+              </div>
             ) : null
           ) : (
             notifications.map((note) => {
@@ -389,22 +439,22 @@ export default function NotificationBell({ audience }: Props) {
                   type="button"
                   onClick={() => !note.read && readOne.mutate(note.id)}
                   className={cn(
-                    "flex w-full gap-2.5 border-b border-slate-50 px-3 py-2.5 text-start transition-colors hover:bg-slate-50",
+                    "flex w-full gap-3 border-b border-slate-100 px-4 py-4 text-start transition-colors hover:bg-slate-50 sm:px-6",
                     !note.read && "bg-amber-50/60",
                   )}
                   data-testid={`notification-item-${note.id}`}
                 >
                   <span
                     className={cn(
-                      "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
+                      "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
                       toneFor(note.kind),
                     )}
                   >
-                    <Icon className="h-3.5 w-3.5" />
+                    <Icon className="h-5 w-5" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-xs leading-relaxed text-slate-700">{note.message}</span>
-                    <span className="mt-1 block text-[10px] text-slate-400">
+                    <span className="block text-sm leading-relaxed text-slate-700">{note.message}</span>
+                    <span className="mt-1.5 block text-xs text-slate-400">
                       {fmtDate(note.date)} • {note.at_time}
                       {!note.read && " • غير مقروء"}
                     </span>
@@ -414,7 +464,10 @@ export default function NotificationBell({ audience }: Props) {
             })
           )}
         </div>
-      </PopoverContent>
-    </Popover>
+            </div>
+          </section>,
+          document.body,
+        )}
+    </>
   );
 }
