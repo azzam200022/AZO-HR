@@ -121,7 +121,9 @@ export default function Leaves() {
                     {LEAVE_TYPE_LABELS[leave.leave_type]}
                   </TableCell>
                   <TableCell className="text-sm tabular-nums text-slate-600">
-                    {fmtDate(leave.start_date)} ← {fmtDate(leave.end_date)}
+                    {leave.start_date === leave.end_date
+                      ? fmtDate(leave.start_date)
+                      : `${fmtDate(leave.start_date)} ← ${fmtDate(leave.end_date)}`}
                   </TableCell>
                   <TableCell className="text-sm tabular-nums text-slate-600">
                     {formatNumber(dayCount(leave))}
