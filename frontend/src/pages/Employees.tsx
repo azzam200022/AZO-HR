@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Clock, Copy, FileText, KeyRound, MapPin, Pencil, Plus, RefreshCw, Search, Trash2, UserRoundCheck, UserRoundX } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut, getApiOrigin } from "@/lib/api";
-import { prepareEmployeePhoto } from "@/lib/employee-photo";
+import { preparePhotoData } from "@/lib/photo-upload";
 import { currentMonthStr, errorText, fmtDate, formatIQD, shiftLabel, todayStr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { DEFAULT_WORK_DAYS, WORK_DAYS, workDaysLabel } from "@/lib/work-days";
@@ -235,7 +235,7 @@ export default function Employees() {
     event.target.value = "";
     if (!file) return;
     try {
-      const photoData = await prepareEmployeePhoto(file);
+      const photoData = await preparePhotoData(file);
       setForm((current) => ({ ...current, photo_data: photoData }));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "تعذرت معالجة الصورة");

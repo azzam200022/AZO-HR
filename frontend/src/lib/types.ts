@@ -174,6 +174,7 @@ export interface EmployeeProduct {
   name: string;
   expiry_dates: ProductExpiryBatch[];
   custom_reminder_days: number | null;
+  has_photo: boolean;
   created_at: string;
 }
 
@@ -181,6 +182,7 @@ export interface EmployeeProductUpdate {
   name?: string;
   add_expiry_date?: string;
   custom_reminder_days?: number | null;
+  photo_data?: string | null;
 }
 
 export interface PayrollItem {

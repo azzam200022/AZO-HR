@@ -1,9 +1,10 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Trash2, X } from "lucide-react";
+import { ImagePlus, Pencil, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
+import { apiDelete, apiGet, apiPatch, apiPost, getApiOrigin } from "@/lib/api";
 import { errorText, fmtDate, formatNumber } from "@/lib/format";
+import { preparePhotoData } from "@/lib/photo-upload";
 import type {
   DeleteResult,
   EmployeeProduct,
@@ -11,9 +12,35 @@ import type {
   ProductExpiryStatus,
 } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CardSection, EmptyState, FadeIn, LoadingBlock, PageHeader } from "@/components/shared";
+
+function productPhotoUrl(productId: string) {
+  return `${getApiOrigin()}/api/me/products/${encodeURIComponent(productId)}/photo`;
+}
+
+function prepareSelectedPhoto(
+  event: ChangeEvent<HTMLInputElement>,
+  onPrepared: (photoData: string) => void,
+) {
+  const input = event.currentTarget;
+  const file = input.files?.[0];
+  if (!file) return;
+  input.value = "";
+  void preparePhotoData(file)
+    .then(onPrepared)
+    .catch((error) =>
+      toast.error(error instanceof Error ? error.message : "تعذر تجهيز الصورة"),
+    );
+}
 
 const STATUS_LABEL: Record<ProductExpiryStatus, string> = {
   far: "بعيد",
@@ -46,10 +73,13 @@ export default function MyProducts() {
   const [name, setName] = useState("");
   const [expiryDates, setExpiryDates] = useState([""]);
   const [customReminderDays, setCustomReminderDays] = useState("");
+  const [photoData, setPhotoData] = useState<string | null>(null);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editReminderDays, setEditReminderDays] = useState("");
+  const [editPhotoData, setEditPhotoData] = useState<string | null | undefined>(undefined);
   const [newExpiryDate, setNewExpiryDate] = useState("");
+  const [previewProduct, setPreviewProduct] = useState<EmployeeProduct | null>(null);
 
   const productsQuery = useQuery({
     queryKey: ["me", "products"],
@@ -61,6 +91,7 @@ export default function MyProducts() {
       name: string;
       expiry_dates: string[];
       custom_reminder_days: number | null;
+      photo_data: string;
     }) =>
       apiPost<EmployeeProduct>("/me/products", payload),
     onSuccess: () => {
@@ -68,6 +99,7 @@ export default function MyProducts() {
       setName("");
       setExpiryDates([""]);
       setCustomReminderDays("");
+      setPhotoData(null);
       toast.success("تمت إضافة المادة وتواريخ انتهائها");
     },
     onError: (error) => toast.error(errorText(error)),
@@ -79,6 +111,7 @@ export default function MyProducts() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["me", "products"] });
       setEditingProductId(null);
+      setEditPhotoData(undefined);
       setNewExpiryDate("");
       toast.success("تم حفظ تعديلات المادة");
     },
@@ -108,6 +141,13 @@ export default function MyProducts() {
       }),
     [productsQuery.data],
   );
+  const editingProduct = products.find((product) => product.id === editingProductId);
+  const editPhotoPreview =
+    editPhotoData !== undefined
+      ? editPhotoData
+      : editingProduct?.has_photo
+        ? productPhotoUrl(editingProduct.id)
+        : null;
 
   const addExpiryDate = () => setExpiryDates((dates) => [...dates, ""]);
   const removeExpiryDate = (index: number) =>
@@ -140,6 +180,7 @@ export default function MyProducts() {
       name: cleanName,
       expiry_dates: expiryDates,
       custom_reminder_days: reminderDays,
+      photo_data: photoData ?? "",
     });
   };
 
@@ -147,6 +188,7 @@ export default function MyProducts() {
     setEditingProductId(product.id);
     setEditName(product.name);
     setEditReminderDays(product.custom_reminder_days?.toString() ?? "");
+    setEditPhotoData(undefined);
     setNewExpiryDate("");
   };
 
@@ -172,6 +214,7 @@ export default function MyProducts() {
       custom_reminder_days: reminderDays,
     };
     if (newExpiryDate) payload.add_expiry_date = newExpiryDate;
+    if (editPhotoData !== undefined) payload.photo_data = editPhotoData;
     updateProductMutation.mutate({ id: productId, payload });
   };
 
@@ -212,6 +255,39 @@ export default function MyProducts() {
                 required
                 data-testid="product-name-input"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="product-photo">صورة المادة من الاستديو (اختياري)</Label>
+              <Input
+                id="product-photo"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(event) => prepareSelectedPhoto(event, setPhotoData)}
+                data-testid="product-photo-input"
+              />
+              {photoData && (
+                <div className="flex items-center gap-3">
+                  <img
+                    src={photoData}
+                    alt={`معاينة صورة ${name || "المادة"}`}
+                    className="h-16 w-16 rounded-lg border border-slate-200 object-cover"
+                    data-testid="product-photo-preview"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPhotoData(null)}
+                    data-testid="remove-product-photo-btn"
+                  >
+                    إزالة الصورة
+                  </Button>
+                </div>
+              )}
+              <p className="text-[11px] leading-5 text-slate-500">
+                تُضغط الصورة تلقائيًا قبل حفظها، ويمكن تغييرها لاحقًا.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -317,13 +393,38 @@ export default function MyProducts() {
                   data-testid={`my-product-${product.id}`}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h2 className="text-sm font-bold text-slate-900">{product.name}</h2>
-                      <p className="mt-1 text-[11px] text-slate-500">
-                        {product.custom_reminder_days
-                          ? `تنبيه إضافي قبل الانتهاء بـ ${reminderDaysLabel(product.custom_reminder_days)}`
-                          : "التذكيرات الافتراضية فقط"}
-                      </p>
+                    <div className="flex min-w-0 items-center gap-3">
+                      {product.has_photo ? (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewProduct(product)}
+                          className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-white ring-1 ring-slate-200 transition hover:ring-2 hover:ring-teal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+                          aria-label={`تكبير صورة ${product.name}`}
+                          data-testid={`product-photo-${product.id}`}
+                        >
+                          <img
+                            src={productPhotoUrl(product.id)}
+                            alt=""
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                          />
+                        </button>
+                      ) : (
+                        <span
+                          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-white text-slate-400 ring-1 ring-slate-200"
+                          aria-hidden="true"
+                        >
+                          <ImagePlus className="h-5 w-5" />
+                        </span>
+                      )}
+                      <div className="min-w-0">
+                        <h2 className="text-sm font-bold text-slate-900">{product.name}</h2>
+                        <p className="mt-1 text-[11px] text-slate-500">
+                          {product.custom_reminder_days
+                            ? `تنبيه إضافي قبل الانتهاء بـ ${reminderDaysLabel(product.custom_reminder_days)}`
+                            : "التذكيرات الافتراضية فقط"}
+                        </p>
+                      </div>
                     </div>
                     {editingProductId !== product.id && (
                       <div className="flex shrink-0 gap-1">
@@ -371,6 +472,35 @@ export default function MyProducts() {
                         />
                       </div>
                       <div className="space-y-1.5">
+                        <Label htmlFor={`edit-product-photo-${product.id}`}>صورة المادة</Label>
+                        <Input
+                          id={`edit-product-photo-${product.id}`}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={(event) => prepareSelectedPhoto(event, setEditPhotoData)}
+                          data-testid={`edit-product-photo-${product.id}`}
+                        />
+                        {editPhotoPreview && (
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={editPhotoPreview}
+                              alt={`معاينة صورة ${product.name}`}
+                              className="h-16 w-16 rounded-lg border border-slate-200 object-cover"
+                              data-testid={`edit-product-photo-preview-${product.id}`}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setEditPhotoData(null)}
+                              data-testid={`remove-edit-product-photo-${product.id}`}
+                            >
+                              إزالة الصورة
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="space-y-1.5">
                         <Label htmlFor={`edit-expiry-date-${product.id}`}>إضافة تاريخ صلاحية</Label>
                         <Input
                           id={`edit-expiry-date-${product.id}`}
@@ -411,7 +541,10 @@ export default function MyProducts() {
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => setEditingProductId(null)}
+                          onClick={() => {
+                            setEditingProductId(null);
+                            setEditPhotoData(undefined);
+                          }}
                           data-testid={`cancel-product-edit-${product.id}`}
                         >
                           <X className="h-3.5 w-3.5" />
@@ -450,6 +583,29 @@ export default function MyProducts() {
           )}
         </CardSection>
       </div>
+
+      <Dialog
+        open={previewProduct !== null}
+        onOpenChange={(open) => {
+          if (!open) setPreviewProduct(null);
+        }}
+      >
+        <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {previewProduct ? `صورة ${previewProduct.name}` : "صورة المادة"}
+            </DialogTitle>
+            <DialogDescription>صورة المادة المسجّلة.</DialogDescription>
+          </DialogHeader>
+          {previewProduct && (
+            <img
+              src={productPhotoUrl(previewProduct.id)}
+              alt={`صورة ${previewProduct.name}`}
+              className="mx-auto max-h-[70dvh] w-full rounded-xl object-contain"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </FadeIn>
   );
 }
