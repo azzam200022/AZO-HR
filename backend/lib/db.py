@@ -58,6 +58,14 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("token", ASCENDING)], name="token", unique=True),
         IndexModel([("employee_id", ASCENDING)], name="employee"),
     ],
+    "device_change_requests": [
+        IndexModel(
+            [("pending_employee_id", ASCENDING)],
+            name="one_pending_request_per_employee",
+            unique=True,
+            sparse=True,
+        ),
+    ],
     "push_tokens": [
         IndexModel([("token", ASCENDING)], name="token", unique=True),
         IndexModel([("role", ASCENDING), ("employee_id", ASCENDING)], name="recipient"),

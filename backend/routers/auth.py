@@ -14,6 +14,7 @@ from lib.auth import (
     destroy_session,
     manager_email,
     optional_principal,
+    require_trusted_employee_device,
     verify_password,
 )
 from lib.db import db
@@ -199,7 +200,13 @@ async def employee_login(payload: EmployeeLogin, response: Response, request: Re
     if employee.get("status") != "active":
         raise HTTPException(status_code=403, detail="حساب الموظف موقوف — راجع مدير النظام")
 
-    token = await create_session("employee", email=employee.get("email", ""), employee_id=employee["id"])
+    await require_trusted_employee_device(employee, payload.device_id)
+    token = await create_session(
+        "employee",
+        email=employee.get("email", ""),
+        employee_id=employee["id"],
+        device_id=payload.device_id,
+    )
     _set_cookie(response, token, request.headers.get("origin"))
     return SessionInfo(
         authenticated=True,

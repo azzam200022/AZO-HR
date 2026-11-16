@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { KeyRound, LogIn, Mail, ShieldCheck, Users } from "lucide-react";
 import { apiPost } from "@/lib/api";
 import { errorText } from "@/lib/format";
+import { getInstallationId } from "@/lib/device-id";
 import type { SessionInfo } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,13 +30,21 @@ export default function Login() {
   });
 
   const codeLogin = useMutation({
-    mutationFn: () => apiPost<SessionInfo>("/auth/employee-login", { access_code: code }),
+    mutationFn: () =>
+      apiPost<SessionInfo>("/auth/employee-login", {
+        access_code: code,
+        device_id: getInstallationId(),
+      }),
     onSuccess: onLoggedIn,
     onError: (error) => toast.error(errorText(error)),
   });
 
   const employeePasswordLogin = useMutation({
-    mutationFn: () => apiPost<SessionInfo>("/auth/employee-login", employeeForm),
+    mutationFn: () =>
+      apiPost<SessionInfo>("/auth/employee-login", {
+        ...employeeForm,
+        device_id: getInstallationId(),
+      }),
     onSuccess: onLoggedIn,
     onError: (error) => toast.error(errorText(error)),
   });

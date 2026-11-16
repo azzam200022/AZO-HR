@@ -51,6 +51,32 @@ async def test_employee_event_is_saved_and_pushed_with_specific_content(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_new_device_request_is_saved_and_pushed_to_manager(monkeypatch):
+    monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
+    monkeypatch.setenv("DB_NAME", "notifications_test")
+    from lib import notify
+
+    notifications = _Notifications()
+    send = AsyncMock()
+    monkeypatch.setattr(notify, "db", SimpleNamespace(notifications=notifications))
+    monkeypatch.setattr(notify, "send_notification", send)
+
+    await notify.notify_manager_event(
+        kind="device_change",
+        employee={"id": "employee-1", "name": "موظف تجريبي"},
+        message="طلب الموظف تسجيل الدخول من جهاز جديد.",
+        device_request_id="device-request-1",
+    )
+
+    assert len(notifications.documents) == 1
+    saved = notifications.documents[0]
+    assert saved["audience"] == "manager"
+    assert saved["kind"] == "device_change"
+    assert saved["device_request_id"] == "device-request-1"
+    send.assert_awaited_once_with(saved)
+
+
+@pytest.mark.asyncio
 async def test_shift_reminder_is_persisted_and_pushed_once(monkeypatch):
     monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
     monkeypatch.setenv("DB_NAME", "notifications_test")

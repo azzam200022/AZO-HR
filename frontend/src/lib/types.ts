@@ -223,7 +223,7 @@ export interface Adjustment {
 
 export interface AppNotification {
   id: string;
-  kind: "late" | "left_site" | "returned_site" | "message" | "bonus" | "deduction" | "attendance" | "payroll" | "leave_request" | "leave_status" | "shift_reminder" | "product_expiry";
+  kind: "late" | "left_site" | "returned_site" | "message" | "bonus" | "deduction" | "attendance" | "payroll" | "leave_request" | "leave_status" | "shift_reminder" | "product_expiry" | "device_change";
   audience: "manager" | "employee";
   employee_id: string;
   employee_name: string;
@@ -231,7 +231,16 @@ export interface AppNotification {
   at_time: string;
   minutes: number;
   message: string;
+  device_request_id?: string;
   read: boolean;
+  created_at: string;
+}
+
+export interface DeviceChangeRequest {
+  id: string;
+  employee_id: string;
+  employee_name: string;
+  device_hint: string;
   created_at: string;
 }
 

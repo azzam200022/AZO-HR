@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlarmClock, Bell, BellRing, CalendarDays, CheckCheck, CircleDollarSign, Gift, MapPin, MapPinOff, MessageSquare, Package } from "lucide-react";
+import { toast } from "sonner";
+import { AlarmClock, Bell, BellRing, CalendarDays, Check, CheckCheck, CircleDollarSign, Gift, MapPin, MapPinOff, MessageSquare, Package, Smartphone, X } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
+import { errorText, fmtDate, formatNumber } from "@/lib/format";
 import { browserPushSetupMessage } from "@/lib/browser-push-status";
-import { fmtDate, formatNumber } from "@/lib/format";
 import {
   currentPushPermission,
   getBrowserPushSetupIssue,
@@ -16,7 +17,7 @@ import {
   showPush,
   type PushPermission,
 } from "@/lib/push";
-import type { AppNotification, MarkAllResult, NotificationSummary } from "@/lib/types";
+import type { AppNotification, DeviceChangeRequest, MarkAllResult, NotificationSummary } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -80,6 +81,13 @@ export default function NotificationBell({ audience }: Props) {
     refetchInterval: open ? 5_000 : false,
   });
 
+  const deviceRequestsQuery = useQuery({
+    queryKey: ["notifications", "device-change-requests"],
+    queryFn: () => apiGet<DeviceChangeRequest[]>("/notifications/device-change-requests"),
+    enabled: audience === "manager" && open,
+    refetchInterval: audience === "manager" && open ? 5_000 : false,
+  });
+
   const unread = summaryQuery.data?.unread ?? 0;
 
   // A rise in the unread counter raises a local/browser notification when allowed.
@@ -107,6 +115,7 @@ export default function NotificationBell({ audience }: Props) {
             leave_status: "تحديث الإجازة",
             shift_reminder: "تذكير بموعد الدوام",
             product_expiry: "تذكير بانتهاء صلاحية مادة",
+            device_change: "طلب دخول من جهاز جديد",
           };
           const title = latest ? titleByKind[latest.kind] : "مواردي — تنبيه جديد";
           return showPush(
@@ -134,6 +143,19 @@ export default function NotificationBell({ audience }: Props) {
   const readAll = useMutation({
     mutationFn: () => apiPost<MarkAllResult>(`${base}/read-all`, {}),
     onSuccess: refresh,
+  });
+
+  const decideDeviceRequest = useMutation({
+    mutationFn: ({ id, decision }: { id: string; decision: "approve" | "reject" }) =>
+      apiPost<{ id: string; status: "approved" | "rejected" }>(
+        `/notifications/device-change-requests/${id}/${decision}`,
+        {},
+      ),
+    onSuccess: (result) => {
+      toast.success(result.status === "approved" ? "تم اعتماد الجهاز الجديد" : "تم رفض طلب الجهاز");
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    onError: (error) => toast.error(errorText(error)),
   });
 
   const enablePush = async () => {
@@ -168,7 +190,13 @@ export default function NotificationBell({ audience }: Props) {
     }
   };
 
-  const notifications = listQuery.data ?? [];
+  const allNotifications = listQuery.data ?? [];
+  const notifications =
+    audience === "manager"
+      ? allNotifications.filter((note) => note.kind !== "device_change")
+      : allNotifications;
+  const deviceRequests =
+    audience === "manager" ? (deviceRequestsQuery.data ?? []) : [];
 
   const iconFor = (kind: AppNotification["kind"]) => {
     switch (kind) {
@@ -187,6 +215,8 @@ export default function NotificationBell({ audience }: Props) {
         return Gift;
       case "product_expiry":
         return Package;
+      case "device_change":
+        return Smartphone;
       case "deduction":
       case "payroll":
         return CircleDollarSign;
@@ -196,7 +226,7 @@ export default function NotificationBell({ audience }: Props) {
   };
 
   const toneFor = (kind: AppNotification["kind"]) =>
-    kind === "late" || kind === "leave_request" || kind === "shift_reminder" || kind === "product_expiry"
+    kind === "late" || kind === "leave_request" || kind === "shift_reminder" || kind === "product_expiry" || kind === "device_change"
       ? "bg-amber-100 text-amber-700"
       : kind === "left_site" || kind === "deduction"
         ? "bg-rose-100 text-rose-700"
@@ -295,10 +325,61 @@ export default function NotificationBell({ audience }: Props) {
         )}
 
         <div className="max-h-80 overflow-y-auto">
+          {deviceRequests.length > 0 && (
+            <section className="border-b border-slate-100 bg-amber-50/70 px-3 py-2.5" data-testid="device-change-requests">
+              <p className="mb-2 text-xs font-bold text-slate-800">طلبات دخول من جهاز جديد</p>
+              <div className="space-y-2">
+                {deviceRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    className="rounded-xl border border-amber-200 bg-white p-2.5"
+                    data-testid={`device-change-request-${request.id}`}
+                  >
+                    <p className="text-xs font-semibold text-slate-800">{request.employee_name}</p>
+                    <p className="mt-1 text-[10px] text-slate-500" dir="ltr">
+                      جهاز جديد · …{request.device_hint}
+                    </p>
+                    <p className="mt-1 text-[10px] text-slate-400">
+                      {fmtDate(request.created_at.slice(0, 10))} ·{" "}
+                      {new Date(request.created_at).toLocaleTimeString("ar-IQ", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                    <div className="mt-2 flex gap-2">
+                      <Button
+                        size="sm"
+                        className="h-8 flex-1"
+                        onClick={() => decideDeviceRequest.mutate({ id: request.id, decision: "approve" })}
+                        disabled={decideDeviceRequest.isPending}
+                        data-testid={`approve-device-${request.id}`}
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                        موافقة
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 flex-1"
+                        onClick={() => decideDeviceRequest.mutate({ id: request.id, decision: "reject" })}
+                        disabled={decideDeviceRequest.isPending}
+                        data-testid={`reject-device-${request.id}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        رفض
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
           {notifications.length === 0 ? (
-            <p className="px-3 py-8 text-center text-xs text-slate-500" data-testid="notifications-empty">
-              لا توجد إشعارات حالياً.
-            </p>
+            deviceRequests.length === 0 ? (
+              <p className="px-3 py-8 text-center text-xs text-slate-500" data-testid="notifications-empty">
+                لا توجد إشعارات حالياً.
+              </p>
+            ) : null
           ) : (
             notifications.map((note) => {
               const Icon = iconFor(note.kind);
