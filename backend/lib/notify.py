@@ -18,6 +18,7 @@ async def _create_notification(
     message: str,
     date: str | None = None,
     minutes: int = 0,
+    device_request_id: str = "",
 ) -> Notification:
     note = Notification(
         kind=kind,
@@ -28,6 +29,7 @@ async def _create_notification(
         at_time=now_time(),
         minutes=minutes,
         message=message,
+        device_request_id=device_request_id,
     )
     try:
         await db.notifications.insert_one(note.model_dump())
@@ -49,6 +51,7 @@ async def notify_manager(
     minutes: int,
     message: str,
     date: str | None = None,
+    device_request_id: str = "",
 ) -> Notification:
     return await _create_notification(
         kind=kind,
@@ -57,6 +60,7 @@ async def notify_manager(
         minutes=minutes,
         message=message,
         date=date,
+        device_request_id=device_request_id,
     )
 
 
@@ -67,6 +71,7 @@ async def notify_manager_event(
     message: str,
     date: str | None = None,
     minutes: int = 0,
+    device_request_id: str = "",
 ) -> Notification:
     return await notify_manager(
         kind=kind,
@@ -74,6 +79,7 @@ async def notify_manager_event(
         minutes=minutes,
         message=message,
         date=date,
+        device_request_id=device_request_id,
     )
 
 

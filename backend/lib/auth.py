@@ -12,12 +12,14 @@ import logging
 import os
 import secrets
 import string
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import Cookie, HTTPException
 from passlib.context import CryptContext
 from pydantic import BaseModel
+from pymongo.errors import DuplicateKeyError
 
 from lib.db import db
 
@@ -84,19 +86,132 @@ class Principal(BaseModel):
     name: str = ""
 
 
-async def create_session(role: str, *, email: str = "", employee_id: str = "") -> str:
+async def create_session(
+    role: str,
+    *,
+    email: str = "",
+    employee_id: str = "",
+    device_id: str = "",
+) -> str:
     token = secrets.token_urlsafe(32)
-    await db.sessions.insert_one(
-        {
-            "token": token,
-            "role": role,
-            "email": email,
-            "employee_id": employee_id,
-            "created_at": datetime.now(timezone.utc),
-            "expires_at": datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS),
-        }
-    )
+    now = datetime.now(timezone.utc)
+    session = {
+        "token": token,
+        "role": role,
+        "email": email,
+        "employee_id": employee_id,
+        "device_id": device_id if role == "employee" else "",
+        "created_at": now,
+        "expires_at": now + timedelta(days=SESSION_TTL_DAYS),
+    }
+    if role == "employee":
+        employee_identity = {"role": role, "employee_id": employee_id}
+        # The login is permitted only after the installation has been trusted. Once it
+        # reaches this point, replace the previous session and its notification routes.
+        await db.push_tokens.delete_many(employee_identity)
+        await db.web_push_subscriptions.delete_many(employee_identity)
+        await db.sessions.delete_many(employee_identity)
+        await db.sessions.replace_one(employee_identity, session, upsert=True)
+    else:
+        await db.sessions.insert_one(session)
     return token
+
+
+async def require_trusted_employee_device(employee: dict, device_id: str) -> None:
+    """Enroll the first installation, or require manager approval to replace it.
+
+    Existing employee sessions without a stored installation ID are treated as an
+    already-used account during rollout: a new installation must be approved rather
+    than silently taking over an unknown legacy session.
+    """
+    employee_id = employee["id"]
+    trusted_device_id = employee.get("trusted_device_id") or ""
+    if trusted_device_id == device_id:
+        return
+
+    if not trusted_device_id:
+        now = datetime.now(timezone.utc)
+        active_session = await db.sessions.find_one(
+            {
+                "role": "employee",
+                "employee_id": employee_id,
+                "expires_at": {"$gt": now},
+            }
+        )
+        if not active_session:
+            result = await db.employees.update_one(
+                {
+                    "id": employee_id,
+                    "$or": [
+                        {"trusted_device_id": {"$exists": False}},
+                        {"trusted_device_id": None},
+                        {"trusted_device_id": ""},
+                    ],
+                },
+                {"$set": {"trusted_device_id": device_id}},
+            )
+            if result.modified_count:
+                return
+
+            # Another login may have won the first-device race. Re-read before deciding.
+            refreshed = await db.employees.find_one({"id": employee_id})
+            trusted_device_id = (refreshed or {}).get("trusted_device_id") or ""
+            if trusted_device_id == device_id:
+                return
+            employee = refreshed or employee
+
+    pending_query = {"pending_employee_id": employee_id}
+    pending = await db.device_change_requests.find_one(pending_query)
+    if pending:
+        if pending.get("device_id") == device_id:
+            raise HTTPException(
+                status_code=403,
+                detail="طلب تسجيل الدخول من هذا الجهاز قيد انتظار موافقة المدير",
+            )
+        raise HTTPException(
+            status_code=403,
+            detail="يوجد طلب دخول من جهاز آخر قيد مراجعة المدير",
+        )
+
+    request_id = str(uuid.uuid4())
+    request = {
+        "id": request_id,
+        "employee_id": employee_id,
+        "employee_name": employee.get("name", ""),
+        "device_id": device_id,
+        "previous_device_id": trusted_device_id,
+        "status": "pending",
+        # The sparse unique index permits one unresolved request per employee.
+        "pending_employee_id": employee_id,
+        "created_at": datetime.now(timezone.utc),
+    }
+    try:
+        await db.device_change_requests.insert_one(request)
+    except DuplicateKeyError:
+        # A simultaneous attempt may have reserved the employee's single pending slot.
+        pending = await db.device_change_requests.find_one(pending_query)
+        if pending and pending.get("device_id") == device_id:
+            raise HTTPException(
+                status_code=403,
+                detail="طلب تسجيل الدخول من هذا الجهاز قيد انتظار موافقة المدير",
+            )
+        raise HTTPException(
+            status_code=403,
+            detail="يوجد طلب دخول من جهاز آخر قيد مراجعة المدير",
+        )
+
+    from lib.notify import notify_manager_event
+
+    await notify_manager_event(
+        kind="device_change",
+        employee=employee,
+        message=f"طلب {employee.get('name', 'الموظف')} تسجيل الدخول من جهاز جديد. يلزم اعتماد المدير.",
+        device_request_id=request_id,
+    )
+    raise HTTPException(
+        status_code=403,
+        detail="هذا الجهاز غير معتمد. أُرسل طلب الدخول إلى المدير؛ أعد المحاولة بعد الموافقة.",
+    )
 
 
 async def destroy_session(token: str | None) -> None:
@@ -130,6 +245,10 @@ async def _principal_from_token(token: str | None) -> Principal | None:
 
     employee = await db.employees.find_one({"id": session.get("employee_id")})
     if not employee or not employee.get("can_login", True) or employee.get("status") != "active":
+        return None
+    if employee.get("trusted_device_id") and (
+        session.get("device_id") != employee["trusted_device_id"]
+    ):
         return None
     return Principal(
         role="employee",

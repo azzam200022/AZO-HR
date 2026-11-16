@@ -425,6 +425,7 @@ class Notification(BaseModel):
         "leave_status",
         "shift_reminder",
         "product_expiry",
+        "device_change",
     ]
     audience: Literal["manager", "employee"] = "manager"
     employee_id: str
@@ -433,6 +434,7 @@ class Notification(BaseModel):
     at_time: str = ""  # HH:MM
     minutes: int = 0
     message: str = ""
+    device_request_id: str = ""
     read: bool = False
     created_at: datetime = Field(default_factory=utcnow)
 
