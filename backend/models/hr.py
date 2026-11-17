@@ -132,6 +132,7 @@ class AwayInterval(BaseModel):
     """A geofence departure and return, not a full movement path."""
 
     left_at: str
+    counting_started_at: str | None = None
     left_lat: float | None = None
     left_lng: float | None = None
     left_distance_m: float | None = None
@@ -163,6 +164,7 @@ class AttendanceRecord(BaseModel):
     away_minutes: int = 0  # minutes spent outside the work location during the shift
     outside_since: str = ""  # HH:MM when the employee was last seen outside ("" = inside)
     outside_since_at: str = ""  # precise local instant of the current departure
+    away_started_at: str | None = None  # precise start after the departure grace period
     away_intervals: list[AwayInterval] = Field(default_factory=list)
     last_seen: str = ""  # HH:MM of the last location heartbeat
     created_at: datetime = Field(default_factory=utcnow)
@@ -619,6 +621,7 @@ class PresenceStatus(BaseModel):
     tracking: bool = False  # false when the employee has no assigned work location
     checked_out: bool = False  # true when an after-shift departure closed the attendance record
     outside_since_at: str = ""
+    away_started_at: str = ""
     away_intervals: list[AwayInterval] = Field(default_factory=list)
 
 
