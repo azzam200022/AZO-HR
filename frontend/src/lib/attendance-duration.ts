@@ -1,5 +1,6 @@
 export interface AwayTimeInterval {
   left_at: string;
+  counting_started_at?: string | null;
   returned_at?: string;
   closed_at?: string;
 }
@@ -26,19 +27,22 @@ export function onsiteDurationSeconds(
   let hasOpenInterval = false;
 
   for (const interval of intervals) {
-    const leftMs = timestamp(interval.left_at);
-    if (leftMs === null) continue;
+    const countingStartMs =
+      interval.counting_started_at === ""
+        ? null
+        : timestamp(interval.counting_started_at ?? interval.left_at);
+    if (countingStartMs === null) continue;
 
     let rightMs = timestamp(interval.returned_at) ?? timestamp(interval.closed_at);
-    if (rightMs === null && openStartMs === leftMs) {
+    if (rightMs === null && openStartMs === countingStartMs) {
       rightMs = endMs;
       hasOpenInterval = true;
     }
 
-    if (openStartMs === leftMs) hasOpenInterval = true;
+    if (openStartMs === countingStartMs) hasOpenInterval = true;
     if (rightMs === null) continue;
 
-    const overlapStart = Math.max(startMs, leftMs);
+    const overlapStart = Math.max(startMs, countingStartMs);
     const overlapEnd = Math.min(endMs, rightMs);
     awayMs += Math.max(0, overlapEnd - overlapStart);
   }
