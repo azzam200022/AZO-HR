@@ -223,6 +223,11 @@ async def my_presence(payload: SelfPunch, principal: Principal = Depends(require
         tracking=bool(doc.get("_tracking", False)),
         checked_out=bool(doc.get("check_out")),
         outside_since_at=doc.get("outside_since_at") or "",
+        away_started_at=(
+            doc.get("away_started_at")
+            if "away_started_at" in doc
+            else doc.get("outside_since_at") or ""
+        ) or "",
         away_intervals=doc.get("away_intervals") or [],
     )
 
