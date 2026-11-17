@@ -210,8 +210,8 @@ export default function MyAttendance() {
     const outsideSinceAt = presence?.tracking
       ? presence.inside
         ? ""
-        : presence.outside_since_at
-      : todayRecord.outside_since_at;
+        : presence.away_started_at
+      : todayRecord.away_started_at ?? todayRecord.outside_since_at;
     const seconds = onsiteDurationSeconds(
       startEpoch,
       endEpoch,
@@ -332,7 +332,9 @@ export default function MyAttendance() {
                 <div className="text-center">
                   <p className="text-xs text-teal-100">
                     {presence?.tracking && !presence.inside
-                      ? "المؤقت متوقف خارج موقع العمل"
+                      ? presence.away_started_at
+                        ? "المؤقت متوقف خارج موقع العمل"
+                        : "المؤقت يعمل خلال مهلة السماح"
                       : "وقت العمل الفعلي"}
                   </p>
                   <p className="mt-1 text-2xl font-bold tabular-nums" data-testid="live-duration">
@@ -399,7 +401,9 @@ export default function MyAttendance() {
               >
                 {presence.inside
                   ? "داخل موقع العمل"
-                  : `خارج موقع العمل — يُحتسب تأخيراً (${lateLabel(presence.away_minutes)})`}
+                  : presence.away_started_at
+                    ? `خارج موقع العمل — يُحتسب تأخيراً (${lateLabel(presence.away_minutes)})`
+                    : "خارج موقع العمل — مهلة سماح دقيقة واحدة"}
               </div>
             )}
 
