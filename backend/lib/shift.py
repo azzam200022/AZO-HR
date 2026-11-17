@@ -8,7 +8,7 @@ Late rule (as specified):
 The same rule applies to an evening shift (16:00 → 00:00) using its own start time.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 DEFAULT_SHIFT_START = "08:00"
 DEFAULT_SHIFT_END = "16:00"
@@ -133,7 +133,7 @@ def away_minutes_at(
 ) -> int:
     """Saved away time plus the open interval through `now`, capped at the shift end."""
     total = int(record.get("away_minutes", 0))
-    outside_since = record.get("outside_since") or ""
+    outside_since = _counted_away_start(record)
     if not outside_since:
         return total
     day_minutes = 24 * 60
@@ -145,11 +145,24 @@ def away_minutes_at(
     return total + end - start
 
 
+def _counted_away_start(record: dict) -> str:
+    """Return the clock time when away time starts, preserving old records."""
+    if "away_started_at" not in record:
+        return record.get("outside_since") or ""
+    value = record.get("away_started_at")
+    if not value:
+        return ""
+    try:
+        return datetime.fromisoformat(value).strftime("%H:%M")
+    except (TypeError, ValueError):
+        return ""
+
+
 def effective_away_minutes(
     record: dict, now: str, today: str, shift_start: str, shift_end: str
 ) -> int:
     """Count an open departure to now during a shift, or to shift end after it."""
-    outside_since = record.get("outside_since") or ""
+    outside_since = _counted_away_start(record)
     if not outside_since:
         return int(record.get("away_minutes", 0))
     record_date = record.get("date") or today
