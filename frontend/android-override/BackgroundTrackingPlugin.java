@@ -56,9 +56,13 @@ public class BackgroundTrackingPlugin extends Plugin {
 
     @PluginMethod
     public void getStatus(PluginCall call) {
+        android.content.SharedPreferences preferences =
+            getContext().getSharedPreferences("azo_background_location", android.content.Context.MODE_PRIVATE);
         JSObject result = new JSObject();
         result.put("active", BackgroundLocationService.isRunning(getContext()));
         result.put("manuallyStopped", BackgroundLocationService.wasManuallyStopped(getContext()));
+        result.put("lastLocationAtMs", preferences.getLong("lastLocationAtMs", 0L));
+        result.put("lastSyncedAtMs", preferences.getLong("lastSyncedAtMs", 0L));
         call.resolve(result);
     }
 }
