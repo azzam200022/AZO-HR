@@ -3,11 +3,13 @@ import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost } from "@/lib/api";
 import {
+  getBackgroundLocationStatus,
   isBackgroundLocationActive,
   isBackgroundLocationManuallyStopped,
   startBackgroundLocationTracking,
   supportsBackgroundLocation,
 } from "@/lib/background-location";
+import { hasRecentBackgroundHeartbeat } from "@/lib/background-location-health";
 import type { AttendanceRecord, Employee, PresenceStatus, TodayResponse, TrackingConsent, WorkLocation } from "@/lib/types";
 
 /** Keep geofence heartbeats alive across every employee-portal tab while the app is open. */
@@ -72,11 +74,39 @@ export default function PresenceTracker() {
 
     let cancelled = false;
     let pending = false;
+    let lastRestartAttemptAt = 0;
     const ping = async () => {
       if (cancelled || pending || document.visibilityState === "hidden") return;
       pending = true;
       try {
-        if (await isBackgroundLocationActive()) return;
+        const backgroundStatus = supportsBackgroundLocation()
+          ? await getBackgroundLocationStatus()
+          : null;
+        const hasNativeHealthMetrics =
+          backgroundStatus?.lastSyncedAtMs != null &&
+          backgroundStatus.lastLocationAtMs != null;
+        const nativeSyncIsFresh = hasNativeHealthMetrics
+          ? hasRecentBackgroundHeartbeat(backgroundStatus.lastSyncedAtMs) &&
+            hasRecentBackgroundHeartbeat(backgroundStatus.lastLocationAtMs)
+          : backgroundStatus?.active === true;
+        if (backgroundStatus?.active && nativeSyncIsFresh) return;
+
+        const nativeLocationIsStale =
+          backgroundStatus?.lastLocationAtMs !== undefined &&
+          !hasRecentBackgroundHeartbeat(backgroundStatus.lastLocationAtMs);
+        if (
+          backgroundStatus &&
+          employeeId &&
+          !backgroundStatus.manuallyStopped &&
+          (!backgroundStatus.active || nativeLocationIsStale) &&
+          Date.now() - lastRestartAttemptAt >= 60_000
+        ) {
+          lastRestartAttemptAt = Date.now();
+          void startBackgroundLocationTracking(employeeId, false).catch(() => {
+            /* The foreground heartbeat below can still keep the manager status current. */
+          });
+        }
+
         const position = await new Promise<GeolocationPosition>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(resolve, reject, {
             enableHighAccuracy: true,
@@ -112,7 +142,7 @@ export default function PresenceTracker() {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [live, location?.id, queryClient, trackingConsent]);
+  }, [employeeId, live, location?.id, queryClient, trackingConsent]);
 
   useEffect(() => {
     if (
