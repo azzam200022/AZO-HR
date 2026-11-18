@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost } from "@/lib/api";
 import {
-  isBackgroundLocationActive,
+  isBackgroundLocationFresh,
   isBackgroundLocationManuallyStopped,
   startBackgroundLocationTracking,
   supportsBackgroundLocation,
@@ -76,7 +76,7 @@ export default function PresenceTracker() {
       if (cancelled || pending || document.visibilityState === "hidden") return;
       pending = true;
       try {
-        if (await isBackgroundLocationActive()) return;
+        if (await isBackgroundLocationFresh()) return;
         const position = await new Promise<GeolocationPosition>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(resolve, reject, {
             enableHighAccuracy: true,

@@ -18,9 +18,28 @@ export interface EmployeeTrackingRow {
 }
 
 export const TRACKING_FRESHNESS_MINUTES = 3;
+export const BACKGROUND_LOCATION_FRESHNESS_MS = 60_000;
 
 const MINUTES_PER_DAY = 24 * 60;
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function hasRecentLocationFix(
+  lastLocationAt: number,
+  now = Date.now(),
+  freshnessMs = BACKGROUND_LOCATION_FRESHNESS_MS,
+): boolean {
+  if (!Number.isFinite(lastLocationAt) || lastLocationAt <= 0) return false;
+  const age = now - lastLocationAt;
+  return age >= 0 && age <= freshnessMs;
+}
+
+export function hasFreshBackgroundLocation(
+  serviceRunning: boolean,
+  lastLocationAt: number,
+  now = Date.now(),
+): boolean {
+  return serviceRunning && hasRecentLocationFix(lastLocationAt, now);
+}
 
 function minutesFromTime(value?: string | null): number | null {
   const match = /^(\d{1,2}):(\d{2})$/.exec(value ?? "");
