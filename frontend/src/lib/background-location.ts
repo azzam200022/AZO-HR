@@ -7,7 +7,19 @@ interface BackgroundTrackingPlugin {
   requestBackgroundPermissions(): Promise<{ granted: boolean }>;
   start(options: { apiBaseUrl: string; employeeId: string }): Promise<{ active: boolean }>;
   stop(options?: { manual?: boolean }): Promise<{ active: boolean }>;
-  getStatus(): Promise<{ active: boolean; manuallyStopped: boolean }>;
+  getStatus(): Promise<{
+    active: boolean;
+    manuallyStopped: boolean;
+    lastLocationAtMs?: number;
+    lastSyncedAtMs?: number;
+  }>;
+}
+
+export interface BackgroundLocationStatus {
+  active: boolean;
+  manuallyStopped: boolean;
+  lastLocationAtMs?: number;
+  lastSyncedAtMs?: number;
 }
 
 const BackgroundTracking = registerPlugin<BackgroundTrackingPlugin>("BackgroundTracking");
@@ -53,20 +65,21 @@ export async function requestBackgroundLocationPermissions() {
 }
 
 export async function isBackgroundLocationActive() {
-  if (!supportsBackgroundLocation()) return false;
-  try {
-    return (await BackgroundTracking.getStatus()).active;
-  } catch {
-    return false;
-  }
+  return (await getBackgroundLocationStatus()).active;
 }
 
 export async function isBackgroundLocationManuallyStopped() {
-  if (!supportsBackgroundLocation()) return false;
+  return (await getBackgroundLocationStatus()).manuallyStopped;
+}
+
+export async function getBackgroundLocationStatus(): Promise<BackgroundLocationStatus> {
+  if (!supportsBackgroundLocation()) {
+    return { active: false, manuallyStopped: false };
+  }
   try {
-    return (await BackgroundTracking.getStatus()).manuallyStopped;
+    return await BackgroundTracking.getStatus();
   } catch {
-    return false;
+    return { active: false, manuallyStopped: false };
   }
 }
 
