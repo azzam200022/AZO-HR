@@ -47,6 +47,7 @@ public class BackgroundLocationService extends Service implements LocationListen
     private static final String PREFS = "azo_background_location";
     private static final long UPDATE_INTERVAL_MS = 5_000L;
     private static final long MIN_SEND_INTERVAL_MS = 5_000L;
+    private static final long LOCATION_RETRY_AFTER_MS = 90_000L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService network = Executors.newSingleThreadExecutor();
@@ -54,6 +55,7 @@ public class BackgroundLocationService extends Service implements LocationListen
     private final Runnable syncRetry = new Runnable() {
         @Override
         public void run() {
+            if (!maintainLocationUpdates()) return;
             scheduleFlush();
             handler.postDelayed(this, 30_000L);
         }
@@ -64,6 +66,7 @@ public class BackgroundLocationService extends Service implements LocationListen
     private String apiBaseUrl = "";
     private String employeeId = "";
     private long lastSentAt;
+    private long locationRequestStartedAt;
     private boolean updatesRequested;
 
     @Override
@@ -86,6 +89,7 @@ public class BackgroundLocationService extends Service implements LocationListen
         }
 
         SharedPreferences preferences = getSharedPreferences(PREFS, MODE_PRIVATE);
+        lastSentAt = preferences.getLong("lastSentAt", 0L);
         if (intent != null && ACTION_START.equals(intent.getAction())) {
             apiBaseUrl = normalizeOrigin(intent.getStringExtra(EXTRA_API_BASE_URL));
             employeeId = intent.getStringExtra(EXTRA_EMPLOYEE_ID);
@@ -128,11 +132,6 @@ public class BackgroundLocationService extends Service implements LocationListen
         }
 
         requestLocationUpdates();
-        if (!updatesRequested) {
-            stopTracking();
-            return START_NOT_STICKY;
-        }
-
         scheduleFlush();
         handler.removeCallbacks(syncRetry);
         handler.postDelayed(syncRetry, 30_000L);
@@ -162,7 +161,14 @@ public class BackgroundLocationService extends Service implements LocationListen
     @SuppressLint("MissingPermission")
     private void requestLocationUpdates() {
         updatesRequested = false;
+        locationRequestStartedAt = System.currentTimeMillis();
         if (locationManager == null || !hasLocationPermission()) return;
+
+        try {
+            locationManager.removeUpdates(this);
+        } catch (Exception ignored) {
+            // The service may be registering for the first time.
+        }
 
         for (String provider : new String[] {
             LocationManager.GPS_PROVIDER,
@@ -194,6 +200,10 @@ public class BackgroundLocationService extends Service implements LocationListen
         getSharedPreferences(PREFS, MODE_PRIVATE)
             .edit()
             .putLong("lastSentAt", now)
+            .putLong(
+                "lastLocationAtMs",
+                location.getTime() > 0 ? location.getTime() : now
+            )
             .apply();
         try {
             locationQueue.enqueue(employeeId, location);
@@ -273,6 +283,10 @@ public class BackgroundLocationService extends Service implements LocationListen
                     JSONArray acknowledged = result.optJSONArray("acknowledged_ids");
                     if (acknowledged == null || acknowledged.length() == 0) return;
                     locationQueue.deleteAcknowledged(employeeId, acknowledged);
+                    getSharedPreferences(PREFS, MODE_PRIVATE)
+                        .edit()
+                        .putLong("lastSyncedAtMs", System.currentTimeMillis())
+                        .apply();
                     checkedOut = checkedOut || result.optBoolean("checked_out", false);
                 }
             } catch (Exception exception) {
@@ -328,6 +342,19 @@ public class BackgroundLocationService extends Service implements LocationListen
         );
         channel.setDescription("إشعار ظاهر ما دام تتبع الموقع أثناء الدوام مفعّلاً.");
         manager.createNotificationChannel(channel);
+    }
+
+    private boolean maintainLocationUpdates() {
+        if (!hasLocationPermission()) {
+            stopTracking();
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        long lastActivity = Math.max(lastSentAt, locationRequestStartedAt);
+        if (now - lastActivity >= LOCATION_RETRY_AFTER_MS) {
+            requestLocationUpdates();
+        }
+        return true;
     }
 
     private void stopTracking() {
@@ -393,10 +420,14 @@ public class BackgroundLocationService extends Service implements LocationListen
     }
 
     @Override
-    public void onProviderEnabled(String provider) {}
+    public void onProviderDisabled(String provider) {
+        handler.post(this::requestLocationUpdates);
+    }
 
     @Override
-    public void onProviderDisabled(String provider) {}
+    public void onProviderEnabled(String provider) {
+        handler.post(this::requestLocationUpdates);
+    }
 
     @Override
     @SuppressWarnings("deprecation")
