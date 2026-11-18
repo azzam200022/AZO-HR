@@ -26,6 +26,8 @@ from lib.shift import (
 )
 from models.hr import AttendanceRecord
 
+DEPARTURE_GRACE_SECONDS = 60
+
 
 async def _employee_location(employee: dict) -> dict | None:
     location_id = employee.get("location_id") or ""
@@ -131,6 +133,7 @@ async def punch_in(
         location_id=location_doc["id"] if location_doc else "",
         distance_m=round(distance, 1) if distance is not None else None,
         late_minutes=late,
+        away_started_at="",
         last_seen=punched_at,
     )
     await db.attendance.insert_one(record.model_dump())
@@ -162,6 +165,7 @@ def _close_away_interval(
         "away_minutes": away_minutes_at(doc, now, shift_start, shift_end),
         "outside_since": "",
         "outside_since_at": "",
+        "away_started_at": "",
     }
     intervals = list(doc.get("away_intervals") or [])
     open_interval = next((item for item in reversed(intervals) if not item.get("closed_at")), None)
@@ -229,8 +233,13 @@ def _open_interval(
     left_at = doc.get("outside_since_at") or _wall_time_iso(
         attendance_date, doc["outside_since"], shift_start, shift_end
     )
+    counting_started_at = doc.get("away_started_at")
+    if counting_started_at is None and "away_started_at" not in doc:
+        # Existing records predate the grace period; preserve their original accounting.
+        counting_started_at = left_at
     interval = {
         "left_at": left_at,
+        "counting_started_at": counting_started_at or "",
         "left_lat": None,
         "left_lng": None,
         "left_distance_m": None,
@@ -355,41 +364,90 @@ async def record_presence(
 
     updates: dict = {"last_seen": now}
     return_alert: tuple[str, float] | None = None
+    left_alert: tuple[str, float] | None = None
     if event_id and event_timestamp_ms is not None:
         updates["_presence_cursor_ms"] = event_timestamp_ms
     intervals = list(doc.get("away_intervals") or [])
     open_interval = _open_interval(doc, intervals, attendance_date, shift_start, shift_end)
-    interval_start = _parse_local_instant(
+    departure_at = _parse_local_instant(
         doc.get("outside_since_at") or (open_interval or {}).get("left_at")
     )
+    interval_start = (
+        _parse_local_instant(doc.get("away_started_at"))
+        if "away_started_at" in doc
+        else departure_at
+    )
+
+    # New departures remain pending for a full minute. Start accounting at the exact
+    # deadline, even if the next GPS heartbeat arrives a few seconds later.
+    grace_pending = (
+        bool(doc.get("outside_since"))
+        and "away_started_at" in doc
+        and not doc.get("away_started_at")
+    )
+    if grace_pending and open_interval and departure_at and scheduled_day:
+        grace_deadline = departure_at + timedelta(seconds=DEPARTURE_GRACE_SECONDS)
+        shift_end_at = _shift_end_local(attendance_date, shift_start, shift_end)
+        grace_expired = (
+            observed_local >= grace_deadline
+            if not inside
+            else observed_local > grace_deadline
+        )
+        if grace_expired and grace_deadline <= shift_end_at:
+            interval_start = grace_deadline
+            grace_start = grace_deadline.isoformat(timespec="seconds")
+            updates["away_started_at"] = grace_start
+            open_interval["counting_started_at"] = grace_start
+            updates["away_intervals"] = intervals
+            left_distance = open_interval.get("left_distance_m")
+            left_alert = (
+                departure_at.strftime("%H:%M"),
+                float(left_distance) if left_distance is not None else distance,
+            )
 
     if inside:
         if doc.get("outside_since") and open_interval:
-            shift_end_at = _shift_end_local(attendance_date, shift_start, shift_end)
-            billable_end = min(observed_local, shift_end_at)
-            started_at = interval_start or observed_local
-            minutes_away = max(0, int((billable_end - started_at).total_seconds() // 60))
-            open_interval.update(
-                {
-                    "returned_at": observed_local.isoformat(timespec="seconds"),
-                    "return_lat": lat,
-                    "return_lng": lng,
-                    "return_distance_m": round(distance, 1),
-                    "return_accuracy_m": accuracy_m,
-                    "closed_at": observed_local.isoformat(timespec="seconds"),
-                    "ended_by": "return",
-                    "minutes": minutes_away,
-                }
-            )
-            updates.update(
-                {
-                    "away_minutes": int(doc.get("away_minutes", 0)) + minutes_away,
-                    "outside_since": "",
-                    "outside_since_at": "",
-                    "away_intervals": intervals,
-                }
-            )
-            return_alert = (now, distance)
+            if interval_start is None:
+                # Returned before the grace deadline, so this was not a billable departure.
+                intervals.remove(open_interval)
+                updates.update(
+                    {
+                        "away_minutes": int(doc.get("away_minutes", 0)),
+                        "outside_since": "",
+                        "outside_since_at": "",
+                        "away_started_at": "",
+                        "away_intervals": intervals,
+                    }
+                )
+            else:
+                shift_end_at = _shift_end_local(attendance_date, shift_start, shift_end)
+                billable_end = min(observed_local, shift_end_at)
+                minutes_away = max(
+                    0, int((billable_end - interval_start).total_seconds() // 60)
+                )
+                open_interval.update(
+                    {
+                        "counting_started_at": interval_start.isoformat(timespec="seconds"),
+                        "returned_at": observed_local.isoformat(timespec="seconds"),
+                        "return_lat": lat,
+                        "return_lng": lng,
+                        "return_distance_m": round(distance, 1),
+                        "return_accuracy_m": accuracy_m,
+                        "closed_at": observed_local.isoformat(timespec="seconds"),
+                        "ended_by": "return",
+                        "minutes": minutes_away,
+                    }
+                )
+                updates.update(
+                    {
+                        "away_minutes": int(doc.get("away_minutes", 0)) + minutes_away,
+                        "outside_since": "",
+                        "outside_since_at": "",
+                        "away_started_at": "",
+                        "away_intervals": intervals,
+                    }
+                )
+                return_alert = (now, distance)
         elif doc.get("outside_since"):
             updates.update(
                 _close_away_interval(
@@ -403,18 +461,23 @@ async def record_presence(
             shift_end_at = _shift_end_local(attendance_date, shift_start, shift_end)
             started_at = interval_start or shift_end_at
             minutes_away = max(0, int((shift_end_at - started_at).total_seconds() // 60))
-            open_interval.update(
-                {
-                    "closed_at": shift_end_at.isoformat(timespec="seconds"),
-                    "ended_by": "shift_end",
-                    "minutes": minutes_away,
-                }
-            )
+            if interval_start is None:
+                intervals.remove(open_interval)
+            else:
+                open_interval.update(
+                    {
+                        "counting_started_at": interval_start.isoformat(timespec="seconds"),
+                        "closed_at": shift_end_at.isoformat(timespec="seconds"),
+                        "ended_by": "shift_end",
+                        "minutes": minutes_away,
+                    }
+                )
             updates.update(
                 {
                     "away_minutes": int(doc.get("away_minutes", 0)) + minutes_away,
                     "outside_since": "",
                     "outside_since_at": "",
+                    "away_started_at": "",
                     "away_intervals": intervals,
                 }
             )
@@ -441,15 +504,19 @@ async def record_presence(
                 "check_out": now,
                 "check_out_at": observed_local.isoformat(timespec="seconds"),
                 "outside_since": "",
+                "outside_since_at": "",
+                "away_started_at": "",
             }
         )
     elif within_window and not doc.get("outside_since"):
         updates["outside_since"] = now
         left_at = observed_local.isoformat(timespec="seconds")
         updates["outside_since_at"] = left_at
+        updates["away_started_at"] = ""
         intervals.append(
             {
                 "left_at": left_at,
+                "counting_started_at": "",
                 "left_lat": lat,
                 "left_lng": lng,
                 "left_distance_m": round(distance, 1),
@@ -465,14 +532,16 @@ async def record_presence(
             }
         )
         updates["away_intervals"] = intervals
-        # One alert per departure — re-entering and leaving again raises a fresh one.
-        await notify_left_site(employee, location_doc["name"], now, distance)
     elif event_id and event_timestamp_ms is not None:
         # Persist cursor progress even when the sample is outside the scheduled window.
         pass
 
     await db.attendance.update_one({"id": doc["id"]}, {"$set": updates})
     fresh = await db.attendance.find_one({"id": doc["id"]})
+    if left_alert is not None:
+        await notify_left_site(
+            employee, location_doc["name"], left_alert[0], left_alert[1]
+        )
     if updates.get("check_out") and not doc.get("check_out"):
         await notify_manager_event(
             kind="attendance",

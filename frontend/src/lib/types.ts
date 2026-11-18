@@ -74,6 +74,7 @@ export interface SessionInfo {
 
 export interface AwayInterval {
   left_at: string;
+  counting_started_at: string | null;
   left_lat: number | null;
   left_lng: number | null;
   left_distance_m: number | null;
@@ -127,6 +128,7 @@ export interface AttendanceRecord {
   away_minutes: number; // minutes spent outside the work location during the shift
   outside_since: string; // HH:MM while currently away, "" when inside
   outside_since_at: string; // exact instant of the current departure
+  away_started_at: string | null; // exact instant when the one-minute grace ends
   away_intervals: AwayInterval[];
   last_seen: string; // HH:MM of the last location heartbeat
   created_at: string;
@@ -141,6 +143,7 @@ export interface PresenceStatus {
   tracking: boolean;
   checked_out: boolean;
   outside_since_at: string;
+  away_started_at: string;
   away_intervals: AwayInterval[];
 }
 

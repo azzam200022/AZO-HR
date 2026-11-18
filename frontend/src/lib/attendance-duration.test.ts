@@ -33,6 +33,51 @@ describe("onsiteDurationSeconds", () => {
     ).toBe(10 * 60);
   });
 
+  it("does not pause the timer while a departure is pending grace", () => {
+    expect(
+      onsiteDurationSeconds(
+        start,
+        end,
+        [
+          {
+            left_at: "2026-11-04T09:10:00+03:00",
+            counting_started_at: "",
+          },
+        ],
+        "",
+      ),
+    ).toBe(60 * 60);
+  });
+
+  it("starts excluding away time at the grace deadline", () => {
+    expect(
+      onsiteDurationSeconds(start, end, [
+        {
+          left_at: "2026-11-04T09:10:00+03:00",
+          counting_started_at: "2026-11-04T09:11:00+03:00",
+          returned_at: "2026-11-04T09:20:00+03:00",
+        },
+      ]),
+    ).toBe(60 * 60 - 9 * 60);
+  });
+
+  it("freezes an open interval at the grace deadline", () => {
+    const graceEnd = "2026-11-04T09:11:00+03:00";
+    expect(
+      onsiteDurationSeconds(
+        start,
+        end,
+        [
+          {
+            left_at: "2026-11-04T09:10:00+03:00",
+            counting_started_at: graceEnd,
+          },
+        ],
+        graceEnd,
+      ),
+    ).toBe(11 * 60);
+  });
+
   it("uses the open departure timestamp when older records lack interval rows", () => {
     expect(
       onsiteDurationSeconds(
