@@ -46,6 +46,8 @@ public class BackgroundTrackingPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
         static let manualStop = "azo.backgroundLocation.manualStop"
         static let apiBaseUrl = "azo.backgroundLocation.apiBaseUrl"
         static let employeeID = "azo.backgroundLocation.employeeID"
+        static let lastLocationAtMs = "azo.backgroundLocation.lastLocationAtMs"
+        static let lastSyncedAtMs = "azo.backgroundLocation.lastSyncedAtMs"
     }
 
     override public func load() {
@@ -132,6 +134,8 @@ public class BackgroundTrackingPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
         call.resolve([
             "active": defaults.bool(forKey: Key.active),
             "manuallyStopped": defaults.bool(forKey: Key.manualStop),
+            "lastLocationAtMs": defaults.double(forKey: Key.lastLocationAtMs),
+            "lastSyncedAtMs": defaults.double(forKey: Key.lastSyncedAtMs),
         ])
     }
 
@@ -181,6 +185,10 @@ public class BackgroundTrackingPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
             return
         }
         lastAcceptedLocationAt = now
+        defaults.set(
+            location.timestamp.timeIntervalSince1970 * 1000,
+            forKey: Key.lastLocationAtMs
+        )
 
         let sample = PendingLocation(
             eventID: UUID().uuidString,
@@ -318,6 +326,12 @@ public class BackgroundTrackingPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
 
                     let acknowledged = Set(result["acknowledged_ids"] as? [String] ?? [])
                     self.deleteAcknowledged(acknowledged)
+                    if !acknowledged.isEmpty {
+                        self.defaults.set(
+                            Date().timeIntervalSince1970 * 1000,
+                            forKey: Key.lastSyncedAtMs
+                        )
+                    }
                     if result["checked_out"] as? Bool == true {
                         self.stopTracking(manual: false)
                     } else if !acknowledged.isEmpty {
