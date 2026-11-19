@@ -2,12 +2,13 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import { API_ORIGIN } from "@/lib/api";
+import { hasFreshBackgroundLocation } from "@/lib/location-tracking";
 
 interface BackgroundTrackingPlugin {
   requestBackgroundPermissions(): Promise<{ granted: boolean }>;
   start(options: { apiBaseUrl: string; employeeId: string }): Promise<{ active: boolean }>;
   stop(options?: { manual?: boolean }): Promise<{ active: boolean }>;
-  getStatus(): Promise<{ active: boolean; manuallyStopped: boolean }>;
+  getStatus(): Promise<{ active: boolean; manuallyStopped: boolean; lastLocationAt: number }>;
 }
 
 const BackgroundTracking = registerPlugin<BackgroundTrackingPlugin>("BackgroundTracking");
@@ -56,6 +57,16 @@ export async function isBackgroundLocationActive() {
   if (!supportsBackgroundLocation()) return false;
   try {
     return (await BackgroundTracking.getStatus()).active;
+  } catch {
+    return false;
+  }
+}
+
+export async function isBackgroundLocationFresh() {
+  if (!supportsBackgroundLocation()) return false;
+  try {
+    const status = await BackgroundTracking.getStatus();
+    return hasFreshBackgroundLocation(status.active, status.lastLocationAt);
   } catch {
     return false;
   }

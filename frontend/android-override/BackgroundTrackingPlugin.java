@@ -59,6 +59,7 @@ public class BackgroundTrackingPlugin extends Plugin {
         JSObject result = new JSObject();
         result.put("active", BackgroundLocationService.isRunning(getContext()));
         result.put("manuallyStopped", BackgroundLocationService.wasManuallyStopped(getContext()));
+        result.put("lastLocationAt", BackgroundLocationService.lastLocationAt(getContext()));
         call.resolve(result);
     }
 }

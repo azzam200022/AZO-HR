@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { AttendanceRecord, Employee } from "@/lib/types";
-import { getShiftState, getTrackingSummary } from "@/lib/location-tracking";
+import {
+  getShiftState,
+  getTrackingSummary,
+  hasFreshBackgroundLocation,
+  hasRecentLocationFix,
+} from "@/lib/location-tracking";
 
 function employee(overrides: Partial<Employee> = {}): Employee {
   return {
@@ -81,6 +86,18 @@ describe("employee shift ordering", () => {
 });
 
 describe("location tracking freshness", () => {
+  it("uses the foreground location fallback when the native fix is stale", () => {
+    const now = 1_800_000_000_000;
+
+    expect(hasRecentLocationFix(now - 30_000, now)).toBe(true);
+    expect(hasRecentLocationFix(now - 61_000, now)).toBe(false);
+    expect(hasRecentLocationFix(0, now)).toBe(false);
+    expect(hasRecentLocationFix(now + 1_000, now)).toBe(false);
+    expect(hasFreshBackgroundLocation(true, now - 30_000, now)).toBe(true);
+    expect(hasFreshBackgroundLocation(true, now - 61_000, now)).toBe(false);
+    expect(hasFreshBackgroundLocation(false, now - 1_000, now)).toBe(false);
+  });
+
   it("treats a recent overnight heartbeat as active across midnight", () => {
     const nightEmployee = employee({
       shift_start: "22:00",
