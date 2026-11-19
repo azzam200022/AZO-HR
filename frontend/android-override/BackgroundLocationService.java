@@ -252,7 +252,12 @@ public class BackgroundLocationService extends Service implements LocationListen
 
                 String cookie = CookieManager.getInstance().getCookie(apiBaseUrl + "/");
                 if (cookie == null || cookie.isEmpty()) {
-                    requestStop();
+                    // The foreground service may outlive the WebView activity. Keep
+                    // the queued locations and retry when its session cookie is available.
+                    android.util.Log.w(
+                        "AzoBackgroundLocation",
+                        "Location sync is waiting for an app session"
+                    );
                     return;
                 }
 
