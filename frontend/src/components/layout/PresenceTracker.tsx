@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost } from "@/lib/api";
 import {
+  isBackgroundLocationActive,
   isBackgroundLocationFresh,
   isBackgroundLocationManuallyStopped,
   startBackgroundLocationTracking,
