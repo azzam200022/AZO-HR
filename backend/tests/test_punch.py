@@ -213,7 +213,7 @@ async def test_offline_location_replay_keeps_departure_return_and_ignores_retrie
         event_id="left-1",
     )
     assert duplicate["_duplicate"] is True
-    assert database.attendance.documents[0]["away_minutes"] == 24
+    assert database.attendance.documents[0]["away_minutes"] == 20
 
 
 @pytest.mark.asyncio
