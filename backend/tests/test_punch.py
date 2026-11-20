@@ -130,7 +130,7 @@ async def test_presence_counts_minutes_between_midshift_departure_and_return(mon
     returned = await punch.record_presence(staff, 0, 0)
     saved = database.attendance.documents[0]
     assert returned["_inside"] is True
-    assert saved["away_minutes"] == 24
+    assert saved["away_minutes"] == 20
     assert saved["outside_since"] == ""
     assert saved["check_out"] == ""
 
@@ -194,12 +194,12 @@ async def test_offline_location_replay_keeps_departure_return_and_ignores_retrie
     )
 
     saved = database.attendance.documents[0]
-    assert result["away_minutes"] == 24
-    assert saved["away_minutes"] == 24
+    assert result["away_minutes"] == 20
+    assert saved["away_minutes"] == 20
     assert saved["outside_since"] == ""
     assert saved["_presence_cursor_ms"] == int(returned_at.timestamp() * 1000)
     assert saved["away_intervals"][0]["left_at"] == "2026-11-04T10:00:00+03:00"
-    assert saved["away_intervals"][0]["counting_started_at"] == "2026-11-04T10:01:00+03:00"
+    assert saved["away_intervals"][0]["counting_started_at"] == "2026-11-04T10:05:00+03:00"
     assert saved["away_intervals"][0]["returned_at"] == "2026-11-04T10:25:00+03:00"
     assert saved["away_intervals"][0]["left_lat"] == 33.3152
     assert saved["away_intervals"][0]["return_lng"] == 44.366
@@ -304,7 +304,7 @@ async def test_departure_notifies_after_grace_and_counts_only_after_deadline(mon
     )
     saved = database.attendance.documents[0]
     assert saved["away_minutes"] == 2
-    returned_notify.assert_awaited_once_with(staff, "موقع العمل", "10:03", 100)
+    returned_notify.assert_awaited_once_with(staff, "موقع العمل", "10:07", 100)
 
 
 @pytest.mark.asyncio
@@ -330,16 +330,20 @@ async def test_departure_notification_fires_once_until_employee_returns(monkeypa
 
     clock.update(now="10:02", distance=500)
     await punch.record_presence(staff, 0, 0)
-    clock.update(now="10:03", distance=520)
+    clock.update(now="10:06", distance=520)
+    await punch.record_presence(staff, 0, 0)
+    assert notify.await_count == 0
+
+    clock.update(now="10:07", distance=520)
     await punch.record_presence(staff, 0, 0)
     assert notify.await_count == 1
 
-    clock.update(now="10:04", distance=100)
+    clock.update(now="10:08", distance=100)
     await punch.record_presence(staff, 0, 0)
-    returned_notify.assert_awaited_once_with(staff, "موقع العمل", "10:04", 100)
-    clock.update(now="10:05", distance=500)
+    returned_notify.assert_awaited_once_with(staff, "موقع العمل", "10:08", 100)
+    clock.update(now="10:09", distance=500)
     await punch.record_presence(staff, 0, 0)
-    clock.update(now="10:06", distance=520)
+    clock.update(now="10:14", distance=520)
     await punch.record_presence(staff, 0, 0)
     assert notify.await_count == 2
     assert returned_notify.await_count == 1
@@ -385,7 +389,7 @@ async def test_open_midshift_absence_closes_at_shift_end(monkeypatch):
     assert result["check_out"] == "16:00"
     assert result["_tracking"] is True
     assert saved["check_out"] == "16:00"
-    assert saved["away_minutes"] == 4
+    assert saved["away_minutes"] == 0
     assert saved["outside_since"] == ""
 
 
@@ -399,7 +403,7 @@ async def test_midshift_absence_return_after_shift_end_counts_only_to_shift_end(
     await punch.record_presence(staff, 0, 0)
     saved = database.attendance.documents[0]
     assert saved["check_out"] == ""
-    assert saved["away_minutes"] == 4
+    assert saved["away_minutes"] == 0
     assert saved["outside_since"] == ""
 
 
