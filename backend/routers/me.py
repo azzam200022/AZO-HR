@@ -15,7 +15,7 @@ from lib.auth import Principal, require_employee
 from lib.employee_photo import employee_photo_response, product_photo_response
 from lib.attendance_calendar import daily_attendance_records
 from lib.cycle import report_cycle_bounds
-from lib.dates import aware, current_month, now_time, today_iso
+from lib.dates import aware, current_month, now_time, now_utc, today_iso
 from lib.db import db
 from lib.adjustments import cycle_adjustment_query, to_model as adjustment_model
 from lib.messaging import GROUP_THREAD, mark_thread_read, send_message, to_model as message_model
@@ -36,6 +36,7 @@ from models.hr import (
     EmployeeReport,
     ProductExpiryBatch,
     ProductExpiryBatchView,
+    ProductExpiryBatchUpdate,
     LeaveBalance,
     LeaveRequest,
     MarkAllResult,
@@ -77,6 +78,8 @@ def _product_view(doc: dict, today: date) -> EmployeeProductView:
                 expiry_date=expiry.isoformat(),
                 days_remaining=days_remaining,
                 status=expiry_status(days_remaining),
+                handled=bool(batch.get("handled", False)),
+                handled_at=aware(batch.get("handled_at")),
             )
         )
     return EmployeeProductView(
@@ -411,6 +414,73 @@ async def update_my_product(
     if not result.matched_count:
         raise HTTPException(status_code=404, detail="المادة غير موجودة")
     document.update(updates)
+    return _product_view(document, date.fromisoformat(today_iso()))
+
+
+@router.patch(
+    "/products/{product_id}/expiry-dates/{batch_id}",
+    response_model=EmployeeProductView,
+)
+async def update_my_product_expiry_batch(
+    product_id: str,
+    batch_id: str,
+    payload: ProductExpiryBatchUpdate,
+    principal: Principal = Depends(require_employee),
+):
+    """Mark one of the signed-in employee's expiry batches handled or reopen it."""
+    await _my_employee(principal)
+    handled_at = now_utc() if payload.handled else None
+    result = await db.employee_products.update_one(
+        {
+            "id": product_id,
+            "employee_id": principal.employee_id,
+            "expiry_dates.id": batch_id,
+        },
+        {
+            "$set": {
+                "expiry_dates.$.handled": payload.handled,
+                "expiry_dates.$.handled_at": handled_at,
+            }
+        },
+    )
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="تاريخ الصلاحية غير موجود")
+
+    document = await db.employee_products.find_one(
+        {"id": product_id, "employee_id": principal.employee_id}
+    )
+    if not document:
+        raise HTTPException(status_code=404, detail="المادة غير موجودة")
+    return _product_view(document, date.fromisoformat(today_iso()))
+
+
+@router.delete(
+    "/products/{product_id}/expiry-dates/{batch_id}",
+    response_model=EmployeeProductView,
+)
+async def delete_my_product_expiry_batch(
+    product_id: str,
+    batch_id: str,
+    principal: Principal = Depends(require_employee),
+):
+    """Delete one expiry batch without deleting its product or other batches."""
+    await _my_employee(principal)
+    result = await db.employee_products.update_one(
+        {
+            "id": product_id,
+            "employee_id": principal.employee_id,
+            "expiry_dates.id": batch_id,
+        },
+        {"$pull": {"expiry_dates": {"id": batch_id}}},
+    )
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="تاريخ الصلاحية غير موجود")
+
+    document = await db.employee_products.find_one(
+        {"id": product_id, "employee_id": principal.employee_id}
+    )
+    if not document:
+        raise HTTPException(status_code=404, detail="المادة غير موجودة")
     return _product_view(document, date.fromisoformat(today_iso()))
 
 

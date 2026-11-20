@@ -385,6 +385,8 @@ class EmployeeProductUpdate(BaseModel):
 class ProductExpiryBatch(BaseModel):
     id: str = Field(default_factory=_uuid)
     expiry_date: str
+    handled: bool = False
+    handled_at: datetime | None = None
 
 
 class EmployeeProductRecord(BaseModel):
@@ -401,6 +403,12 @@ class ProductExpiryBatchView(BaseModel):
     expiry_date: str
     days_remaining: int
     status: Literal["far", "near", "expired"]
+    handled: bool = False
+    handled_at: datetime | None = None
+
+
+class ProductExpiryBatchUpdate(BaseModel):
+    handled: bool
 
 
 class EmployeeProductView(BaseModel):

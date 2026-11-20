@@ -127,6 +127,8 @@ async def run_product_expiry_reminder_cycle(
             continue
 
         for batch in product.get("expiry_dates") or []:
+            if batch.get("handled"):
+                continue
             batch_id = batch.get("id")
             expiry_date = batch.get("expiry_date")
             if not batch_id or not expiry_date:

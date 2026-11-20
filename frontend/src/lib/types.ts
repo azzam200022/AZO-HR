@@ -170,6 +170,8 @@ export interface ProductExpiryBatch {
   expiry_date: string;
   days_remaining: number;
   status: ProductExpiryStatus;
+  handled: boolean;
+  handled_at: string | null;
 }
 
 export interface EmployeeProduct {

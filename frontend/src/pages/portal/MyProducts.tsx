@@ -1,6 +1,6 @@
 import { useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ImagePlus, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, ImagePlus, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiDelete, apiGet, apiPatch, apiPost, getApiOrigin } from "@/lib/api";
 import { errorText, fmtDate, formatNumber } from "@/lib/format";
@@ -128,6 +128,41 @@ export default function MyProducts() {
     onError: (error) => toast.error(errorText(error)),
   });
 
+  const deleteExpiryDateMutation = useMutation({
+    mutationFn: ({ productId, batchId }: { productId: string; batchId: string }) =>
+      apiDelete<EmployeeProduct>(
+        `/me/products/${encodeURIComponent(productId)}/expiry-dates/${encodeURIComponent(batchId)}`,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["me", "products"] });
+      toast.success("تم حذف تاريخ الصلاحية");
+    },
+    onError: (error) => toast.error(errorText(error)),
+  });
+
+  const handleExpiryDateMutation = useMutation({
+    mutationFn: ({
+      productId,
+      batchId,
+      handled,
+    }: {
+      productId: string;
+      batchId: string;
+      handled: boolean;
+    }) =>
+      apiPatch<EmployeeProduct>(
+        `/me/products/${encodeURIComponent(productId)}/expiry-dates/${encodeURIComponent(batchId)}`,
+        { handled },
+      ),
+    onSuccess: (_product, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["me", "products"] });
+      toast.success(
+        variables.handled ? "تم تسجيل معالجة تاريخ الصلاحية" : "تمت إعادة فتح تذكيرات الصلاحية",
+      );
+    },
+    onError: (error) => toast.error(errorText(error)),
+  });
+
   const products = useMemo(
     () =>
       [...(productsQuery.data ?? [])].sort((a, b) => {
@@ -221,6 +256,12 @@ export default function MyProducts() {
   const deleteProduct = (product: EmployeeProduct) => {
     if (window.confirm(`هل تريد حذف «${product.name}» وكل تواريخ صلاحيتها؟`)) {
       deleteProductMutation.mutate(product.id);
+    }
+  };
+
+  const deleteExpiryDate = (product: EmployeeProduct, batch: EmployeeProduct["expiry_dates"][number]) => {
+    if (window.confirm(`هل تريد حذف تاريخ ${fmtDate(batch.expiry_date)} من «${product.name}»؟`)) {
+      deleteExpiryDateMutation.mutate({ productId: product.id, batchId: batch.id });
     }
   };
 
@@ -555,27 +596,80 @@ export default function MyProducts() {
                   )}
 
                   <div className="mt-3 space-y-2">
-                    {[...product.expiry_dates]
-                      .sort((a, b) => a.expiry_date.localeCompare(b.expiry_date))
-                      .map((batch) => (
-                        <div
-                          key={batch.id}
-                          className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 ${STATUS_STYLE[batch.status]}`}
-                          data-testid={`product-expiry-${batch.id}`}
-                        >
-                          <div>
-                            <p className="text-xs font-semibold">
-                              تاريخ الانتهاء: {fmtDate(batch.expiry_date)}
-                            </p>
-                            <p className="mt-1 text-[11px]">
-                              {remainingLabel(batch.days_remaining)}
-                            </p>
+                    {product.expiry_dates.length === 0 ? (
+                      <p className="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-500">
+                        لا توجد تواريخ صلاحية مسجّلة. يمكنك إضافة تاريخ من تعديل المادة.
+                      </p>
+                    ) : (
+                      [...product.expiry_dates]
+                        .sort((a, b) => a.expiry_date.localeCompare(b.expiry_date))
+                        .map((batch) => (
+                          <div
+                            key={batch.id}
+                            className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2.5 ${STATUS_STYLE[batch.status]}`}
+                            data-testid={`product-expiry-${batch.id}`}
+                          >
+                            <div>
+                              <p className="text-xs font-semibold">
+                                تاريخ الانتهاء: {fmtDate(batch.expiry_date)}
+                              </p>
+                              <p className="mt-1 text-[11px]">
+                                {remainingLabel(batch.days_remaining)}
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 flex-wrap items-center gap-1">
+                              <span className="text-[11px] font-bold">
+                                {STATUS_LABEL[batch.status]}
+                              </span>
+                              {batch.handled && (
+                                <span
+                                  className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-800"
+                                  data-testid={`product-expiry-handled-${batch.id}`}
+                                >
+                                  تم التعامل
+                                </span>
+                              )}
+                              <Button
+                                type="button"
+                                size="xs"
+                                variant="outline"
+                                onClick={() =>
+                                  handleExpiryDateMutation.mutate({
+                                    productId: product.id,
+                                    batchId: batch.id,
+                                    handled: !batch.handled,
+                                  })
+                                }
+                                disabled={handleExpiryDateMutation.isPending}
+                                aria-label={
+                                  batch.handled
+                                    ? `إلغاء معالجة تاريخ ${fmtDate(batch.expiry_date)}`
+                                    : `تسجيل معالجة تاريخ ${fmtDate(batch.expiry_date)}`
+                                }
+                                data-testid={`handle-product-expiry-${batch.id}`}
+                              >
+                                {batch.handled ? (
+                                  <RotateCcw className="h-3 w-3" />
+                                ) : (
+                                  <Check className="h-3 w-3" />
+                                )}
+                                {batch.handled ? "تراجع" : "تم"}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon-xs"
+                                variant="ghost"
+                                onClick={() => deleteExpiryDate(product, batch)}
+                                disabled={deleteExpiryDateMutation.isPending}
+                                aria-label={`حذف تاريخ ${fmtDate(batch.expiry_date)} من ${product.name}`}
+                                data-testid={`delete-product-expiry-${batch.id}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
                           </div>
-                          <span className="shrink-0 text-[11px] font-bold">
-                            {STATUS_LABEL[batch.status]}
-                          </span>
-                        </div>
-                      ))}
+                        ))
+                    )}
                   </div>
                 </article>
               ))}
