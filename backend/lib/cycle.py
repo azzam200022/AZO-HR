@@ -22,7 +22,15 @@ def cycle_anchor(employee: dict) -> str:
 
 def pay_cycle(employee: dict, on: str | None = None) -> tuple[str, str]:
     """(start_iso, end_iso) of the cycle containing `on` — today when omitted."""
-    return cycle_bounds(cycle_anchor(employee), on)
+    anchor = cycle_anchor(employee)
+    if employee.get("payroll_cycle_start"):
+        # This field selects a recurring day of the month, not the first date on
+        # which cycles may exist. Keep the anchor day while avoiding the
+        # "before hire date" special case when the configured date is in the
+        # future (for example, a Dec 1 anchor while reporting November).
+        anchor_day = date.fromisoformat(anchor).day
+        anchor = f"2000-01-{anchor_day:02d}"
+    return cycle_bounds(anchor, on)
 
 
 def report_cycle_bounds(
