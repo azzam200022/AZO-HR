@@ -10,5 +10,6 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(BackgroundTrackingPlugin.class);
         super.onCreate(savedInstanceState);
         CookieManager.getInstance().setAcceptThirdPartyCookies(getBridge().getWebView(), true);
+        getBridge().getWebView().getSettings().setMediaPlaybackRequiresUserGesture(false);
     }
 }

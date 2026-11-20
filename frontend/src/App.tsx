@@ -23,6 +23,7 @@ import Login from "@/pages/Login";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { getAuthScreenState } from "@/lib/auth-screen-state";
 import { installIconClickSound } from "@/lib/icon-click-sound";
+import StartupIntro from "@/components/StartupIntro";
 
 function Splash() {
   return (
@@ -220,6 +221,7 @@ export default function App() {
   return (
     <AuthProvider>
       <Shell />
+      <StartupIntro />
       <Toaster />
     </AuthProvider>
   );
