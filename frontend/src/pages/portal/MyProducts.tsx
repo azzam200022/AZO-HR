@@ -1,6 +1,16 @@
 import { useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ImagePlus, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  ImagePlus,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Trash2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { apiDelete, apiGet, apiPatch, apiPost, getApiOrigin } from "@/lib/api";
 import { errorText, fmtDate, formatNumber } from "@/lib/format";
@@ -67,9 +77,34 @@ function reminderDaysLabel(days: number) {
   return `${formatNumber(days)} يومًا`;
 }
 
+type ProductExpiryBatch = EmployeeProduct["expiry_dates"][number];
+
+function compareExpiryBatches(a: ProductExpiryBatch, b: ProductExpiryBatch) {
+  const aIsUpcoming = a.days_remaining >= 0;
+  const bIsUpcoming = b.days_remaining >= 0;
+  if (aIsUpcoming !== bIsUpcoming) return aIsUpcoming ? -1 : 1;
+  return aIsUpcoming
+    ? a.expiry_date.localeCompare(b.expiry_date)
+    : b.expiry_date.localeCompare(a.expiry_date);
+}
+
+function nearestExpiryBatch(expiryDates: ProductExpiryBatch[]) {
+  const unhandledDates = expiryDates.filter((batch) => !batch.handled);
+  const candidates = unhandledDates.length > 0 ? unhandledDates : expiryDates;
+  return [...candidates].sort(compareExpiryBatches)[0];
+}
+
+function compareProductsByNearestExpiry(a: EmployeeProduct, b: EmployeeProduct) {
+  const nearestA = nearestExpiryBatch(a.expiry_dates);
+  const nearestB = nearestExpiryBatch(b.expiry_dates);
+  if (!nearestA || !nearestB) return nearestA ? -1 : nearestB ? 1 : 0;
+  return compareExpiryBatches(nearestA, nearestB);
+}
+
 /** An employee's own products, with each expiry date treated as a separate batch. */
 export default function MyProducts() {
   const queryClient = useQueryClient();
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [name, setName] = useState("");
   const [expiryDates, setExpiryDates] = useState([""]);
   const [customReminderDays, setCustomReminderDays] = useState("");
@@ -80,6 +115,7 @@ export default function MyProducts() {
   const [editPhotoData, setEditPhotoData] = useState<string | null | undefined>(undefined);
   const [newExpiryDate, setNewExpiryDate] = useState("");
   const [previewProduct, setPreviewProduct] = useState<EmployeeProduct | null>(null);
+  const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
 
   const productsQuery = useQuery({
     queryKey: ["me", "products"],
@@ -100,6 +136,7 @@ export default function MyProducts() {
       setExpiryDates([""]);
       setCustomReminderDays("");
       setPhotoData(null);
+      setAddDialogOpen(false);
       toast.success("تمت إضافة المادة وتواريخ انتهائها");
     },
     onError: (error) => toast.error(errorText(error)),
@@ -164,16 +201,7 @@ export default function MyProducts() {
   });
 
   const products = useMemo(
-    () =>
-      [...(productsQuery.data ?? [])].sort((a, b) => {
-        const firstA = [...a.expiry_dates].sort((x, y) =>
-          x.expiry_date.localeCompare(y.expiry_date),
-        )[0]?.expiry_date ?? "";
-        const firstB = [...b.expiry_dates].sort((x, y) =>
-          x.expiry_date.localeCompare(y.expiry_date),
-        )[0]?.expiry_date ?? "";
-        return firstA.localeCompare(firstB);
-      }),
+    () => [...(productsQuery.data ?? [])].sort(compareProductsByNearestExpiry),
     [productsQuery.data],
   );
   const editingProduct = products.find((product) => product.id === editingProductId);
@@ -221,6 +249,7 @@ export default function MyProducts() {
 
   const beginEdit = (product: EmployeeProduct) => {
     setEditingProductId(product.id);
+    setExpandedProductId(product.id);
     setEditName(product.name);
     setEditReminderDays(product.custom_reminder_days?.toString() ?? "");
     setEditPhotoData(undefined);
@@ -271,6 +300,16 @@ export default function MyProducts() {
         title="المواد وتواريخ الانتهاء"
         description="سجّل المادة وتواريخ انتهاء دفعاتها، وسنرسل التذكيرات إلى حسابك."
         testid="my-products-title"
+        action={
+          <Button
+            type="button"
+            onClick={() => setAddDialogOpen(true)}
+            data-testid="open-add-product-btn"
+          >
+            <Plus className="h-4 w-4" />
+            إضافة مادة جديدة
+          </Button>
+        }
       />
 
       <div className="mt-4 space-y-4">
@@ -283,7 +322,14 @@ export default function MyProducts() {
           <span className="rounded-lg bg-rose-50 px-2 py-2 text-rose-800">أحمر · منتهي</span>
         </div>
 
-        <CardSection title="إضافة مادة" testid="my-products-form-card">
+        <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+          <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-2xl overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>إضافة مادة جديدة</DialogTitle>
+              <DialogDescription>
+                أدخل اسم المادة وتواريخ انتهاء دفعاتها لحفظها في قائمتك.
+              </DialogDescription>
+            </DialogHeader>
           <form className="space-y-4" onSubmit={submit} data-testid="my-product-form">
             <div className="space-y-2">
               <Label htmlFor="product-name">اسم المادة</Label>
@@ -413,7 +459,8 @@ export default function MyProducts() {
               حفظ المادة
             </Button>
           </form>
-        </CardSection>
+          </DialogContent>
+        </Dialog>
 
         <CardSection title="المواد المسجّلة" testid="my-products-list-card">
           {productsQuery.isLoading ? (
@@ -427,7 +474,10 @@ export default function MyProducts() {
             />
           ) : (
             <div className="space-y-3" data-testid="my-products-list">
-              {products.map((product) => (
+              {products.map((product) => {
+                const nearestExpiry = nearestExpiryBatch(product.expiry_dates);
+                const isExpanded = expandedProductId === product.id;
+                return (
                 <article
                   key={product.id}
                   className="rounded-xl border border-slate-100 bg-slate-50/60 p-3.5"
@@ -492,6 +542,49 @@ export default function MyProducts() {
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      {nearestExpiry ? (
+                        <>
+                          <span
+                            className={`rounded-full border px-2 py-1 text-[10px] font-bold ${STATUS_STYLE[nearestExpiry.status]}`}
+                          >
+                            {STATUS_LABEL[nearestExpiry.status]}
+                          </span>
+                          <p className="text-xs font-semibold text-slate-700">
+                            أقرب انتهاء: {fmtDate(nearestExpiry.expiry_date)} ·{" "}
+                            {remainingLabel(nearestExpiry.days_remaining)}
+                            {nearestExpiry.handled ? " · تم التعامل" : ""}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-xs text-slate-500">لا توجد تواريخ صلاحية مسجّلة.</p>
+                      )}
+                    </div>
+                    {product.expiry_dates.length > 0 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setExpandedProductId(isExpanded ? null : product.id)
+                        }
+                        aria-expanded={isExpanded}
+                        aria-controls={`product-expiries-${product.id}`}
+                        data-testid={`toggle-product-expiries-${product.id}`}
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="h-3.5 w-3.5" />
+                        ) : (
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        )}
+                        {isExpanded
+                          ? "إخفاء التواريخ"
+                          : `عرض التواريخ (${formatNumber(product.expiry_dates.length)})`}
+                      </Button>
                     )}
                   </div>
 
@@ -595,7 +688,12 @@ export default function MyProducts() {
                     </form>
                   )}
 
-                  <div className="mt-3 space-y-2">
+                  {isExpanded && (
+                    <div
+                      id={`product-expiries-${product.id}`}
+                      className="mt-3 space-y-2"
+                      data-testid={`product-expiries-${product.id}`}
+                    >
                     {product.expiry_dates.length === 0 ? (
                       <p className="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-500">
                         لا توجد تواريخ صلاحية مسجّلة. يمكنك إضافة تاريخ من تعديل المادة.
@@ -670,9 +768,11 @@ export default function MyProducts() {
                           </div>
                         ))
                     )}
-                  </div>
+                    </div>
+                  )}
                 </article>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardSection>
