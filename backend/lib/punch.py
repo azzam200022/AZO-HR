@@ -26,7 +26,7 @@ from lib.shift import (
 )
 from models.hr import AttendanceRecord
 
-DEPARTURE_GRACE_SECONDS = 60
+DEPARTURE_GRACE_SECONDS = 5 * 60
 
 
 async def _employee_location(employee: dict) -> dict | None:
@@ -378,7 +378,7 @@ async def record_presence(
         else departure_at
     )
 
-    # New departures remain pending for a full minute. Start accounting at the exact
+    # New departures remain pending for a full five minutes. Start accounting at the exact
     # deadline, even if the next GPS heartbeat arrives a few seconds later.
     grace_pending = (
         bool(doc.get("outside_since"))

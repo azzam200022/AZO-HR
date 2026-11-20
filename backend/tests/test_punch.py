@@ -231,7 +231,7 @@ async def test_departure_inside_grace_does_not_notify_or_count_away_time(monkeyp
     await punch.record_presence(staff, 0, 0, observed_at=departed_at)
     clock.update(distance=100)
     returned = await punch.record_presence(
-        staff, 0, 0, observed_at=departed_at + timedelta(seconds=59)
+        staff, 0, 0, observed_at=departed_at + timedelta(seconds=299)
     )
 
     saved = database.attendance.documents[0]
@@ -262,11 +262,23 @@ async def test_departure_notifies_after_grace_and_counts_only_after_deadline(mon
         staff,
         0,
         0,
-        observed_at=departed_at + timedelta(seconds=65),
-        event_id="outside-2",
+        observed_at=departed_at + timedelta(seconds=299),
+        event_id="outside-299",
     )
     saved = database.attendance.documents[0]
-    assert saved["away_started_at"] == "2026-11-04T10:01:00+03:00"
+    assert saved["away_started_at"] == ""
+    assert saved["away_minutes"] == 0
+    notify.assert_not_awaited()
+
+    await punch.record_presence(
+        staff,
+        0,
+        0,
+        observed_at=departed_at + timedelta(seconds=300),
+        event_id="outside-300",
+    )
+    saved = database.attendance.documents[0]
+    assert saved["away_started_at"] == "2026-11-04T10:05:00+03:00"
     assert saved["away_intervals"][0]["counting_started_at"] == saved["away_started_at"]
     assert saved["away_minutes"] == 0
     notify.assert_awaited_once_with(staff, "موقع العمل", "10:00", 500)
@@ -276,8 +288,8 @@ async def test_departure_notifies_after_grace_and_counts_only_after_deadline(mon
         staff,
         0,
         0,
-        observed_at=departed_at + timedelta(seconds=120),
-        event_id="outside-3",
+        observed_at=departed_at + timedelta(seconds=360),
+        event_id="outside-360",
     )
     assert still_outside["away_minutes"] == 1
     assert notify.await_count == 1
@@ -287,8 +299,8 @@ async def test_departure_notifies_after_grace_and_counts_only_after_deadline(mon
         staff,
         0,
         0,
-        observed_at=departed_at + timedelta(seconds=180),
-        event_id="return-4",
+        observed_at=departed_at + timedelta(seconds=420),
+        event_id="return-420",
     )
     saved = database.attendance.documents[0]
     assert saved["away_minutes"] == 2

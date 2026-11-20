@@ -403,7 +403,7 @@ export default function MyAttendance() {
                   ? "داخل موقع العمل"
                   : presence.away_started_at
                     ? `خارج موقع العمل — يُحتسب تأخيراً (${lateLabel(presence.away_minutes)})`
-                    : "خارج موقع العمل — مهلة سماح دقيقة واحدة"}
+                    : "خارج موقع العمل — مهلة سماح 5 دقائق"}
               </div>
             )}
 
