@@ -21,12 +21,36 @@ import MyProducts from "@/pages/portal/MyProducts";
 import MyProfile from "@/pages/portal/MyProfile";
 import Login from "@/pages/Login";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { getAuthScreenState } from "@/lib/auth-screen-state";
 import { installIconClickSound } from "@/lib/icon-click-sound";
 
 function Splash() {
   return (
     <div className="flex min-h-svh items-center justify-center bg-slate-50">
       <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-teal-600" />
+    </div>
+  );
+}
+
+function SessionUnavailable({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="flex min-h-svh items-center justify-center bg-slate-50 px-4" dir="rtl">
+      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-2xl text-amber-700">
+          !
+        </div>
+        <h1 className="text-lg font-bold text-slate-900">تعذر التحقق من جلسة الدخول</h1>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          لم يتم تسجيل خروجك. لا يمكن الوصول إلى الخادم الآن؛ تحقق من اتصال الإنترنت ثم أعد المحاولة.
+        </p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-5 w-full rounded-xl bg-teal-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
+        >
+          إعادة المحاولة
+        </button>
+      </div>
     </div>
   );
 }
@@ -48,11 +72,15 @@ function EmployeeOnly({ children }: { children: ReactNode }) {
 }
 
 function Shell() {
-  const { session, isLoading, role } = useAuth();
+  const { session, isLoading, sessionCheckUnavailable, retrySessionCheck, role } = useAuth();
   const location = useLocation();
 
-  if (isLoading) return <Splash />;
-  if (!session?.authenticated) return <Login />;
+  const authScreenState = getAuthScreenState(isLoading, sessionCheckUnavailable, session);
+  if (authScreenState === "loading") return <Splash />;
+  if (authScreenState === "unavailable") {
+    return <SessionUnavailable onRetry={retrySessionCheck} />;
+  }
+  if (authScreenState === "login") return <Login />;
 
   const isEmployee = role === "employee";
   const isMessagingScreen = location.pathname === "/messages" || location.pathname === "/me/messages";
