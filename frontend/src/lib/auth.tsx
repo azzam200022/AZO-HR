@@ -19,6 +19,8 @@ export type Role = "manager" | "employee";
 interface AuthContextValue {
   session: SessionInfo | undefined;
   isLoading: boolean;
+  sessionCheckUnavailable: boolean;
+  retrySessionCheck: () => void;
   role: Role | null;
   logout: () => void;
   theme: AppTheme;
@@ -28,6 +30,8 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue>({
   session: undefined,
   isLoading: true,
+  sessionCheckUnavailable: false,
+  retrySessionCheck: () => {},
   role: null,
   logout: () => {},
   theme: "light",
@@ -37,12 +41,23 @@ const AuthContext = createContext<AuthContextValue>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
 
-  const { data: session, isLoading } = useQuery({
+  const {
+    data: session,
+    isPending,
+    isError: sessionCheckFailed,
+    fetchStatus,
+    refetch: refetchSession,
+  } = useQuery({
     queryKey: ["session"],
     queryFn: () => apiGet<SessionInfo>("/auth/me"),
     staleTime: 30_000,
     retry: false,
+    refetchOnReconnect: "always",
+    refetchOnWindowFocus: "always",
   });
+  const isLoading = isPending && fetchStatus !== "paused";
+  const sessionCheckUnavailable =
+    !session?.authenticated && (sessionCheckFailed || fetchStatus === "paused");
   const themeKey = getThemeStorageKey(session);
   const [savedTheme, setSavedTheme] = useState<{ key: string; theme: AppTheme } | null>(null);
   const theme = themeKey && savedTheme?.key === themeKey ? savedTheme.theme : "light";
@@ -88,9 +103,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session?.authenticated, session?.role, session?.email, session?.employee_id]);
 
   const role = session?.authenticated ? (session.role as Role) : null;
+  const retrySessionCheck = () => {
+    void refetchSession();
+  };
 
   return (
-    <AuthContext.Provider value={{ session, isLoading, role, logout: () => logout(), theme, setTheme }}>
+    <AuthContext.Provider
+      value={{
+        session,
+        isLoading,
+        sessionCheckUnavailable,
+        retrySessionCheck,
+        role,
+        logout: () => logout(),
+        theme,
+        setTheme,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
