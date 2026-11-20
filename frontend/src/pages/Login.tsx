@@ -7,6 +7,7 @@ import { errorText } from "@/lib/format";
 import { getInstallationId } from "@/lib/device-id";
 import type { SessionInfo } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import IconClickSoundToggle from "@/components/layout/IconClickSoundToggle";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -89,10 +90,15 @@ export default function Login() {
             </span>
             <p className="mt-3 text-xl font-extrabold text-slate-900">مواردي</p>
           </div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900" data-testid="login-title">
-            تسجيل الدخول
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">اختر نوع الحساب للمتابعة.</p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-bold tracking-tight text-slate-900" data-testid="login-title">
+                تسجيل الدخول
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">اختر نوع الحساب للمتابعة.</p>
+            </div>
+            <IconClickSoundToggle />
+          </div>
 
           <Tabs defaultValue="employee" className="mt-6">
             <TabsList className="w-full" data-testid="login-tabs">
