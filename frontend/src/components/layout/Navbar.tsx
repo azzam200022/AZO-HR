@@ -137,7 +137,6 @@ export default function Navbar() {
           <span className="hidden text-xs font-medium text-slate-500 xl:block" data-testid="header-date">
             {format(now, "EEEE، d MMMM yyyy", { locale: arSA })}
           </span>
-          <IconClickSoundToggle />
           <Button
             type="button"
             size="icon-sm"
@@ -230,19 +229,22 @@ export default function Navbar() {
             className="w-[min(22rem,88vw)] border-slate-200 bg-white p-0"
             data-testid="manager-navigation-drawer"
           >
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              aria-label={theme === "dark" ? "تفعيل الوضع النهاري" : "تفعيل الوضع الليلي"}
-              aria-pressed={theme === "dark"}
-              title={theme === "dark" ? "تفعيل الوضع النهاري" : "تفعيل الوضع الليلي"}
-              data-testid="manager-drawer-theme-toggle"
-              className="absolute left-4 top-4 z-10 h-9 w-9 rounded-xl border-slate-200 text-slate-700"
-            >
-              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </Button>
+            <div className="absolute left-4 top-4 z-10 flex items-center gap-1">
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                aria-label={theme === "dark" ? "تفعيل الوضع النهاري" : "تفعيل الوضع الليلي"}
+                aria-pressed={theme === "dark"}
+                title={theme === "dark" ? "تفعيل الوضع النهاري" : "تفعيل الوضع الليلي"}
+                data-testid="manager-drawer-theme-toggle"
+                className="h-9 w-9 rounded-xl border-slate-200 text-slate-700"
+              >
+                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </Button>
+              <IconClickSoundToggle />
+            </div>
             <SheetHeader className="border-b border-slate-100 px-5 pb-5 pt-10">
               <SheetTitle className="text-lg font-extrabold text-slate-900">قائمة التنقل</SheetTitle>
               <SheetDescription>التنقل بين أقسام الإدارة.</SheetDescription>

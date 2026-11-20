@@ -8,6 +8,10 @@ import {
   supportsBackgroundLocation,
 } from "@/lib/background-location";
 import { errorText } from "@/lib/format";
+import {
+  getIconClickSoundEnabled,
+  saveIconClickSoundEnabled,
+} from "@/lib/icon-click-sound";
 import type { EmployeeReport, TrackingConsent } from "@/lib/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FadeIn, PageHeader } from "@/components/shared";
@@ -60,6 +64,7 @@ export default function MyProfile() {
   const queryClient = useQueryClient();
   const [selectedAdjustmentsCycle, setSelectedAdjustmentsCycle] = useState<CycleSelection>("current");
   const [selectedAttendanceCycle, setSelectedAttendanceCycle] = useState<CycleSelection>("current");
+  const [appSoundMuted, setAppSoundMuted] = useState(() => !getIconClickSoundEnabled());
   const currentReportQuery = useQuery({
     queryKey: ["me", "report", "cycle", "current"],
     queryFn: () => apiGet<EmployeeReport>("/me/report?cycle=current"),
@@ -158,6 +163,25 @@ export default function MyProfile() {
             disabled={trackingConsentQuery.isLoading || trackingConsentMutation.isPending}
             data-testid="tracking-consent-checkbox"
             aria-label="تتبع الموقع أثناء الدوام"
+          />
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
+          <label
+            htmlFor="app-sound-mute-checkbox"
+            className="cursor-pointer text-sm font-semibold text-slate-800"
+          >
+            كتم صوت التطبيق
+          </label>
+          <Checkbox
+            id="app-sound-mute-checkbox"
+            checked={appSoundMuted}
+            onCheckedChange={(checked) => {
+              const muted = checked === true;
+              saveIconClickSoundEnabled(!muted);
+              setAppSoundMuted(muted);
+            }}
+            data-testid="app-sound-mute-checkbox"
+            aria-label="كتم صوت التطبيق"
           />
         </div>
       </div>

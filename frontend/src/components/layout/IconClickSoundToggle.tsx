@@ -19,15 +19,15 @@ export default function IconClickSoundToggle() {
   return (
     <Button
       type="button"
-      size="icon-sm"
-      variant="ghost"
+      size="icon"
+      variant="outline"
       onClick={toggle}
       aria-label={label}
       aria-pressed={enabled}
       title={label}
       data-testid="icon-sound-toggle"
       data-no-click-sound
-      className="shrink-0"
+      className="h-9 w-9 shrink-0 rounded-xl border-slate-200 text-slate-700"
     >
       {enabled ? (
         <Volume2 className="h-4 w-4" aria-hidden="true" />
