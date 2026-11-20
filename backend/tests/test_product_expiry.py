@@ -139,6 +139,50 @@ def test_custom_expiry_reminder_does_not_duplicate_a_default_date(
     assert due_expiry_reminders(expiry, today, custom_days) == expected
 
 
+@pytest.mark.asyncio
+async def test_reminder_cycle_skips_handled_expiry_batches():
+    database = SimpleNamespace(
+        employee_products=_Collection(
+            [
+                {
+                    "id": "product-1",
+                    "employee_id": "employee-1",
+                    "name": "حليب",
+                    "expiry_dates": [
+                        {
+                            "id": "batch-handled",
+                            "expiry_date": "2026-12-15",
+                            "handled": True,
+                        },
+                        {"id": "batch-open", "expiry_date": "2026-12-15"},
+                    ],
+                }
+            ]
+        ),
+        employees=_Collection(
+            [{"id": "employee-1", "name": "موظف", "status": "active"}]
+        ),
+    )
+    send = AsyncMock()
+
+    attempted = await run_product_expiry_reminder_cycle(
+        date(2026, 11, 15),
+        database=database,
+        reminder_sender=send,
+    )
+
+    assert attempted == 1
+    send.assert_awaited_once_with(
+        employee={"id": "employee-1", "name": "موظف", "status": "active"},
+        product_id="product-1",
+        product_name="حليب",
+        batch_id="batch-open",
+        expiry_date="2026-12-15",
+        reminder_key="month",
+        reminder_label="شهر",
+    )
+
+
 @pytest.mark.parametrize(
     ("days_remaining", "expected"),
     [(31, "far"), (30, "near"), (0, "near"), (-1, "expired")],
