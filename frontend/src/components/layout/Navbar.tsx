@@ -28,6 +28,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { MANAGER_SIDEBAR_NAV } from "@/components/layout/manager-navigation";
+import IconClickSoundToggle from "@/components/layout/IconClickSoundToggle";
 
 export default function Navbar() {
   const { session, role, logout, theme, setTheme } = useAuth();
@@ -136,6 +137,7 @@ export default function Navbar() {
           <span className="hidden text-xs font-medium text-slate-500 xl:block" data-testid="header-date">
             {format(now, "EEEE، d MMMM yyyy", { locale: arSA })}
           </span>
+          <IconClickSoundToggle />
           <Button
             type="button"
             size="icon-sm"

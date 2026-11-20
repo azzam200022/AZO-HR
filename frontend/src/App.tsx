@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import Navbar from "@/components/layout/Navbar";
@@ -21,6 +21,7 @@ import MyProducts from "@/pages/portal/MyProducts";
 import MyProfile from "@/pages/portal/MyProfile";
 import Login from "@/pages/Login";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { installIconClickSound } from "@/lib/icon-click-sound";
 
 function Splash() {
   return (
@@ -186,6 +187,8 @@ function Shell() {
 }
 
 export default function App() {
+  useEffect(() => installIconClickSound(), []);
+
   return (
     <AuthProvider>
       <Shell />
