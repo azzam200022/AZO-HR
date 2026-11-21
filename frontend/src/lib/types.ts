@@ -249,6 +249,18 @@ export interface DeviceChangeRequest {
   created_at: string;
 }
 
+export interface MessageAttachment {
+  kind: "image" | "audio";
+  mime_type: string;
+  size_bytes: number;
+}
+
+export interface MessageAttachmentUpload {
+  kind: "image" | "audio";
+  mime_type: string;
+  data_url: string;
+}
+
 export interface Message {
   id: string;
   thread: "direct" | "group";
@@ -256,6 +268,7 @@ export interface Message {
   sender: "manager" | "employee";
   sender_name: string;
   body: string;
+  attachment: MessageAttachment | null;
   read_by_manager: boolean;
   read_by_employee: boolean;
   created_at: string;

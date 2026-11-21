@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 
 from lib.auth import Principal, require_manager
 from lib.db import db
-from lib.messaging import GROUP_THREAD, mark_thread_read, send_message, to_model
+from lib.message_attachments import message_attachment_response
+from lib.messaging import GROUP_THREAD, mark_thread_read, message_preview, send_message, to_model
 from models.hr import (
     BroadcastResult,
     MarkAllResult,
@@ -20,7 +22,11 @@ async def list_threads():
     employees = await db.employees.find({}).sort("name", 1).to_list(1000)
     threads: list[MessageThread] = []
 
-    group_docs = await db.messages.find({"thread": GROUP_THREAD}).sort("created_at", -1).to_list(500)
+    group_docs = (
+        await db.messages.find({"thread": GROUP_THREAD}, {"attachment_data": 0})
+        .sort("created_at", -1)
+        .to_list(500)
+    )
     threads.append(
         MessageThread(
             thread=GROUP_THREAD,
@@ -30,14 +36,17 @@ async def list_threads():
             has_photo=False,
             messages=len(group_docs),
             unread=sum(1 for d in group_docs if not d.get("read_by_manager")),
-            last_body=(group_docs[0].get("body", "") if group_docs else ""),
+            last_body=(message_preview(group_docs[0]) if group_docs else ""),
             last_at=(group_docs[0].get("created_at").isoformat() if group_docs else ""),
         )
     )
 
     for emp in employees:
         docs = (
-            await db.messages.find({"thread": "direct", "employee_id": emp["id"]})
+            await db.messages.find(
+                {"thread": "direct", "employee_id": emp["id"]},
+                {"attachment_data": 0},
+            )
             .sort("created_at", -1)
             .to_list(500)
         )
@@ -50,7 +59,7 @@ async def list_threads():
                 has_photo=bool(emp.get("photo_data")),
                 messages=len(docs),
                 unread=sum(1 for d in docs if not d.get("read_by_manager")),
-                last_body=(docs[0].get("body", "") if docs else ""),
+                last_body=(message_preview(docs[0]) if docs else ""),
                 last_at=(docs[0].get("created_at").isoformat() if docs else ""),
             )
         )
@@ -63,14 +72,27 @@ async def list_messages(employee_id: str | None = None):
     query: dict = (
         {"thread": "direct", "employee_id": employee_id} if employee_id else {"thread": GROUP_THREAD}
     )
-    docs = await db.messages.find(query).sort("created_at", 1).to_list(500)
+    docs = await db.messages.find(query, {"attachment_data": 0}).sort("created_at", 1).to_list(500)
     return [to_model(d) for d in docs]
+
+
+@router.get("/{message_id}/attachment")
+async def get_message_attachment(message_id: str) -> Response:
+    """Managers may view an attachment only through the existing manager session."""
+    document = await db.messages.find_one(
+        {"id": message_id},
+        {"attachment": 1, "attachment_data": 1},
+    )
+    return message_attachment_response(document)
 
 
 @router.post("", response_model=Message, status_code=201)
 async def post_message(payload: MessageSend, principal: Principal = Depends(require_manager)):
-    if not payload.body.strip():
-        raise HTTPException(status_code=400, detail="لا يمكن إرسال رسالة فارغة")
+    if not payload.body.strip() and payload.attachment is None:
+        raise HTTPException(
+            status_code=400,
+            detail="اكتب رسالة أو أرفق صورة أو مقطعًا صوتيًا",
+        )
     if payload.thread == "direct":
         if not payload.employee_id:
             raise HTTPException(status_code=400, detail="اختر الموظف المرسل إليه")
@@ -82,12 +104,18 @@ async def post_message(payload: MessageSend, principal: Principal = Depends(requ
         sender="manager",
         sender_name=principal.name or "الإدارة",
         body=payload.body,
+        attachment=payload.attachment,
     )
 
 
 @router.post("/broadcast", response_model=BroadcastResult, status_code=201)
 async def broadcast(payload: MessageSend, principal: Principal = Depends(require_manager)):
     """Send the same message into every active employee's private thread."""
+    if payload.attachment is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="الإرسال للجميع يدعم النص فقط؛ استخدم مجموعة الفريق لإرسال الصور أو الصوت",
+        )
     if not payload.body.strip():
         raise HTTPException(status_code=400, detail="لا يمكن إرسال رسالة فارغة")
     employees = await db.employees.find({"status": "active"}).to_list(1000)

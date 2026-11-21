@@ -449,13 +449,26 @@ class Notification(BaseModel):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class MessageAttachment(BaseModel):
+    kind: Literal["image", "audio"]
+    mime_type: str
+    size_bytes: int = Field(ge=1)
+
+
+class MessageAttachmentUpload(BaseModel):
+    kind: Literal["image", "audio"]
+    mime_type: str = Field(min_length=1, max_length=80)
+    data_url: str = Field(min_length=1, max_length=7_100_000)
+
+
 class Message(BaseModel):
     id: str = Field(default_factory=_uuid)
     thread: Literal["direct", "group"] = "direct"
     employee_id: str = ""  # the employee side of a private thread; "" for the team channel
     sender: Literal["manager", "employee"]
     sender_name: str = ""
-    body: str = Field(min_length=1, max_length=2000)
+    body: str = Field(default="", max_length=2000)
+    attachment: MessageAttachment | None = None
     read_by_manager: bool = False
     read_by_employee: bool = False
     created_at: datetime = Field(default_factory=utcnow)
@@ -464,7 +477,8 @@ class Message(BaseModel):
 class MessageSend(BaseModel):
     thread: Literal["direct", "group"] = "direct"
     employee_id: str = ""
-    body: str = ""
+    body: str = Field(default="", max_length=2000)
+    attachment: MessageAttachmentUpload | None = None
 
 
 class MessageThread(BaseModel):

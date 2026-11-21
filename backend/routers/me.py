@@ -17,6 +17,7 @@ from lib.attendance_calendar import daily_attendance_records
 from lib.cycle import report_cycle_bounds
 from lib.dates import aware, current_month, now_time, now_utc, today_iso
 from lib.db import db
+from lib.message_attachments import message_attachment_response
 from lib.adjustments import cycle_adjustment_query, to_model as adjustment_model
 from lib.messaging import GROUP_THREAD, mark_thread_read, send_message, to_model as message_model
 from lib.notify import notify_manager_event
@@ -598,14 +599,36 @@ async def my_messages(thread: str = "direct", principal: Principal = Depends(req
         if thread == GROUP_THREAD
         else {"thread": "direct", "employee_id": principal.employee_id}
     )
-    docs = await db.messages.find(query).sort("created_at", 1).to_list(500)
+    docs = await db.messages.find(query, {"attachment_data": 0}).sort("created_at", 1).to_list(500)
     return [message_model(d) for d in docs]
+
+
+@router.get("/messages/{message_id}/attachment")
+async def my_message_attachment(
+    message_id: str,
+    principal: Principal = Depends(require_employee),
+) -> Response:
+    """Employees may fetch media only from their own private thread or the team channel."""
+    document = await db.messages.find_one(
+        {
+            "id": message_id,
+            "$or": [
+                {"thread": GROUP_THREAD},
+                {"thread": "direct", "employee_id": principal.employee_id},
+            ],
+        },
+        {"attachment": 1, "attachment_data": 1},
+    )
+    return message_attachment_response(document)
 
 
 @router.post("/messages", response_model=Message, status_code=201)
 async def send_my_message(payload: MessageSend, principal: Principal = Depends(require_employee)):
-    if not payload.body.strip():
-        raise HTTPException(status_code=400, detail="لا يمكن إرسال رسالة فارغة")
+    if not payload.body.strip() and payload.attachment is None:
+        raise HTTPException(
+            status_code=400,
+            detail="اكتب رسالة أو أرفق صورة أو مقطعًا صوتيًا",
+        )
     employee = await _my_employee(principal)
     # The employee id always comes from the session — a spoofed one in the body is ignored.
     return await send_message(
@@ -614,6 +637,7 @@ async def send_my_message(payload: MessageSend, principal: Principal = Depends(r
         sender="employee",
         sender_name=employee.get("name", ""),
         body=payload.body,
+        attachment=payload.attachment,
     )
 
 
