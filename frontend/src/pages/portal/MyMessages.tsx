@@ -154,9 +154,11 @@ export default function MyMessages() {
                     <div
                       className={cn(
                         "rounded-2xl px-3.5 py-2.5 text-sm shadow-xs",
-                        m.sender === "employee"
-                          ? "rounded-se-sm bg-teal-600 text-white"
-                          : "rounded-ss-sm bg-slate-100 text-slate-800",
+                        m.attachment && !m.body
+                          ? "p-0 shadow-none"
+                          : m.sender === "employee"
+                            ? "rounded-se-sm bg-teal-600 text-white"
+                            : "rounded-ss-sm bg-slate-100 text-slate-800",
                       )}
                     >
                       {m.attachment && (
@@ -169,7 +171,11 @@ export default function MyMessages() {
                       <p
                         className={cn(
                           "mt-1 text-[10px]",
-                          m.sender === "employee" ? "text-teal-100" : "text-slate-500",
+                          m.attachment && !m.body
+                            ? "text-slate-500"
+                            : m.sender === "employee"
+                              ? "text-teal-100"
+                              : "text-slate-500",
                         )}
                       >
                         {m.sender === "manager" ? "الإدارة" : m.sender_name} • {fmtDate(m.created_at.slice(0, 10))} {timeOf(m.created_at)}

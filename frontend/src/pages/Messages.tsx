@@ -318,9 +318,11 @@ export default function Messages() {
                       <div
                         className={cn(
                           "rounded-2xl px-4 py-3 text-sm shadow-xs",
-                          m.sender === "manager"
-                            ? "rounded-ss-sm bg-teal-600 text-white"
-                            : "rounded-se-sm border border-slate-200 bg-white text-slate-800",
+                          m.attachment && !m.body
+                            ? "p-0 shadow-none"
+                            : m.sender === "manager"
+                              ? "rounded-ss-sm bg-teal-600 text-white"
+                              : "rounded-se-sm border border-slate-200 bg-white text-slate-800",
                         )}
                       >
                         {m.attachment && (
