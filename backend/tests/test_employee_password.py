@@ -3,13 +3,15 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
+from pymongo.errors import DuplicateKeyError
 
 from models.hr import EmployeeCreate
 
 
 class _EmployeeCollection:
-    def __init__(self):
+    def __init__(self, duplicate_on_insert=()):
         self.documents = []
+        self.duplicate_on_insert = set(duplicate_on_insert)
 
     async def find_one(self, query):
         return next(
@@ -22,6 +24,11 @@ class _EmployeeCollection:
         )
 
     async def insert_one(self, document):
+        if document["access_code"] in self.duplicate_on_insert:
+            self.duplicate_on_insert.remove(document["access_code"])
+            raise DuplicateKeyError(
+                "duplicate access code", details={"keyPattern": {"access_code": 1}}
+            )
         self.documents.append(document)
         return SimpleNamespace(inserted_id=document["id"])
 
@@ -80,6 +87,24 @@ def test_create_employee_rejects_short_passwords():
         _payload(password="12345")
 
 
+def test_employee_access_code_index_is_unique_for_nonempty_codes(monkeypatch):
+    monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
+    monkeypatch.setenv("DB_NAME", "employee_password_test")
+
+    from lib.db import INDEXES
+
+    index = next(
+        model
+        for model in INDEXES["employees"]
+        if model.document["name"] == "access_code_unique"
+    )
+
+    assert index.document["unique"] is True
+    assert index.document["partialFilterExpression"] == {
+        "access_code": {"$type": "string", "$gt": ""}
+    }
+
+
 @pytest.mark.asyncio
 async def test_create_employee_without_password_keeps_access_code_login(monkeypatch):
     monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
@@ -94,3 +119,21 @@ async def test_create_employee_without_password_keeps_access_code_login(monkeypa
 
     assert result.access_code
     assert "password_hash" not in collection.documents[0]
+
+
+@pytest.mark.asyncio
+async def test_create_employee_retries_access_code_collision(monkeypatch):
+    monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
+    monkeypatch.setenv("DB_NAME", "employee_password_test")
+
+    from routers import employees
+
+    collection = _EmployeeCollection(duplicate_on_insert={"MW-1111"})
+    monkeypatch.setattr(employees, "db", SimpleNamespace(employees=collection))
+    codes = iter(("MW-1111", "MW-2222"))
+    monkeypatch.setattr(employees, "new_access_code", lambda: next(codes))
+
+    result = await employees.create_employee(_payload())
+
+    assert result.access_code == "MW-2222"
+    assert collection.documents[0]["access_code"] == "MW-2222"

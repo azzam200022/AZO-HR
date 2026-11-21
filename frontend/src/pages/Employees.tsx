@@ -2,13 +2,13 @@ import { useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Clock, Copy, FileText, KeyRound, MapPin, Pencil, Plus, RefreshCw, Search, Trash2, UserRoundCheck, UserRoundX } from "lucide-react";
+import { Clock, Copy, FileText, KeyRound, MapPin, Pencil, Plus, Search, Trash2, UserRoundCheck, UserRoundX } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut, getApiOrigin } from "@/lib/api";
 import { preparePhotoData } from "@/lib/photo-upload";
 import { currentMonthStr, errorText, fmtDate, formatIQD, shiftLabel, todayStr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { DEFAULT_WORK_DAYS, WORK_DAYS, workDaysLabel } from "@/lib/work-days";
-import { EMPLOYEE_STATUS_LABELS, type AccessCodeResult, type Employee, type EmployeeReport, type EmployeeStatus, type WorkLocation } from "@/lib/types";
+import { EMPLOYEE_STATUS_LABELS, type Employee, type EmployeeReport, type EmployeeStatus, type WorkLocation } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import EmployeeAvatar from "@/components/EmployeeAvatar";
@@ -254,15 +254,6 @@ export default function Employees() {
     onError: (error) => toast.error(errorText(error)),
   });
 
-  const regenerateMutation = useMutation({
-    mutationFn: (id: string) => apiPost<AccessCodeResult>(`/employees/${id}/regenerate-code`),
-    onSuccess: (result) => {
-      invalidate();
-      toast.success(`رمز الدخول الجديد: ${result.access_code}`);
-    },
-    onError: (error) => toast.error(errorText(error)),
-  });
-
   const toggleLoginMutation = useMutation({
     mutationFn: ({ id, can_login }: { id: string; can_login: boolean }) =>
       apiPatch<Employee>(`/employees/${id}`, { can_login }),
@@ -490,15 +481,6 @@ export default function Employees() {
                         <Copy className="h-3 w-3" />
                         {emp.access_code || "—"}
                       </button>
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        onClick={() => regenerateMutation.mutate(emp.id)}
-                        data-testid={`regenerate-code-btn-${emp.id}`}
-                        title="توليد رمز جديد"
-                      >
-                        <RefreshCw className="h-3.5 w-3.5" />
-                      </Button>
                       <Button
                         size="icon-sm"
                         variant="ghost"

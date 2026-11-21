@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
+from pymongo.errors import DuplicateKeyError
 
 from lib.cycle import CyclePeriod
 
@@ -53,17 +54,23 @@ async def create_employee(payload: EmployeeCreate):
         raise HTTPException(status_code=400, detail="أضف بريداً إلكترونياً للموظف أولاً")
     employee_data = payload.model_dump(exclude={"photo_data", "password"})
     employee = Employee(**employee_data)
-    while await db.employees.find_one({"access_code": employee.access_code or "x"}):
-        employee.access_code = new_access_code()
-    if not employee.access_code:
-        employee.access_code = new_access_code()
-        while await db.employees.find_one({"access_code": employee.access_code}):
-            employee.access_code = new_access_code()
     employee_doc = employee.model_dump()
     employee_doc["photo_data"] = payload.photo_data
     if payload.password:
         employee_doc["password_hash"] = hash_password(payload.password)
-    await db.employees.insert_one(employee_doc)
+
+    while True:
+        employee.access_code = new_access_code()
+        if await db.employees.find_one({"access_code": employee.access_code}):
+            continue
+        employee_doc["access_code"] = employee.access_code
+        try:
+            await db.employees.insert_one(employee_doc)
+            break
+        except DuplicateKeyError as exc:
+            key_pattern = (exc.details or {}).get("keyPattern", {})
+            if "access_code" not in key_pattern:
+                raise
     return _to_model(employee_doc)
 
 
@@ -77,18 +84,6 @@ async def employee_report(
     if month is not None and cycle is not None:
         raise HTTPException(status_code=400, detail="اختر دورة أو شهرًا واحدًا للتقرير")
     return await build_report(await _get_employee_or_404(employee_id), month, cycle)
-
-
-@router.post("/{employee_id}/regenerate-code", response_model=AccessCodeResult)
-async def regenerate_code(employee_id: str):
-    await _get_employee_or_404(employee_id)
-    code = new_access_code()
-    while await db.employees.find_one({"access_code": code}):
-        code = new_access_code()
-    await db.employees.update_one({"id": employee_id}, {"$set": {"access_code": code}})
-    # Existing sessions for this employee are revoked — a reissued code ends the old login.
-    await db.sessions.delete_many({"employee_id": employee_id})
-    return AccessCodeResult(employee_id=employee_id, access_code=code)
 
 
 @router.post("/{employee_id}/set-password", response_model=AccessCodeResult)
