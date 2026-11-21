@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent, type ChangeEvent } from "react";
-import { ImagePlus, Mic, Paperclip, Send, Square, X } from "lucide-react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type PointerEvent } from "react";
+import { ImagePlus, Mic, Paperclip, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { preparePhotoData } from "@/lib/photo-upload";
 import type { MessageAttachmentUpload } from "@/lib/types";
+import VoiceMessagePlayer, { VoiceWaveform } from "@/components/VoiceMessagePlayer";
 
 const MAX_AUDIO_BYTES = 5 * 1024 * 1024;
 const MAX_RECORDING_MS = 2 * 60 * 1000;
@@ -65,12 +66,20 @@ export default function MessageComposer({
   const [draft, setDraft] = useState("");
   const [attachment, setAttachment] = useState<MessageAttachmentUpload | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [cancelArmed, setCancelArmed] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const recordingTimerRef = useRef<number | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const recordingStartedAtRef = useRef<number | null>(null);
+  const pointerIdRef = useRef<number | null>(null);
+  const pointerStartXRef = useRef(0);
+  const releasedBeforeReadyRef = useRef(false);
+  const cancelRecordingRef = useRef(false);
+  const startInProgressRef = useRef(false);
   const canRecordAudio =
     typeof window !== "undefined" &&
     typeof MediaRecorder !== "undefined" &&
@@ -79,8 +88,17 @@ export default function MessageComposer({
   useEffect(() => {
     if (allowAttachments) return;
     setAttachment(null);
+    cancelRecordingRef.current = true;
     const recorder = recorderRef.current;
-    if (recorder && recorder.state !== "inactive") recorder.stop();
+    if (recorder && recorder.state !== "inactive") {
+      if (recordingTimerRef.current !== null) {
+        window.clearTimeout(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+      recorder.stop();
+    } else if (startInProgressRef.current) {
+      releasedBeforeReadyRef.current = true;
+    }
   }, [allowAttachments]);
 
   useEffect(
@@ -98,6 +116,17 @@ export default function MessageComposer({
     },
     [],
   );
+
+  useEffect(() => {
+    if (!isRecording) return;
+    const updateElapsed = () => {
+      const startedAt = recordingStartedAtRef.current;
+      if (startedAt !== null) setRecordingSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    };
+    updateElapsed();
+    const interval = window.setInterval(updateElapsed, 250);
+    return () => window.clearInterval(interval);
+  }, [isRecording]);
 
   const handleImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
@@ -139,21 +168,24 @@ export default function MessageComposer({
     }
   };
 
-  const stopRecording = () => {
+  const stopRecording = (cancel = false) => {
     if (recordingTimerRef.current !== null) {
       window.clearTimeout(recordingTimerRef.current);
       recordingTimerRef.current = null;
     }
+    cancelRecordingRef.current = cancel;
     const recorder = recorderRef.current;
     if (recorder && recorder.state !== "inactive") recorder.stop();
   };
 
   const startRecording = async () => {
+    if (startInProgressRef.current || recorderRef.current) return;
     if (!canRecordAudio) {
       toast.error("التسجيل غير متاح على هذا الجهاز؛ اختر ملفاً صوتياً بدلاً منه");
       return;
     }
 
+    startInProgressRef.current = true;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = RECORDING_MIME_TYPES.find((candidate) =>
@@ -166,6 +198,8 @@ export default function MessageComposer({
       recorderRef.current = recorder;
       chunksRef.current = [];
       setAttachment(null);
+      recordingStartedAtRef.current = Date.now();
+      setRecordingSeconds(0);
 
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunksRef.current.push(event.data);
@@ -180,7 +214,13 @@ export default function MessageComposer({
         streamRef.current = null;
         recorderRef.current = null;
         setIsRecording(false);
+        recordingStartedAtRef.current = null;
 
+        if (cancelRecordingRef.current) {
+          cancelRecordingRef.current = false;
+          setAttachment(null);
+          return;
+        }
         if (blob.size === 0) {
           toast.error("لم يُسجّل أي صوت");
           return;
@@ -207,17 +247,79 @@ export default function MessageComposer({
       };
 
       recorder.start(1000);
+      startInProgressRef.current = false;
       setIsRecording(true);
       recordingTimerRef.current = window.setTimeout(() => {
         toast.info("أُوقف التسجيل بعد دقيقتين");
         stopRecording();
       }, MAX_RECORDING_MS);
+      if (releasedBeforeReadyRef.current) {
+        releasedBeforeReadyRef.current = false;
+        stopRecording(cancelRecordingRef.current);
+      }
     } catch {
+      startInProgressRef.current = false;
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
       recorderRef.current = null;
+      recordingStartedAtRef.current = null;
+      releasedBeforeReadyRef.current = false;
       setIsRecording(false);
       toast.error("تعذر الوصول إلى الميكروفون؛ يمكنك اختيار ملف صوتي بدلاً منه");
+    }
+  };
+
+  const beginHoldToRecord = (event: PointerEvent<HTMLButtonElement>) => {
+    if (isPending || isRecording || startInProgressRef.current) return;
+    event.preventDefault();
+    pointerIdRef.current = event.pointerId;
+    pointerStartXRef.current = event.clientX;
+    releasedBeforeReadyRef.current = false;
+    cancelRecordingRef.current = false;
+    setCancelArmed(false);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture is not available in every embedded browser.
+    }
+    void startRecording();
+  };
+
+  const moveHoldToRecord = (event: PointerEvent<HTMLButtonElement>) => {
+    if (pointerIdRef.current !== event.pointerId) return;
+    const shouldCancel = event.clientX < pointerStartXRef.current - 72;
+    setCancelArmed(shouldCancel);
+    cancelRecordingRef.current = shouldCancel;
+  };
+
+  const endHoldToRecord = (event: PointerEvent<HTMLButtonElement>, cancel = false) => {
+    if (pointerIdRef.current !== event.pointerId) return;
+    pointerIdRef.current = null;
+    const shouldCancel = cancel || cancelRecordingRef.current;
+    cancelRecordingRef.current = shouldCancel;
+    setCancelArmed(false);
+    if (recorderRef.current && recorderRef.current.state !== "inactive") {
+      stopRecording(shouldCancel);
+    } else {
+      releasedBeforeReadyRef.current = true;
+    }
+  };
+
+  const handleRecordKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.repeat || startInProgressRef.current || (event.key !== " " && event.key !== "Enter")) return;
+    event.preventDefault();
+    releasedBeforeReadyRef.current = false;
+    cancelRecordingRef.current = false;
+    void startRecording();
+  };
+
+  const handleRecordKeyUp = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== " " && event.key !== "Enter") return;
+    event.preventDefault();
+    if (recorderRef.current && recorderRef.current.state !== "inactive") {
+      stopRecording();
+    } else {
+      releasedBeforeReadyRef.current = true;
     }
   };
 
@@ -280,52 +382,21 @@ export default function MessageComposer({
               <Paperclip className="h-3.5 w-3.5" />
               ملف صوتي
             </Button>
-            <Button
-              type="button"
-              variant={isRecording ? "destructive" : "outline"}
-              size="sm"
-              onClick={isRecording ? stopRecording : startRecording}
-              disabled={isPending || (!isRecording && !canRecordAudio)}
-              data-testid={`${testIdPrefix}-record-audio-btn`}
-            >
-              {isRecording ? (
-                <>
-                  <Square className="h-3.5 w-3.5" />
-                  إيقاف التسجيل
-                </>
-              ) : (
-                <>
-                  <Mic className="h-3.5 w-3.5" />
-                  تسجيل صوت
-                </>
-              )}
-            </Button>
-            {isRecording && (
-              <span className="text-xs font-medium text-rose-700" role="status">
-                جارٍ التسجيل…
-              </span>
-            )}
           </div>
           {attachment && (
             <div
-              className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2"
+              className="flex min-w-0 items-center gap-3 px-1 py-2"
               data-testid={`${testIdPrefix}-attachment-preview`}
             >
               {attachment.kind === "image" ? (
                 <img
                   src={attachment.data_url}
                   alt="معاينة الصورة المرفقة"
-                  className="h-16 w-16 rounded-lg object-cover"
+                  className="max-h-24 max-w-28 rounded-xl object-contain"
                 />
               ) : (
                 <div className="min-w-0 flex-1">
-                  <p className="mb-1 text-xs font-semibold text-slate-700">معاينة الرسالة الصوتية</p>
-                  <audio
-                    controls
-                    preload="metadata"
-                    src={attachment.data_url}
-                    className="max-w-full"
-                  />
+                  <VoiceMessagePlayer src={attachment.data_url} />
                 </div>
               )}
               <Button
@@ -342,26 +413,59 @@ export default function MessageComposer({
           )}
         </>
       )}
-      <div className="flex items-end gap-2 sm:gap-3">
-        <Textarea
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder={placeholder}
-          rows={2}
-          maxLength={2000}
-          className="min-h-[4.5rem] flex-1 resize-none rounded-xl bg-slate-50/60 text-sm"
-          data-testid={`${testIdPrefix}-input`}
-        />
-        <Button
-          type="submit"
-          disabled={sendingDisabled || (!draft.trim() && !attachment)}
-          className="h-10 shrink-0 rounded-xl px-4 sm:h-11"
-          aria-label="إرسال الرسالة"
-          data-testid={`${testIdPrefix}-send-btn`}
-        >
-          <Send className="h-4 w-4" />
-          إرسال
-        </Button>
+      <div className="flex min-w-0 items-end gap-2 sm:gap-3">
+        <div className="flex min-h-[3.25rem] min-w-0 flex-1 items-center rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 focus-within:border-teal-400 focus-within:ring-2 focus-within:ring-teal-500/15">
+          {isRecording ? (
+            <div className="flex min-w-0 flex-1 items-center gap-3 px-1" role="status" aria-live="polite">
+              <VoiceWaveform animated />
+              <span className={`shrink-0 text-xs font-semibold ${cancelArmed ? "text-rose-600" : "text-slate-500"}`}>
+                {cancelArmed ? "اترك للإلغاء" : `حرّر للإيقاف · ${Math.floor(recordingSeconds / 60)}:${String(recordingSeconds % 60).padStart(2, "0")}`}
+              </span>
+            </div>
+          ) : (
+            <Textarea
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder={placeholder}
+              rows={2}
+              maxLength={2000}
+              className="min-h-[2.5rem] flex-1 resize-none border-0 bg-transparent px-1 py-1 text-sm shadow-none focus-visible:ring-0"
+              data-testid={`${testIdPrefix}-input`}
+            />
+          )}
+          {allowAttachments && !draft.trim() && !attachment ? (
+            <Button
+              type="button"
+              variant={isRecording ? "destructive" : "default"}
+              size="icon"
+              onPointerDown={beginHoldToRecord}
+              onPointerMove={moveHoldToRecord}
+              onPointerUp={(event) => endHoldToRecord(event)}
+              onPointerCancel={(event) => endHoldToRecord(event, true)}
+              onKeyDown={handleRecordKeyDown}
+              onKeyUp={handleRecordKeyUp}
+              onContextMenu={(event) => event.preventDefault()}
+              disabled={isPending || (!isRecording && !canRecordAudio)}
+              className="h-10 w-10 shrink-0 rounded-full touch-none"
+              aria-label="اضغط مطولاً لتسجيل رسالة صوتية؛ حرّر للإيقاف أو اسحب لليسار للإلغاء"
+              title="اضغط مطولاً للتسجيل، واسحب لليسار للإلغاء"
+              data-testid={`${testIdPrefix}-record-audio-btn`}
+            >
+              {isRecording ? <span className="h-3 w-3 rounded-sm bg-white" /> : <Mic className="h-4 w-4" />}
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              disabled={sendingDisabled || (!draft.trim() && !attachment)}
+              size="icon"
+              className="h-10 w-10 shrink-0 rounded-full"
+              aria-label="إرسال الرسالة"
+              data-testid={`${testIdPrefix}-send-btn`}
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
     </form>
   );
