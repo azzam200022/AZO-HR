@@ -48,8 +48,10 @@ async def get_employee_photo(employee_id: str):
 
 @router.post("", response_model=Employee, status_code=201)
 async def create_employee(payload: EmployeeCreate):
-    """Creating an employee also issues the login code they sign in with."""
-    employee_data = payload.model_dump(exclude={"photo_data"})
+    """Create an employee with a login code and, optionally, email/password access."""
+    if payload.password and not payload.email.strip():
+        raise HTTPException(status_code=400, detail="أضف بريداً إلكترونياً للموظف أولاً")
+    employee_data = payload.model_dump(exclude={"photo_data", "password"})
     employee = Employee(**employee_data)
     while await db.employees.find_one({"access_code": employee.access_code or "x"}):
         employee.access_code = new_access_code()
@@ -59,6 +61,8 @@ async def create_employee(payload: EmployeeCreate):
             employee.access_code = new_access_code()
     employee_doc = employee.model_dump()
     employee_doc["photo_data"] = payload.photo_data
+    if payload.password:
+        employee_doc["password_hash"] = hash_password(payload.password)
     await db.employees.insert_one(employee_doc)
     return _to_model(employee_doc)
 

@@ -70,6 +70,7 @@ class EmployeeCreate(BaseModel):
     name: str
     job_title: str
     email: str = ""
+    password: str = ""
     phone: str = ""
     photo_data: str = Field(
         default="", max_length=420_000, pattern=EMPLOYEE_PHOTO_PATTERN
@@ -92,6 +93,13 @@ class EmployeeCreate(BaseModel):
     @classmethod
     def _work_days_valid(cls, value: list[int]) -> list[int]:
         return _validate_work_days(value)  # type: ignore[return-value]
+
+    @field_validator("password")
+    @classmethod
+    def _password_valid(cls, value: str) -> str:
+        if value and (len(value) < 6 or not value.strip()):
+            raise ValueError("كلمة المرور يجب ألا تقل عن 6 أحرف")
+        return value
 
     @field_validator("hire_date")
     @classmethod

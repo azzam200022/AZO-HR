@@ -91,6 +91,7 @@ interface EmployeeForm {
   name: string;
   job_title: string;
   email: string;
+  password: string;
   phone: string;
   photo_data: string | null;
   base_salary: string;
@@ -110,6 +111,7 @@ const EMPTY_FORM: EmployeeForm = {
   name: "",
   job_title: "",
   email: "",
+  password: "",
   phone: "",
   photo_data: null,
   base_salary: "",
@@ -200,8 +202,17 @@ export default function Employees() {
 
   const saveMutation = useMutation({
     mutationFn: (payload: EmployeeForm) => {
+      if (!editing && payload.password) {
+        if (!payload.email.trim()) {
+          throw new Error("أضف البريد الإلكتروني قبل تعيين كلمة مرور للدخول");
+        }
+        if (payload.password.trim().length < 6) {
+          throw new Error("كلمة المرور يجب أن تكون 6 أحرف على الأقل");
+        }
+      }
+      const { password, ...employeeFields } = payload;
       const body = {
-        ...payload,
+        ...employeeFields,
         photo_data: payload.photo_data ?? undefined,
         base_salary: Number(payload.base_salary) || 0,
         allowances: Number(payload.allowances) || 0,
@@ -211,7 +222,7 @@ export default function Employees() {
       };
       return editing
         ? apiPut<Employee>(`/employees/${editing.id}`, body)
-        : apiPost<Employee>("/employees", body);
+        : apiPost<Employee>("/employees", { ...body, password });
     },
     onSuccess: () => {
       invalidate();
@@ -294,6 +305,7 @@ export default function Employees() {
       name: emp.name,
       job_title: emp.job_title,
       email: emp.email,
+      password: "",
       phone: emp.phone,
       photo_data: null,
       base_salary: String(emp.base_salary),
@@ -674,6 +686,23 @@ export default function Employees() {
                 data-testid="employee-email-input"
               />
             </div>
+            {!editing && (
+              <div className="space-y-2">
+                <Label htmlFor="emp-login-password">كلمة مرور دخول التطبيق (اختيارية)</Label>
+                <Input
+                  id="emp-login-password"
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  autoComplete="new-password"
+                  dir="ltr"
+                  data-testid="employee-login-password-input"
+                />
+                <p className="text-xs leading-relaxed text-slate-500">
+                  للدخول بالبريد وكلمة المرور. اتركها فارغة لاستخدام رمز الدخول فقط.
+                </p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="emp-phone">رقم الجوال</Label>
               <Input
