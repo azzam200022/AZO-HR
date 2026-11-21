@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'azo-hr-pwa-'
-const CACHE_NAME = `${CACHE_PREFIX}v3`
+const CACHE_NAME = `${CACHE_PREFIX}v4`
 const appScope = new URL(self.registration.scope)
 const appShellUrl = new URL('./', appScope).href
 const notificationBadgeUrl = new URL('notification-badge.png', appScope).href
@@ -138,11 +138,26 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  const isAppAsset =
-    url.pathname.startsWith(assetsPath) ||
-    url.pathname === manifestPath ||
-    pwaIconPaths.has(url.pathname)
-  if (!isAppAsset) return
+  const isPwaMetadata = url.pathname === manifestPath || pwaIconPaths.has(url.pathname)
+  if (isPwaMetadata) {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(CACHE_NAME)
+        try {
+          const response = await fetch(request, { cache: 'no-store' })
+          if (response.ok && response.type === 'basic') {
+            await cache.put(request, response.clone())
+          }
+          return response
+        } catch {
+          return (await cache.match(request)) ?? Response.error()
+        }
+      })(),
+    )
+    return
+  }
+
+  if (!url.pathname.startsWith(assetsPath)) return
 
   event.respondWith(
     (async () => {
