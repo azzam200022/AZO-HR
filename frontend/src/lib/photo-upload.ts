@@ -70,10 +70,20 @@ async function preparePhotoDataWithLimits(
 
 /** Keep small profile and catalog photos compact. */
 export function preparePhotoData(file: File): Promise<string> {
-  return preparePhotoDataWithLimits(file, PROFILE_MAX_DIMENSION, PROFILE_MAX_OUTPUT_BYTES, [0.82, 0.72, 0.62, 0.52]);
+  return preparePhotoDataWithLimits(
+    file,
+    PROFILE_MAX_DIMENSION,
+    PROFILE_MAX_OUTPUT_BYTES,
+    [0.82, 0.72, 0.62, 0.52],
+  );
 }
 
 /** Preserve enough detail for a message image opened full-screen. */
 export function prepareMessagePhotoData(file: File): Promise<string> {
-  return preparePhotoDataWithLimits(file, MESSAGE_MAX_DIMENSION, MESSAGE_MAX_OUTPUT_BYTES, [0.9, 0.86, 0.82, 0.78]);
+  return preparePhotoDataWithLimits(
+    file,
+    MESSAGE_MAX_DIMENSION,
+    MESSAGE_MAX_OUTPUT_BYTES,
+    [0.9, 0.86, 0.82, 0.78],
+  );
 }
