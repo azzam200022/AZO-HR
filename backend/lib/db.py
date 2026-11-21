@@ -24,6 +24,12 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("status", ASCENDING), ("created_at", DESCENDING)], name="status_created"),
         IndexModel([("status", ASCENDING), ("hire_date", ASCENDING)], name="status_hire_date"),
         IndexModel([("access_code", ASCENDING)], name="access_code"),
+        IndexModel(
+            [("access_code", ASCENDING)],
+            name="access_code_unique",
+            unique=True,
+            partialFilterExpression={"access_code": {"$type": "string", "$gt": ""}},
+        ),
     ],
     "attendance": [
         IndexModel([("id", ASCENDING)], name="id", unique=True),

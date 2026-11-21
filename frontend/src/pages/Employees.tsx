@@ -2,13 +2,13 @@ import { useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Clock, Copy, FileText, KeyRound, MapPin, Pencil, Plus, RefreshCw, Search, Trash2, UserRoundCheck, UserRoundX } from "lucide-react";
+import { Clock, Copy, FileText, KeyRound, MapPin, Pencil, Plus, Search, Trash2, UserRoundCheck, UserRoundX } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut, getApiOrigin } from "@/lib/api";
 import { preparePhotoData } from "@/lib/photo-upload";
 import { currentMonthStr, errorText, fmtDate, formatIQD, shiftLabel, todayStr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { DEFAULT_WORK_DAYS, WORK_DAYS, workDaysLabel } from "@/lib/work-days";
-import { EMPLOYEE_STATUS_LABELS, type AccessCodeResult, type Employee, type EmployeeReport, type EmployeeStatus, type WorkLocation } from "@/lib/types";
+import { EMPLOYEE_STATUS_LABELS, type Employee, type EmployeeReport, type EmployeeStatus, type WorkLocation } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import EmployeeAvatar from "@/components/EmployeeAvatar";
@@ -91,6 +91,7 @@ interface EmployeeForm {
   name: string;
   job_title: string;
   email: string;
+  password: string;
   phone: string;
   photo_data: string | null;
   base_salary: string;
@@ -110,6 +111,7 @@ const EMPTY_FORM: EmployeeForm = {
   name: "",
   job_title: "",
   email: "",
+  password: "",
   phone: "",
   photo_data: null,
   base_salary: "",
@@ -200,8 +202,17 @@ export default function Employees() {
 
   const saveMutation = useMutation({
     mutationFn: (payload: EmployeeForm) => {
+      if (!editing && payload.password) {
+        if (!payload.email.trim()) {
+          throw new Error("أضف البريد الإلكتروني قبل تعيين كلمة مرور للدخول");
+        }
+        if (payload.password.trim().length < 6) {
+          throw new Error("كلمة المرور يجب أن تكون 6 أحرف على الأقل");
+        }
+      }
+      const { password, ...employeeFields } = payload;
       const body = {
-        ...payload,
+        ...employeeFields,
         photo_data: payload.photo_data ?? undefined,
         base_salary: Number(payload.base_salary) || 0,
         allowances: Number(payload.allowances) || 0,
@@ -211,7 +222,7 @@ export default function Employees() {
       };
       return editing
         ? apiPut<Employee>(`/employees/${editing.id}`, body)
-        : apiPost<Employee>("/employees", body);
+        : apiPost<Employee>("/employees", { ...body, password });
     },
     onSuccess: () => {
       invalidate();
@@ -239,15 +250,6 @@ export default function Employees() {
       queryClient.invalidateQueries(); // employee delete cascades to attendance/leaves/payroll
       setDeleting(null);
       toast.success("تم حذف الموظف وجميع سجلاته");
-    },
-    onError: (error) => toast.error(errorText(error)),
-  });
-
-  const regenerateMutation = useMutation({
-    mutationFn: (id: string) => apiPost<AccessCodeResult>(`/employees/${id}/regenerate-code`),
-    onSuccess: (result) => {
-      invalidate();
-      toast.success(`رمز الدخول الجديد: ${result.access_code}`);
     },
     onError: (error) => toast.error(errorText(error)),
   });
@@ -294,6 +296,7 @@ export default function Employees() {
       name: emp.name,
       job_title: emp.job_title,
       email: emp.email,
+      password: "",
       phone: emp.phone,
       photo_data: null,
       base_salary: String(emp.base_salary),
@@ -481,15 +484,6 @@ export default function Employees() {
                       <Button
                         size="icon-sm"
                         variant="ghost"
-                        onClick={() => regenerateMutation.mutate(emp.id)}
-                        data-testid={`regenerate-code-btn-${emp.id}`}
-                        title="توليد رمز جديد"
-                      >
-                        <RefreshCw className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
                         className={emp.can_login ? "text-slate-500" : "text-amber-600"}
                         onClick={() =>
                           toggleLoginMutation.mutate({ id: emp.id, can_login: !emp.can_login })
@@ -674,6 +668,23 @@ export default function Employees() {
                 data-testid="employee-email-input"
               />
             </div>
+            {!editing && (
+              <div className="space-y-2">
+                <Label htmlFor="emp-login-password">كلمة مرور دخول التطبيق (اختيارية)</Label>
+                <Input
+                  id="emp-login-password"
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  autoComplete="new-password"
+                  dir="ltr"
+                  data-testid="employee-login-password-input"
+                />
+                <p className="text-xs leading-relaxed text-slate-500">
+                  للدخول بالبريد وكلمة المرور. اتركها فارغة لاستخدام رمز الدخول فقط.
+                </p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="emp-phone">رقم الجوال</Label>
               <Input
