@@ -1,6 +1,8 @@
 const MAX_SOURCE_BYTES = 12 * 1024 * 1024;
-const MAX_OUTPUT_BYTES = 300 * 1024;
-const MAX_DIMENSION = 384;
+const PROFILE_MAX_OUTPUT_BYTES = 300 * 1024;
+const MESSAGE_MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
+const PROFILE_MAX_DIMENSION = 384;
+const MESSAGE_MAX_DIMENSION = 2048;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 function readAsDataUrl(blob: Blob): Promise<string> {
@@ -25,8 +27,12 @@ function encodeJpeg(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
   });
 }
 
-/** Resize and compress an image before storing it with an app record. */
-export async function preparePhotoData(file: File): Promise<string> {
+async function preparePhotoDataWithLimits(
+  file: File,
+  maxDimension: number,
+  maxOutputBytes: number,
+  qualities: number[],
+): Promise<string> {
   if (!ALLOWED_TYPES.has(file.type)) {
     throw new Error("اختر صورة بصيغة JPG أو PNG أو WebP");
   }
@@ -42,7 +48,7 @@ export async function preparePhotoData(file: File): Promise<string> {
       element.onerror = () => reject(new Error("تعذر فتح الصورة المحددة"));
       element.src = objectUrl;
     });
-    const scale = Math.min(1, MAX_DIMENSION / Math.max(image.width, image.height));
+    const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(image.width * scale));
     canvas.height = Math.max(1, Math.round(image.height * scale));
@@ -52,12 +58,32 @@ export async function preparePhotoData(file: File): Promise<string> {
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
 
-    for (const quality of [0.82, 0.72, 0.62, 0.52]) {
+    for (const quality of qualities) {
       const blob = await encodeJpeg(canvas, quality);
-      if (blob.size <= MAX_OUTPUT_BYTES) return readAsDataUrl(blob);
+      if (blob.size <= maxOutputBytes) return readAsDataUrl(blob);
     }
     throw new Error("تعذر ضغط الصورة إلى الحجم المطلوب؛ اختر صورة أصغر");
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
+}
+
+/** Keep small profile and catalog photos compact. */
+export function preparePhotoData(file: File): Promise<string> {
+  return preparePhotoDataWithLimits(
+    file,
+    PROFILE_MAX_DIMENSION,
+    PROFILE_MAX_OUTPUT_BYTES,
+    [0.82, 0.72, 0.62, 0.52],
+  );
+}
+
+/** Preserve enough detail for a message image opened full-screen. */
+export function prepareMessagePhotoData(file: File): Promise<string> {
+  return preparePhotoDataWithLimits(
+    file,
+    MESSAGE_MAX_DIMENSION,
+    MESSAGE_MAX_OUTPUT_BYTES,
+    [0.9, 0.86, 0.82, 0.78],
+  );
 }

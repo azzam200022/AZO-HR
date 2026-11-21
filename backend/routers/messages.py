@@ -91,7 +91,7 @@ async def post_message(payload: MessageSend, principal: Principal = Depends(requ
     if not payload.body.strip() and payload.attachment is None:
         raise HTTPException(
             status_code=400,
-            detail="اكتب رسالة أو أرفق صورة أو مقطعًا صوتيًا",
+            detail="اكتب رسالة أو أرفق صورة",
         )
     if payload.thread == "direct":
         if not payload.employee_id:

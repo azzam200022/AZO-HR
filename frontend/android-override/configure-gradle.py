@@ -24,11 +24,23 @@ for permission in (
             + manifest[application_index:]
         )
 
+service_name = "com.azzam200022.azo.BackgroundLocationService"
 service_declaration = (
-    '<service android:name="com.azzam200022.azo.BackgroundLocationService" '
-    'android:exported="false" android:foregroundServiceType="location" />'
+    f'<service android:name="{service_name}" '
+    'android:exported="false" android:foregroundServiceType="location" '
+    'android:stopWithTask="false" />'
 )
-if service_declaration not in manifest:
+service_pattern = re.compile(
+    r'<service\b(?=[^>]*android:name="' + re.escape(service_name) + r'")[^>]*/>'
+)
+existing_service = service_pattern.search(manifest)
+if existing_service:
+    manifest = (
+        manifest[:existing_service.start()]
+        + service_declaration
+        + manifest[existing_service.end():]
+    )
+else:
     if "</application>" not in manifest:
         raise SystemExit("Could not locate the closing Android application tag")
     manifest = manifest.replace(

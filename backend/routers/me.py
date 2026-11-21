@@ -627,7 +627,7 @@ async def send_my_message(payload: MessageSend, principal: Principal = Depends(r
     if not payload.body.strip() and payload.attachment is None:
         raise HTTPException(
             status_code=400,
-            detail="اكتب رسالة أو أرفق صورة أو مقطعًا صوتيًا",
+            detail="اكتب رسالة أو أرفق صورة",
         )
     employee = await _my_employee(principal)
     # The employee id always comes from the session — a spoofed one in the body is ignored.

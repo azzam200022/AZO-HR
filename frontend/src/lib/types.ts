@@ -256,7 +256,7 @@ export interface MessageAttachment {
 }
 
 export interface MessageAttachmentUpload {
-  kind: "image" | "audio";
+  kind: "image";
   mime_type: string;
   data_url: string;
 }

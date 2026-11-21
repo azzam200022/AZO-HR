@@ -60,7 +60,7 @@ async def send_message(
     """Persist a message and raise an in-app notification for the other side."""
     body = body.strip()
     if not body and attachment is None:
-        raise HTTPException(status_code=400, detail="اكتب رسالة أو أرفق صورة أو مقطعًا صوتيًا")
+        raise HTTPException(status_code=400, detail="اكتب رسالة أو أرفق صورة")
 
     attachment_info = None
     attachment_data = None

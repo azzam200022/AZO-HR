@@ -46,6 +46,7 @@ public class BackgroundTrackingPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
         static let manualStop = "azo.backgroundLocation.manualStop"
         static let apiBaseUrl = "azo.backgroundLocation.apiBaseUrl"
         static let employeeID = "azo.backgroundLocation.employeeID"
+        static let lastLocationAt = "azo.backgroundLocation.lastLocationAt"
     }
 
     override public func load() {
@@ -118,6 +119,7 @@ public class BackgroundTrackingPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
         defaults.set(employeeID, forKey: Key.employeeID)
         defaults.set(true, forKey: Key.active)
         defaults.set(false, forKey: Key.manualStop)
+        defaults.set(0, forKey: Key.lastLocationAt)
         lastAcceptedLocationAt = nil
         beginLocationUpdates()
         call.resolve(["active": true])
@@ -132,6 +134,7 @@ public class BackgroundTrackingPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
         call.resolve([
             "active": defaults.bool(forKey: Key.active),
             "manuallyStopped": defaults.bool(forKey: Key.manualStop),
+            "lastLocationAt": defaults.double(forKey: Key.lastLocationAt),
         ])
     }
 
@@ -181,6 +184,7 @@ public class BackgroundTrackingPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
             return
         }
         lastAcceptedLocationAt = now
+        defaults.set(now.timeIntervalSince1970 * 1000, forKey: Key.lastLocationAt)
 
         let sample = PendingLocation(
             eventID: UUID().uuidString,
@@ -287,10 +291,8 @@ public class BackgroundTrackingPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
             }
             let cookieHeader = matchingCookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
             guard !cookieHeader.isEmpty else {
-                DispatchQueue.main.async {
-                    self.flushInFlight = false
-                    self.stopTracking(manual: false)
-                }
+                // Keep collecting and queueing fixes while the web session is unavailable.
+                DispatchQueue.main.async { self.flushInFlight = false }
                 return
             }
 
