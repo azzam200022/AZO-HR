@@ -2,14 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Send, Users, X } from "lucide-react";
+import { Users, X } from "lucide-react";
 import MessageAvatar from "@/components/MessageAvatar";
+import MessageAttachmentView from "@/components/MessageAttachmentView";
+import MessageComposer, { type MessageComposerPayload } from "@/components/MessageComposer";
 import { apiGet, apiPost, getApiOrigin } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { errorText, fmtDate } from "@/lib/format";
 import type { Employee, MarkAllResult, Message } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState, FadeIn, LoadingBlock } from "@/components/shared";
 import { cn } from "@/lib/utils";
@@ -30,7 +31,6 @@ export default function MyMessages() {
     else navigate("/me", { replace: true });
   };
   const [thread, setThread] = useState<"direct" | "group">("direct");
-  const [draft, setDraft] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
 
   const profileQuery = useQuery({
@@ -65,9 +65,9 @@ export default function MyMessages() {
   }, [messages.length, thread]);
 
   const sendMutation = useMutation({
-    mutationFn: () => apiPost<Message>("/me/messages", { thread, body: draft }),
+    mutationFn: (payload: MessageComposerPayload) =>
+      apiPost<Message>("/me/messages", { thread, ...payload }),
     onSuccess: () => {
-      setDraft("");
       queryClient.invalidateQueries({ queryKey: ["me", "messages"] });
     },
     onError: (error) => toast.error(errorText(error)),
@@ -159,7 +159,13 @@ export default function MyMessages() {
                           : "rounded-ss-sm bg-slate-100 text-slate-800",
                       )}
                     >
-                      <p className="whitespace-pre-wrap leading-relaxed">{m.body}</p>
+                      {m.attachment && (
+                        <MessageAttachmentView
+                          attachment={m.attachment}
+                          src={`${getApiOrigin()}/api/me/messages/${encodeURIComponent(m.id)}/attachment`}
+                        />
+                      )}
+                      {m.body && <p className="whitespace-pre-wrap leading-relaxed">{m.body}</p>}
                       <p
                         className={cn(
                           "mt-1 text-[10px]",
@@ -178,26 +184,15 @@ export default function MyMessages() {
         </div>
 
         <footer className="shrink-0 border-t border-slate-100 bg-white p-3 sm:p-4">
-          <div className="flex items-end gap-2 sm:gap-3">
-            <Textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder={thread === "direct" ? "اكتب رسالتك للإدارة..." : "شارك الفريق..."}
-              rows={2}
-              className="min-h-[4.5rem] flex-1 resize-none rounded-xl bg-slate-50/60 text-sm"
-              data-testid="my-message-input"
-            />
-            <Button
-              onClick={() => draft.trim() && sendMutation.mutate()}
-              disabled={sendMutation.isPending || !draft.trim()}
-              className="h-10 shrink-0 rounded-xl px-4 sm:h-11"
-              aria-label="إرسال الرسالة"
-              data-testid="my-message-send-btn"
-            >
-              <Send className="h-4 w-4" />
-              إرسال
-            </Button>
-          </div>
+          <MessageComposer
+            key={thread}
+            placeholder={thread === "direct" ? "اكتب رسالتك للإدارة..." : "شارك الفريق..."}
+            isPending={sendMutation.isPending}
+            testIdPrefix="my-message"
+            onSend={async (payload) => {
+              await sendMutation.mutateAsync(payload);
+            }}
+          />
         </footer>
       </section>
       </div>

@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowRight, Megaphone, MessageSquare, Send, Users, X } from "lucide-react";
+import { ArrowRight, Megaphone, MessageSquare, Users, X } from "lucide-react";
 import MessageAvatar from "@/components/MessageAvatar";
+import MessageAttachmentView from "@/components/MessageAttachmentView";
+import MessageComposer, { type MessageComposerPayload } from "@/components/MessageComposer";
 import { apiGet, apiPost, getApiOrigin } from "@/lib/api";
 import { errorText, fmtDate, formatNumber } from "@/lib/format";
 import type { BroadcastResult, MarkAllResult, Message, MessageThread } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { EmptyState, FadeIn, LoadingBlock, StatusBadge } from "@/components/shared";
 import { cn } from "@/lib/utils";
 
@@ -29,7 +30,6 @@ export default function Messages() {
     thread: "group",
     employeeId: "",
   });
-  const [draft, setDraft] = useState("");
   const [broadcastMode, setBroadcastMode] = useState(false);
   const messageListRef = useRef<HTMLDivElement>(null);
   const [mobileView, setMobileView] = useState<"threads" | "chat">("threads");
@@ -80,14 +80,13 @@ export default function Messages() {
   }, [activeThread?.unread, active.thread, active.employeeId]);
 
   const sendMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (payload: MessageComposerPayload) =>
       apiPost<Message>("/messages", {
         thread: active.thread,
         employee_id: active.employeeId,
-        body: draft,
+        ...payload,
       }),
     onSuccess: () => {
-      setDraft("");
       queryClient.invalidateQueries({ queryKey: ["messages"] });
       queryClient.invalidateQueries({ queryKey: ["message-threads"] });
     },
@@ -95,9 +94,8 @@ export default function Messages() {
   });
 
   const broadcastMutation = useMutation({
-    mutationFn: () => apiPost<BroadcastResult>("/messages/broadcast", { body: draft }),
+    mutationFn: (body: string) => apiPost<BroadcastResult>("/messages/broadcast", { body }),
     onSuccess: (result) => {
-      setDraft("");
       setBroadcastMode(false);
       queryClient.invalidateQueries({ queryKey: ["messages"] });
       queryClient.invalidateQueries({ queryKey: ["message-threads"] });
@@ -106,10 +104,16 @@ export default function Messages() {
     onError: (error) => toast.error(errorText(error)),
   });
 
-  const submit = () => {
-    if (!draft.trim()) return;
-    if (broadcastMode) broadcastMutation.mutate();
-    else sendMutation.mutate();
+  const sendMessage = async (payload: MessageComposerPayload) => {
+    if (broadcastMode) {
+      if (payload.attachment) {
+        toast.error("استخدم مجموعة الفريق لإرسال الصور أو الصوت");
+        throw new Error("وسائط الإرسال الجماعي غير مدعومة");
+      }
+      await broadcastMutation.mutateAsync(payload.body);
+      return;
+    }
+    await sendMutation.mutateAsync(payload);
   };
 
   const sending = sendMutation.isPending || broadcastMutation.isPending;
@@ -319,7 +323,13 @@ export default function Messages() {
                             : "rounded-se-sm border border-slate-200 bg-white text-slate-800",
                         )}
                       >
-                        <p className="whitespace-pre-wrap leading-relaxed">{m.body}</p>
+                        {m.attachment && (
+                          <MessageAttachmentView
+                            attachment={m.attachment}
+                            src={`${getApiOrigin()}/api/messages/${encodeURIComponent(m.id)}/attachment`}
+                          />
+                        )}
+                        {m.body && <p className="whitespace-pre-wrap leading-relaxed">{m.body}</p>}
                       </div>
                       <p
                         className={cn(
@@ -347,27 +357,14 @@ export default function Messages() {
                 </div>
               </div>
             )}
-            <div className="flex items-end gap-2 sm:gap-3">
-              <Textarea
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder={broadcastMode ? "رسالة لكل الموظفين..." : "اكتب رسالتك..."}
-                rows={2}
-                className="min-h-[4.5rem] flex-1 resize-none rounded-xl bg-slate-50/60 text-sm"
-                data-testid="message-input"
-              />
-              <Button
-                type="button"
-                onClick={submit}
-                disabled={sending || !draft.trim()}
-                className="h-10 shrink-0 rounded-xl px-4 sm:h-11"
-                aria-label="إرسال الرسالة"
-                data-testid="message-send-btn"
-              >
-                <Send className="h-4 w-4" />
-                إرسال
-              </Button>
-            </div>
+            <MessageComposer
+              key={`${active.thread}-${active.employeeId}`}
+              placeholder={broadcastMode ? "رسالة لكل الموظفين..." : "اكتب رسالتك..."}
+              isPending={sending}
+              testIdPrefix="message"
+              allowAttachments={!broadcastMode}
+              onSend={sendMessage}
+            />
           </footer>
         </section>
       </div>

@@ -4,12 +4,27 @@ Two channels only: a private thread per employee, and one public team channel. T
 an employee may read is always derived from the session, never from a client-supplied id.
 """
 
+from fastapi import HTTPException
+
 from lib.dates import aware, now_time, today_iso
 from lib.db import db
+from lib.message_attachments import decode_message_attachment
 from lib.push import send_notification
-from models.hr import Message, Notification
+from models.hr import Message, MessageAttachmentUpload, Notification
 
 GROUP_THREAD = "group"
+
+
+def message_preview(message: dict) -> str:
+    body = (message.get("body") or "").strip()
+    if body:
+        return body
+    kind = (message.get("attachment") or {}).get("kind")
+    if kind == "image":
+        return "صورة"
+    if kind == "audio":
+        return "رسالة صوتية"
+    return ""
 
 
 async def _notify(
@@ -40,20 +55,34 @@ async def send_message(
     sender: str,
     sender_name: str,
     body: str,
+    attachment: MessageAttachmentUpload | None = None,
 ) -> Message:
     """Persist a message and raise an in-app notification for the other side."""
+    body = body.strip()
+    if not body and attachment is None:
+        raise HTTPException(status_code=400, detail="اكتب رسالة أو أرفق صورة أو مقطعًا صوتيًا")
+
+    attachment_info = None
+    attachment_data = None
+    if attachment is not None:
+        attachment_info, attachment_data = decode_message_attachment(attachment)
+
     msg = Message(
         thread=thread,
         employee_id=employee_id if thread == "direct" else "",
         sender=sender,
         sender_name=sender_name,
-        body=body.strip(),
+        body=body,
+        attachment=attachment_info,
         read_by_manager=sender == "manager",
         read_by_employee=sender == "employee",
     )
-    await db.messages.insert_one(msg.model_dump())
+    message_doc = msg.model_dump()
+    if attachment_data is not None:
+        message_doc["attachment_data"] = attachment_data
+    await db.messages.insert_one(message_doc)
 
-    content = body.strip()
+    content = message_preview(message_doc)
     preview = content[:200] + ("…" if len(content) > 200 else "")
     if sender == "manager":
         if thread == "direct":
