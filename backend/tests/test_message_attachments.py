@@ -1,6 +1,7 @@
 import base64
 
 import pytest
+from pydantic import ValidationError
 from fastapi import HTTPException
 
 from lib.message_attachments import decode_message_attachment, message_attachment_response
@@ -25,19 +26,9 @@ def test_decode_image_attachment_returns_metadata_and_bytes():
     assert decoded == content
 
 
-def test_decode_audio_attachment_accepts_codec_parameters_in_data_url():
-    content = b"\x1a\x45\xdf\xa3webm audio"
-    encoded = base64.b64encode(content).decode("ascii")
-    request = MessageAttachmentUpload(
-        kind="audio",
-        mime_type="audio/webm",
-        data_url=f"data:audio/webm;codecs=opus;base64,{encoded}",
-    )
-
-    metadata, decoded = decode_message_attachment(request)
-
-    assert metadata.mime_type == "audio/webm"
-    assert decoded == content
+def test_message_attachment_upload_rejects_new_audio_uploads():
+    with pytest.raises(ValidationError):
+        upload("audio", "audio/webm", b"voice note")
 
 
 def test_decode_message_attachment_rejects_unsupported_media_type():

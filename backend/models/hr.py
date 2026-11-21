@@ -456,7 +456,7 @@ class MessageAttachment(BaseModel):
 
 
 class MessageAttachmentUpload(BaseModel):
-    kind: Literal["image", "audio"]
+    kind: Literal["image"]
     mime_type: str = Field(min_length=1, max_length=80)
     data_url: str = Field(min_length=1, max_length=7_100_000)
 
