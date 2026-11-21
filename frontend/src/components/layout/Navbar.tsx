@@ -18,6 +18,13 @@ import { useAuth } from "@/lib/auth";
 import type { Employee } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import NotificationBell from "@/components/layout/NotificationBell";
 import EmployeeLocationStatus from "@/components/layout/EmployeeLocationStatus";
 import {
@@ -41,6 +48,7 @@ export default function Navbar() {
   });
   const [now, setNow] = useState(() => new Date());
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -211,7 +219,8 @@ export default function Navbar() {
             <Button
               size="icon-sm"
               variant="ghost"
-              onClick={logout}
+              onClick={() => setLogoutDialogOpen(true)}
+              aria-label="تسجيل الخروج"
               title="تسجيل الخروج"
               data-testid="logout-btn"
             >
@@ -289,6 +298,38 @@ export default function Navbar() {
           </SheetContent>
         </Sheet>
       )}
+
+      <Dialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
+        <DialogContent className="max-w-sm" data-testid="logout-confirm-dialog">
+          <DialogTitle>تأكيد تسجيل الخروج</DialogTitle>
+          <DialogDescription>
+            {role === "employee"
+              ? "سيتم إنهاء جلستك وإيقاف تتبع الموقع الجاري. لإبقاء التتبع أثناء الدوام، ألغِ تسجيل الخروج واترك التطبيق في الخلفية."
+              : "سيتم إنهاء جلستك الحالية. هل تريد المتابعة؟"}
+          </DialogDescription>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setLogoutDialogOpen(false)}
+              data-testid="logout-cancel-btn"
+            >
+              إلغاء
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                setLogoutDialogOpen(false);
+                logout();
+              }}
+              data-testid="logout-confirm-btn"
+            >
+              تأكيد تسجيل الخروج
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 }
