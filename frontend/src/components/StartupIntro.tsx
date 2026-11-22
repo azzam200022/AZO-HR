@@ -43,7 +43,7 @@ export default function StartupIntro() {
     };
   }, []);
 
-  const startWithSound = () => {
+  const startVideo = () => {
     const video = videoRef.current;
     if (!video) return;
 
@@ -71,6 +71,7 @@ export default function StartupIntro() {
           className="h-full w-full object-cover"
           src={`${import.meta.env.BASE_URL}app-intro.mp4`}
           autoPlay
+          muted
           playsInline
           preload="auto"
           aria-label="مقدمة تطبيق مواردي"
@@ -93,14 +94,14 @@ export default function StartupIntro() {
       {autoplayBlocked && videoReady && !videoFinished && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950/55 px-6 text-center">
           <p className="max-w-xs text-sm leading-6 text-white">
-            قد يمنع المتصفح تشغيل الصوت تلقائيًا. اضغط لبدء المقدمة بالصوت.
+            تعذر بدء المقدمة تلقائيًا. اضغط لبدء تشغيلها.
           </p>
           <button
             type="button"
             className="rounded-xl bg-white px-5 py-3 text-sm font-bold text-slate-900"
-            onClick={startWithSound}
+            onClick={startVideo}
           >
-            تشغيل المقدمة بالصوت
+            تشغيل المقدمة
           </button>
           <button
             type="button"
