@@ -5,8 +5,9 @@ export default function StartupIntro() {
   const { isLoading } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoReady, setVideoReady] = useState(false);
+  const [videoStarted, setVideoStarted] = useState(false);
   const [videoFinished, setVideoFinished] = useState(false);
-  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+  const [playbackFailed, setPlaybackFailed] = useState(false);
   const [isOnline, setIsOnline] = useState(
     () => typeof navigator === "undefined" || navigator.onLine,
   );
@@ -23,33 +24,14 @@ export default function StartupIntro() {
     };
   }, []);
 
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    let active = true;
-    void video.play().then(
-      () => {
-        if (active) setAutoplayBlocked(false);
-      },
-      () => {
-        if (active) setAutoplayBlocked(true);
-      },
-    );
-
-    return () => {
-      active = false;
-      video.pause();
-    };
-  }, []);
-
   const startVideo = () => {
     const video = videoRef.current;
     if (!video) return;
 
+    setPlaybackFailed(false);
     void video.play().then(
-      () => setAutoplayBlocked(false),
-      () => setAutoplayBlocked(true),
+      () => setVideoStarted(true),
+      () => setPlaybackFailed(true),
     );
   };
 
@@ -70,8 +52,6 @@ export default function StartupIntro() {
           ref={videoRef}
           className="h-full w-full object-cover"
           src={`${import.meta.env.BASE_URL}app-intro.mp4`}
-          autoPlay
-          muted
           playsInline
           preload="auto"
           aria-label="مقدمة تطبيق مواردي"
@@ -81,36 +61,32 @@ export default function StartupIntro() {
         />
       )}
 
-      {!videoFinished && (
-        <button
-          type="button"
-          className="absolute right-4 top-5 rounded-full bg-black/40 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm"
-          onClick={() => setVideoFinished(true)}
-        >
-          تخطي
-        </button>
-      )}
-
-      {autoplayBlocked && videoReady && !videoFinished && (
+      {!videoStarted && !videoFinished && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950/55 px-6 text-center">
           <p className="max-w-xs text-sm leading-6 text-white">
-            تعذر بدء المقدمة تلقائيًا. اضغط لبدء تشغيلها.
+            {playbackFailed
+              ? "تعذر تشغيل المقدمة. حاول مرة أخرى أو تخطَّ."
+              : "اضغط لبدء مقدمة التطبيق بالصوت."}
           </p>
           <button
             type="button"
             className="rounded-xl bg-white px-5 py-3 text-sm font-bold text-slate-900"
             onClick={startVideo}
+            disabled={!videoReady}
           >
-            تشغيل المقدمة
-          </button>
-          <button
-            type="button"
-            className="rounded-xl border border-white/50 px-5 py-3 text-sm font-semibold text-white"
-            onClick={() => setVideoFinished(true)}
-          >
-            متابعة إلى التطبيق
+            {playbackFailed ? "إعادة المحاولة" : "تشغيل المقدمة بالصوت"}
           </button>
         </div>
+      )}
+
+      {!videoFinished && (
+        <button
+          type="button"
+          className="absolute right-4 top-5 z-10 rounded-full bg-black/40 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm"
+          onClick={() => setVideoFinished(true)}
+        >
+          تخطي
+        </button>
       )}
 
       {videoFinished && (
