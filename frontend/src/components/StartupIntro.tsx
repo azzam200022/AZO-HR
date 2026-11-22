@@ -7,7 +7,7 @@ export default function StartupIntro() {
   const [videoReady, setVideoReady] = useState(false);
   const [videoStarted, setVideoStarted] = useState(false);
   const [videoFinished, setVideoFinished] = useState(false);
-  const [playbackFailed, setPlaybackFailed] = useState(false);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [isOnline, setIsOnline] = useState(
     () => typeof navigator === "undefined" || navigator.onLine,
   );
@@ -24,14 +24,33 @@ export default function StartupIntro() {
     };
   }, []);
 
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    let active = true;
+    void video.play().then(
+      () => {
+        if (active) setAutoplayBlocked(false);
+      },
+      () => {
+        if (active) setAutoplayBlocked(true);
+      },
+    );
+
+    return () => {
+      active = false;
+      video.pause();
+    };
+  }, []);
+
   const startVideo = () => {
     const video = videoRef.current;
     if (!video) return;
 
-    setPlaybackFailed(false);
     void video.play().then(
-      () => setVideoStarted(true),
-      () => setPlaybackFailed(true),
+      () => setAutoplayBlocked(false),
+      () => setAutoplayBlocked(true),
     );
   };
 
@@ -52,10 +71,12 @@ export default function StartupIntro() {
           ref={videoRef}
           className="h-full w-full object-cover"
           src={`${import.meta.env.BASE_URL}app-intro.mp4`}
+          autoPlay
           playsInline
           preload="auto"
           aria-label="مقدمة تطبيق مواردي"
           onCanPlay={() => setVideoReady(true)}
+          onPlay={() => setVideoStarted(true)}
           onEnded={() => setVideoFinished(true)}
           onError={() => setVideoFinished(true)}
         />
@@ -64,18 +85,19 @@ export default function StartupIntro() {
       {!videoStarted && !videoFinished && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950/55 px-6 text-center">
           <p className="max-w-xs text-sm leading-6 text-white">
-            {playbackFailed
-              ? "تعذر تشغيل المقدمة. حاول مرة أخرى أو تخطَّ."
-              : "اضغط لبدء مقدمة التطبيق بالصوت."}
+            {autoplayBlocked && videoReady
+              ? "اضغط لبدء مقدمة التطبيق بالصوت."
+              : "جارٍ تجهيز المقدمة بالصوت…"}
           </p>
-          <button
-            type="button"
-            className="rounded-xl bg-white px-5 py-3 text-sm font-bold text-slate-900"
-            onClick={startVideo}
-            disabled={!videoReady}
-          >
-            {playbackFailed ? "إعادة المحاولة" : "تشغيل المقدمة بالصوت"}
-          </button>
+          {autoplayBlocked && videoReady && (
+            <button
+              type="button"
+              className="rounded-xl bg-white px-5 py-3 text-sm font-bold text-slate-900"
+              onClick={startVideo}
+            >
+              تشغيل المقدمة بالصوت
+            </button>
+          )}
         </div>
       )}
 
