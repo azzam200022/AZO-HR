@@ -5,6 +5,7 @@ export default function StartupIntro() {
   const { isLoading } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoReady, setVideoReady] = useState(false);
+  const [videoStarted, setVideoStarted] = useState(false);
   const [videoFinished, setVideoFinished] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [isOnline, setIsOnline] = useState(
@@ -43,7 +44,7 @@ export default function StartupIntro() {
     };
   }, []);
 
-  const startWithSound = () => {
+  const startVideo = () => {
     const video = videoRef.current;
     if (!video) return;
 
@@ -75,41 +76,39 @@ export default function StartupIntro() {
           preload="auto"
           aria-label="مقدمة تطبيق مواردي"
           onCanPlay={() => setVideoReady(true)}
+          onPlay={() => setVideoStarted(true)}
           onEnded={() => setVideoFinished(true)}
           onError={() => setVideoFinished(true)}
         />
       )}
 
+      {!videoStarted && !videoFinished && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950/55 px-6 text-center">
+          <p className="max-w-xs text-sm leading-6 text-white">
+            {autoplayBlocked && videoReady
+              ? "اضغط لبدء مقدمة التطبيق بالصوت."
+              : "جارٍ تجهيز المقدمة بالصوت…"}
+          </p>
+          {autoplayBlocked && videoReady && (
+            <button
+              type="button"
+              className="rounded-xl bg-white px-5 py-3 text-sm font-bold text-slate-900"
+              onClick={startVideo}
+            >
+              تشغيل المقدمة بالصوت
+            </button>
+          )}
+        </div>
+      )}
+
       {!videoFinished && (
         <button
           type="button"
-          className="absolute right-4 top-5 rounded-full bg-black/40 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm"
+          className="absolute right-4 top-5 z-10 rounded-full bg-black/40 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm"
           onClick={() => setVideoFinished(true)}
         >
           تخطي
         </button>
-      )}
-
-      {autoplayBlocked && videoReady && !videoFinished && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950/55 px-6 text-center">
-          <p className="max-w-xs text-sm leading-6 text-white">
-            قد يمنع المتصفح تشغيل الصوت تلقائيًا. اضغط لبدء المقدمة بالصوت.
-          </p>
-          <button
-            type="button"
-            className="rounded-xl bg-white px-5 py-3 text-sm font-bold text-slate-900"
-            onClick={startWithSound}
-          >
-            تشغيل المقدمة بالصوت
-          </button>
-          <button
-            type="button"
-            className="rounded-xl border border-white/50 px-5 py-3 text-sm font-semibold text-white"
-            onClick={() => setVideoFinished(true)}
-          >
-            متابعة إلى التطبيق
-          </button>
-        </div>
       )}
 
       {videoFinished && (
