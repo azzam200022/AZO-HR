@@ -1,8 +1,10 @@
-# إنشاء APK من GitHub Actions
+# إنشاء ملفات Android من GitHub Actions
 
 - يبدأ بناء debug عند الدفع إلى `main` أو تشغيل workflow يدويًا؛ ويظهر كـ Artifact لمدة 30 يومًا.
+- يبدأ إصدار النشر عند دفع tag بصيغة `v*`؛ وينشئ AAB موقّعًا للنشر على Google Play وAPK موقّعًا للاختبار/التوزيع المباشر.
+- يستهدف البناء Android API 36، وهو الحد المطلوب للتطبيقات الجديدة والتحديثات المرسلة إلى Google Play اعتبارًا من 31 أغسطس 2026.
 - يطلب التطبيق إذن الإشعارات عند اختيار «تمكين إشعارات التطبيق». تصل تنبيهات FCM عند إغلاق التطبيق بعد إعداد Firebase والخادم كما هو موضح في `PUSH_AND_BACKGROUND_LOCATION.md`.
-- عند دفع tag يبدأ بـ `v`، يستخدم workflow أسرار التوقيع ويبني APK release، ثم ينشئ GitHub Release دائمًا حتى الحذف اليدوي.
+- بعد نجاح إصدار tag، ينشر GitHub Release ملفي `azo-vX.aab` و`azo-vX.apk`. ارفع ملف AAB إلى Play Console، وليس APK.
 - أضف أسرار المستودع التالية من Settings → Secrets and variables → Actions: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. لا ترفع ملف keystore إلى المستودع.
 - لا تُستخدم أسرار التوقيع في تشغيلات Pull Request؛ يتحقق CI من إعداد release بمفتاح مؤقت خاص بالاختبار.
 - يزيد `versionCode` تلقائيًا برقم تشغيل GitHub Actions، ويأخذ `versionName` اسم tag الإصدار.

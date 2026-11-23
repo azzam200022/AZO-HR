@@ -24,23 +24,11 @@ for permission in (
             + manifest[application_index:]
         )
 
-service_name = "com.azzam200022.azo.BackgroundLocationService"
 service_declaration = (
-    f'<service android:name="{service_name}" '
-    'android:exported="false" android:foregroundServiceType="location" '
-    'android:stopWithTask="false" />'
+    '<service android:name="com.azzam200022.azo.BackgroundLocationService" '
+    'android:exported="false" android:foregroundServiceType="location" />'
 )
-service_pattern = re.compile(
-    r'<service\b(?=[^>]*android:name="' + re.escape(service_name) + r'")[^>]*/>'
-)
-existing_service = service_pattern.search(manifest)
-if existing_service:
-    manifest = (
-        manifest[:existing_service.start()]
-        + service_declaration
-        + manifest[existing_service.end():]
-    )
-else:
+if service_declaration not in manifest:
     if "</application>" not in manifest:
         raise SystemExit("Could not locate the closing Android application tag")
     manifest = manifest.replace(
@@ -49,6 +37,19 @@ else:
         1,
     )
 manifest_file.write_text(manifest, encoding="utf-8")
+
+variables_file = Path("android/variables.gradle")
+variables = variables_file.read_text(encoding="utf-8")
+for sdk_name in ("compileSdkVersion", "targetSdkVersion"):
+    variables, sdk_count = re.subn(
+        rf"(?m)^([ \t]*{sdk_name}[ \t]*=[ \t]*)\d+([ \t]*(?:#.*)?)$",
+        rf"\g<1>36\2",
+        variables,
+        count=1,
+    )
+    if sdk_count != 1:
+        raise SystemExit(f"Could not set {sdk_name} to Android API 36")
+variables_file.write_text(variables, encoding="utf-8")
 
 gradle_file = Path("android/app/build.gradle")
 text = gradle_file.read_text(encoding="utf-8")
