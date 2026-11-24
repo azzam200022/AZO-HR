@@ -20,7 +20,8 @@ async def _get_employee_or_404(employee_id: str) -> dict:
     doc = await db.employees.find_one({"id": employee_id})
     if not doc:
         raise HTTPException(status_code=404, detail="الموظف غير موجود")
-    return doc
+    doc.pop("_id", None)
+    return dict(doc)
 
 
 def _to_model(doc: dict) -> Employee:
@@ -117,4 +118,14 @@ async def delete_employee(employee_id: str):
     await db.leaves.delete_many({"employee_id": employee_id})
     await db.payroll.delete_many({"employee_id": employee_id})
     await db.sessions.delete_many({"employee_id": employee_id})
+    await db.push_tokens.delete_many({"employee_id": employee_id})
+    await db.web_push_subscriptions.delete_many({"employee_id": employee_id})
+    await db.device_change_requests.delete_many({"employee_id": employee_id})
+    await db.attendance_archive.delete_many({"employee_id": employee_id})
+    await db.messages.delete_many({"thread": "direct", "employee_id": employee_id})
+    await db.notifications.delete_many({"employee_id": employee_id})
+    await db.account_deletion_requests.update_many(
+        {"employee_id": employee_id},
+        {"$set": {"status": "completed", "name": "", "contact": "", "reason": ""}},
+    )
     return DeleteResult(id=employee_id, deleted=True)

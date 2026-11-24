@@ -16,6 +16,8 @@ import type { EmployeeReport, TrackingConsent } from "@/lib/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FadeIn, PageHeader } from "@/components/shared";
 import EmployeeReportPanel from "@/components/EmployeeReportPanel";
+import DeleteAccountCard from "@/components/DeleteAccountCard";
+import { LocationDisclosureDialog } from "@/components/LocationDisclosureDialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type CycleSelection = "current" | "previous";
@@ -65,6 +67,7 @@ export default function MyProfile() {
   const [selectedAdjustmentsCycle, setSelectedAdjustmentsCycle] = useState<CycleSelection>("current");
   const [selectedAttendanceCycle, setSelectedAttendanceCycle] = useState<CycleSelection>("current");
   const [appSoundMuted, setAppSoundMuted] = useState(() => !getIconClickSoundEnabled());
+  const [disclosureOpen, setDisclosureOpen] = useState(false);
   const currentReportQuery = useQuery({
     queryKey: ["me", "report", "cycle", "current"],
     queryFn: () => apiGet<EmployeeReport>("/me/report?cycle=current"),
@@ -159,7 +162,9 @@ export default function MyProfile() {
           <Checkbox
             id="tracking-consent-checkbox"
             checked={trackingConsentQuery.data?.enabled ?? false}
-            onCheckedChange={(checked) => trackingConsentMutation.mutate(checked === true)}
+            onCheckedChange={(checked) =>
+              checked === true ? setDisclosureOpen(true) : trackingConsentMutation.mutate(false)
+            }
             disabled={trackingConsentQuery.isLoading || trackingConsentMutation.isPending}
             data-testid="tracking-consent-checkbox"
             aria-label="تتبع الموقع أثناء الدوام"
@@ -185,6 +190,15 @@ export default function MyProfile() {
           />
         </div>
       </div>
+      <DeleteAccountCard />
+      <LocationDisclosureDialog
+        open={disclosureOpen}
+        onAccept={() => {
+          setDisclosureOpen(false);
+          trackingConsentMutation.mutate(true);
+        }}
+        onDecline={() => setDisclosureOpen(false)}
+      />
     </FadeIn>
   );
 }

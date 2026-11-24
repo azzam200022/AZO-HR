@@ -444,6 +444,7 @@ class Notification(BaseModel):
         "shift_reminder",
         "product_expiry",
         "device_change",
+        "account_deletion",
     ]
     audience: Literal["manager", "employee"] = "manager"
     employee_id: str

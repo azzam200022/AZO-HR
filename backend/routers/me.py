@@ -62,7 +62,8 @@ async def _my_employee(principal: Principal) -> dict:
     doc = await db.employees.find_one({"id": principal.employee_id})
     if not doc:
         raise HTTPException(status_code=404, detail="الموظف غير موجود")
-    return doc
+    doc.pop("_id", None)
+    return dict(doc)
 
 
 def _product_view(doc: dict, today: date) -> EmployeeProductView:

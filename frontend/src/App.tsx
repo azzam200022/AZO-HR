@@ -20,6 +20,8 @@ import MyLeaves from "@/pages/portal/MyLeaves";
 import MyProducts from "@/pages/portal/MyProducts";
 import MyProfile from "@/pages/portal/MyProfile";
 import Login from "@/pages/Login";
+import PrivacyPolicy from "@/pages/public/PrivacyPolicy";
+import DeleteAccount from "@/pages/public/DeleteAccount";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { getAuthScreenState } from "@/lib/auth-screen-state";
 import { installIconClickSound } from "@/lib/icon-click-sound";
@@ -75,6 +77,9 @@ function EmployeeOnly({ children }: { children: ReactNode }) {
 function Shell() {
   const { session, isLoading, sessionCheckUnavailable, retrySessionCheck, role } = useAuth();
   const location = useLocation();
+
+  if (location.pathname === "/privacy") return <PrivacyPolicy />;
+  if (location.pathname === "/delete-account") return <DeleteAccount />;
 
   const authScreenState = getAuthScreenState(isLoading, sessionCheckUnavailable, session);
   if (authScreenState === "loading") return <Splash />;
@@ -217,11 +222,13 @@ function Shell() {
 
 export default function App() {
   useEffect(() => installIconClickSound(), []);
+  const { pathname } = useLocation();
+  const isPublicPage = pathname === "/privacy" || pathname === "/delete-account";
 
   return (
     <AuthProvider>
       <Shell />
-      <StartupIntro />
+      {!isPublicPage && <StartupIntro />}
       <Toaster />
     </AuthProvider>
   );

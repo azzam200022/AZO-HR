@@ -228,7 +228,7 @@ export interface Adjustment {
 
 export interface AppNotification {
   id: string;
-  kind: "late" | "left_site" | "returned_site" | "message" | "bonus" | "deduction" | "attendance" | "payroll" | "leave_request" | "leave_status" | "shift_reminder" | "product_expiry" | "device_change";
+  kind: "late" | "left_site" | "returned_site" | "message" | "bonus" | "deduction" | "attendance" | "payroll" | "leave_request" | "leave_status" | "shift_reminder" | "product_expiry" | "device_change" | "account_deletion";
   audience: "manager" | "employee";
   employee_id: string;
   employee_name: string;

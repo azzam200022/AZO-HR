@@ -92,6 +92,7 @@ from routers.adjustments import router as adjustments_router
 from routers.messages import router as messages_router
 from routers.notifications import router as notifications_router
 from routers.reports import router as reports_router
+from routers.account_deletion import router as account_deletion_router
 
 api_router.include_router(auth_router)
 api_router.include_router(me_router)
@@ -105,6 +106,7 @@ api_router.include_router(adjustments_router)
 api_router.include_router(messages_router)
 api_router.include_router(notifications_router)
 api_router.include_router(reports_router)
+api_router.include_router(account_deletion_router)
 
 # Include the router in the main app
 app.include_router(api_router)
