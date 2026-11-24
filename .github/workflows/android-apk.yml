@@ -91,7 +91,7 @@ jobs:
           test -s app/build/outputs/bundle/release/app-release.aab
         working-directory: frontend/android
       - name: Build signed release APK and AAB
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push')
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -110,18 +110,22 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
           test -s "$keystore_path"
           unset ANDROID_KEYSTORE_BASE64
-          ANDROID_KEYSTORE_FILE="$keystore_path" ./gradlew assembleRelease bundleRelease --no-daemon
-          test -s app/build/outputs/bundle/release/app-release.aab
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            ANDROID_KEYSTORE_FILE="$keystore_path" ./gradlew assembleRelease bundleRelease --no-daemon
+            test -s app/build/outputs/bundle/release/app-release.aab
+          else
+            ANDROID_KEYSTORE_FILE="$keystore_path" ./gradlew assembleRelease --no-daemon
+          fi
         working-directory: frontend/android
       - name: Save debug APK artifact
-        if: ${{ github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/v') && (github.event_name != 'push' || github.ref != 'refs/heads/main') }}
         uses: actions/upload-artifact@v4
         with:
           name: android-apk-${{ github.ref_name }}
           path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
       - name: Save signed release APK artifact
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push')
         uses: actions/upload-artifact@v4
         with:
           name: android-apk-${{ github.ref_name }}
@@ -136,7 +140,7 @@ jobs:
           retention-days: 30
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push')
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -148,22 +152,35 @@ jobs:
           name: android-apk-${{ github.ref_name }}
           path: release-assets/apk
       - name: Download signed AAB artifact
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/download-artifact@v4
         with:
           name: android-aab-${{ github.ref_name }}
           path: release-assets/aab
       - name: Name release files
         run: |
-          mv release-assets/apk/app-release.apk "release-assets/azo-${GITHUB_REF_NAME}.apk"
-          mv release-assets/aab/app-release.aab "release-assets/azo-${GITHUB_REF_NAME}.aab"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            mv release-assets/apk/app-release.apk "release-assets/azo-${GITHUB_REF_NAME}.apk"
+            mv release-assets/aab/app-release.aab "release-assets/azo-${GITHUB_REF_NAME}.aab"
+          else
+            release_tag="build-${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}"
+            mv release-assets/apk/app-release.apk "release-assets/azo-${release_tag}.apk"
+          fi
       - name: Publish permanent GitHub Release asset
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          assets=("release-assets/azo-${GITHUB_REF_NAME}.aab" "release-assets/azo-${GITHUB_REF_NAME}.apk")
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            tag="$GITHUB_REF_NAME"
+            assets=("release-assets/azo-${tag}.aab" "release-assets/azo-${tag}.apk")
+            if gh release view "$tag" >/dev/null 2>&1; then
+              gh release upload "$tag" "${assets[@]}" --clobber
+            else
+              gh release create "$tag" "${assets[@]}" --title "AZO $tag" --generate-notes --verify-tag
+            fi
           else
-            gh release create "$GITHUB_REF_NAME" "${assets[@]}" --title "AZO $GITHUB_REF_NAME" --generate-notes --verify-tag
+            tag="build-${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}"
+            asset="release-assets/azo-${tag}.apk"
+            gh release create "$tag" "$asset" --target "$GITHUB_SHA" --title "AZO Android build #${GITHUB_RUN_NUMBER}" --notes "Automatically built from main commit ${GITHUB_SHA}."
           fi
