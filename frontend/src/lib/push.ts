@@ -358,7 +358,6 @@ export async function showPush(title: string, body: string, tag = "mawaridi") {
             id: Math.floor(Date.now() % 2_147_483_647),
             title,
             body,
-            schedule: { at: new Date(Date.now() + 500) },
           },
         ],
       });

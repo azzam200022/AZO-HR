@@ -24,6 +24,16 @@ for permission in (
             + manifest[application_index:]
         )
 
+# Google Play restricts exact alarms to alarm/calendar apps; AZO shows notifications immediately.
+if 'xmlns:tools=' not in manifest:
+    manifest = manifest.replace(
+        "<manifest ", '<manifest xmlns:tools="http://schemas.android.com/tools" ', 1
+    )
+removal = '<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" tools:node="remove" />'
+if removal not in manifest:
+    application_index = manifest.find("<application")
+    manifest = manifest[:application_index] + f"    {removal}\n" + manifest[application_index:]
+
 service_declaration = (
     '<service android:name="com.azzam200022.azo.BackgroundLocationService" '
     'android:exported="false" android:foregroundServiceType="location" />'

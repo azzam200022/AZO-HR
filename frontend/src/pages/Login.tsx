@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Link } from "react-router-dom";
 import { KeyRound, LogIn, Mail, ShieldCheck, Users } from "lucide-react";
 import { apiPost } from "@/lib/api";
 import { errorText } from "@/lib/format";
@@ -246,6 +247,10 @@ export default function Login() {
               </form>
             </TabsContent>
           </Tabs>
+          <div className="mt-6 flex justify-center gap-4 text-xs font-semibold text-teal-700">
+            <Link to="/privacy" data-testid="login-privacy-link">سياسة الخصوصية</Link>
+            <Link to="/delete-account" data-testid="login-delete-account-link">حذف الحساب</Link>
+          </div>
         </div>
       </div>
     </div>

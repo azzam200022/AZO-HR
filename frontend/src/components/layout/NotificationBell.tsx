@@ -131,6 +131,7 @@ export default function NotificationBell({ audience }: Props) {
             shift_reminder: "تذكير بموعد الدوام",
             product_expiry: "تذكير بانتهاء صلاحية مادة",
             device_change: "طلب دخول من جهاز جديد",
+            account_deletion: "طلب حذف حساب",
           };
           const title = latest ? titleByKind[latest.kind] : "مواردي — تنبيه جديد";
           return showPush(
@@ -243,7 +244,7 @@ export default function NotificationBell({ audience }: Props) {
   const toneFor = (kind: AppNotification["kind"]) =>
     kind === "late" || kind === "leave_request" || kind === "shift_reminder" || kind === "product_expiry" || kind === "device_change"
       ? "bg-amber-100 text-amber-700"
-      : kind === "left_site" || kind === "deduction"
+      : kind === "left_site" || kind === "deduction" || kind === "account_deletion"
         ? "bg-rose-100 text-rose-700"
         : kind === "returned_site" || kind === "bonus" || kind === "payroll"
           ? "bg-emerald-100 text-emerald-700"
