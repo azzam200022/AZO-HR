@@ -57,6 +57,12 @@ INDEXES: dict[str, list[IndexModel]] = {
             [("employee_id", ASCENDING), ("created_at", DESCENDING)],
             name="employee_created",
         ),
+        IndexModel(
+            [("employee_id", ASCENDING), ("barcode", ASCENDING)],
+            name="employee_barcode_unique",
+            unique=True,
+            partialFilterExpression={"barcode": {"$type": "string", "$gt": ""}},
+        ),
         IndexModel([("expiry_dates.expiry_date", ASCENDING)], name="expiry_date"),
     ],
     "users": [IndexModel([("email", ASCENDING)], name="email", unique=True)],

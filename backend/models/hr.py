@@ -327,6 +327,7 @@ class EmployeeProductCreate(BaseModel):
     """A product name with one or more independently expiring batches."""
 
     name: str = Field(min_length=1, max_length=120)
+    barcode: str | None = Field(default=None, max_length=128)
     expiry_dates: list[str] = Field(min_length=1, max_length=50)
     custom_reminder_days: int | None = Field(default=None, ge=1, le=365)
     photo_data: str = Field(
@@ -340,6 +341,13 @@ class EmployeeProductCreate(BaseModel):
         if not value:
             raise ValueError("اسم المادة مطلوب")
         return value
+
+    @field_validator("barcode")
+    @classmethod
+    def _barcode_trimmed(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
 
     @field_validator("expiry_dates")
     @classmethod
@@ -360,6 +368,7 @@ class EmployeeProductUpdate(BaseModel):
     """Editable fields for one employee-owned product."""
 
     name: str | None = Field(default=None, min_length=1, max_length=120)
+    barcode: str | None = Field(default=None, max_length=128)
     add_expiry_date: str | None = None
     custom_reminder_days: int | None = Field(default=None, ge=1, le=365)
     photo_data: str | None = Field(
@@ -375,6 +384,13 @@ class EmployeeProductUpdate(BaseModel):
         if not value:
             raise ValueError("اسم المادة مطلوب")
         return value
+
+    @field_validator("barcode")
+    @classmethod
+    def _updated_barcode_trimmed(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
 
     @field_validator("add_expiry_date")
     @classmethod
@@ -401,6 +417,7 @@ class EmployeeProductRecord(BaseModel):
     id: str = Field(default_factory=_uuid)
     employee_id: str
     name: str
+    barcode: str | None = None
     expiry_dates: list[ProductExpiryBatch]
     custom_reminder_days: int | None = Field(default=None, ge=1, le=365)
     created_at: datetime = Field(default_factory=utcnow)
@@ -422,6 +439,7 @@ class ProductExpiryBatchUpdate(BaseModel):
 class EmployeeProductView(BaseModel):
     id: str
     name: str
+    barcode: str | None = None
     expiry_dates: list[ProductExpiryBatchView]
     custom_reminder_days: int | None = None
     has_photo: bool = False

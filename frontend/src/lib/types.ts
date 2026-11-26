@@ -177,6 +177,7 @@ export interface ProductExpiryBatch {
 export interface EmployeeProduct {
   id: string;
   name: string;
+  barcode: string | null;
   expiry_dates: ProductExpiryBatch[];
   custom_reminder_days: number | null;
   has_photo: boolean;
@@ -185,6 +186,7 @@ export interface EmployeeProduct {
 
 export interface EmployeeProductUpdate {
   name?: string;
+  barcode?: string | null;
   add_expiry_date?: string;
   custom_reminder_days?: number | null;
   photo_data?: string | null;
