@@ -346,10 +346,104 @@ async def my_products(
             {"barcode": clean_search},
             {"name": {"$regex": re.escape(clean_search), "$options": "i"}},
         ]
+    today = date.fromisoformat(today_iso())
+    today_iso_value = today.isoformat()
     docs = await db.employee_products.aggregate(
         [
             {"$match": query},
-            {"$sort": {"created_at": -1}},
+            {
+                "$addFields": {
+                    "_unhandled_expiry_batches": {
+                        "$filter": {
+                            "input": {"$ifNull": ["$expiry_dates", []]},
+                            "as": "batch",
+                            "cond": {"$ne": ["$$batch.handled", True]},
+                        }
+                    }
+                }
+            },
+            {
+                "$addFields": {
+                    "_effective_expiry_batches": {
+                        "$cond": [
+                            {
+                                "$gt": [
+                                    {"$size": "$_unhandled_expiry_batches"},
+                                    0,
+                                ]
+                            },
+                            "$_unhandled_expiry_batches",
+                            {"$ifNull": ["$expiry_dates", []]},
+                        ]
+                    }
+                }
+            },
+            {
+                "$addFields": {
+                    "_upcoming_expiry_batches": {
+                        "$filter": {
+                            "input": "$_effective_expiry_batches",
+                            "as": "batch",
+                            "cond": {
+                                "$gte": ["$$batch.expiry_date", today_iso_value]
+                            },
+                        }
+                    },
+                    "_expired_expiry_batches": {
+                        "$filter": {
+                            "input": "$_effective_expiry_batches",
+                            "as": "batch",
+                            "cond": {
+                                "$lt": ["$$batch.expiry_date", today_iso_value]
+                            },
+                        }
+                    },
+                }
+            },
+            {
+                "$addFields": {
+                    "_expiry_group": {
+                        "$cond": [
+                            {"$gt": [{"$size": "$_upcoming_expiry_batches"}, 0]},
+                            0,
+                            {
+                                "$cond": [
+                                    {"$gt": [{"$size": "$_expired_expiry_batches"}, 0]},
+                                    1,
+                                    2,
+                                ]
+                            },
+                        ]
+                    },
+                    "_nearest_upcoming_expiry": {
+                        "$min": {
+                            "$map": {
+                                "input": "$_upcoming_expiry_batches",
+                                "as": "batch",
+                                "in": "$$batch.expiry_date",
+                            }
+                        }
+                    },
+                    "_nearest_expired_expiry": {
+                        "$max": {
+                            "$map": {
+                                "input": "$_expired_expiry_batches",
+                                "as": "batch",
+                                "in": "$$batch.expiry_date",
+                            }
+                        }
+                    },
+                }
+            },
+            {
+                "$sort": {
+                    "_expiry_group": 1,
+                    "_nearest_upcoming_expiry": 1,
+                    "_nearest_expired_expiry": -1,
+                    "created_at": -1,
+                    "id": 1,
+                }
+            },
             {"$limit": 5000},
             {
                 "$project": {
@@ -367,7 +461,6 @@ async def my_products(
             },
         ]
     ).to_list(5000)
-    today = date.fromisoformat(today_iso())
     return [_product_view(doc, today) for doc in docs]
 
 

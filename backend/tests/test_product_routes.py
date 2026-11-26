@@ -171,6 +171,14 @@ async def test_product_barcode_search_is_limited_to_the_signed_in_employee(monke
         "employee_id": "employee-1",
         "barcode": "0123456789012",
     }
+    sort_step = next(
+        index for index, step in enumerate(products.pipeline) if "$sort" in step
+    )
+    limit_step = next(
+        index for index, step in enumerate(products.pipeline) if "$limit" in step
+    )
+    assert sort_step < limit_step
+    assert products.pipeline[sort_step]["$sort"]["_nearest_upcoming_expiry"] == 1
 
 
 @pytest.mark.asyncio
