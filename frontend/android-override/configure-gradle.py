@@ -47,6 +47,19 @@ if service_declaration not in manifest:
         f"        {service_declaration}\n    </application>",
         1,
     )
+barcode_scanner_metadata = (
+    '<meta-data android:name="com.google.mlkit.vision.DEPENDENCIES" '
+    'android:value="barcode_ui" />'
+)
+if barcode_scanner_metadata not in manifest:
+    if "</application>" not in manifest:
+        raise SystemExit("Could not locate the closing Android application tag")
+    manifest = manifest.replace(
+        "</application>",
+        f"        {barcode_scanner_metadata}\n    </application>",
+        1,
+    )
+
 manifest_file.write_text(manifest, encoding="utf-8")
 
 variables_file = Path("android/variables.gradle")
