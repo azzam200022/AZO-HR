@@ -5,11 +5,13 @@ that is what makes cross-employee access (IDOR/BOLA) structurally impossible rat
 merely checked.
 """
 
+import re
 from datetime import date, datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
+from pymongo.errors import DuplicateKeyError
 
 from lib.auth import Principal, require_employee
 from lib.employee_photo import employee_photo_response, product_photo_response
@@ -87,9 +89,10 @@ def _product_view(doc: dict, today: date) -> EmployeeProductView:
     return EmployeeProductView(
         id=doc["id"],
         name=doc["name"],
+        barcode=doc.get("barcode"),
         expiry_dates=expiry_dates,
         custom_reminder_days=doc.get("custom_reminder_days"),
-        has_photo=bool(doc.get("photo_data")),
+        has_photo=bool(doc.get("has_photo", doc.get("photo_data"))),
         created_at=aware(doc.get("created_at")),
     )
 
@@ -327,14 +330,137 @@ async def my_report(
 
 
 @router.get("/products", response_model=list[EmployeeProductView])
-async def my_products(principal: Principal = Depends(require_employee)):
+async def my_products(
+    search: str | None = None,
+    barcode: str | None = None,
+    principal: Principal = Depends(require_employee),
+):
     """Only the signed-in employee's own products and expiry batches."""
-    docs = (
-        await db.employee_products.find({"employee_id": principal.employee_id})
-        .sort("created_at", -1)
-        .to_list(500)
-    )
+    query = {"employee_id": principal.employee_id}
+    clean_barcode = (barcode or "").strip()
+    clean_search = (search or "").strip()
+    if clean_barcode:
+        query["barcode"] = clean_barcode
+    elif clean_search:
+        query["$or"] = [
+            {"barcode": clean_search},
+            {"name": {"$regex": re.escape(clean_search), "$options": "i"}},
+        ]
     today = date.fromisoformat(today_iso())
+    today_iso_value = today.isoformat()
+    docs = await db.employee_products.aggregate(
+        [
+            {"$match": query},
+            {
+                "$addFields": {
+                    "_unhandled_expiry_batches": {
+                        "$filter": {
+                            "input": {"$ifNull": ["$expiry_dates", []]},
+                            "as": "batch",
+                            "cond": {"$ne": ["$$batch.handled", True]},
+                        }
+                    }
+                }
+            },
+            {
+                "$addFields": {
+                    "_effective_expiry_batches": {
+                        "$cond": [
+                            {
+                                "$gt": [
+                                    {"$size": "$_unhandled_expiry_batches"},
+                                    0,
+                                ]
+                            },
+                            "$_unhandled_expiry_batches",
+                            {"$ifNull": ["$expiry_dates", []]},
+                        ]
+                    }
+                }
+            },
+            {
+                "$addFields": {
+                    "_upcoming_expiry_batches": {
+                        "$filter": {
+                            "input": "$_effective_expiry_batches",
+                            "as": "batch",
+                            "cond": {
+                                "$gte": ["$$batch.expiry_date", today_iso_value]
+                            },
+                        }
+                    },
+                    "_expired_expiry_batches": {
+                        "$filter": {
+                            "input": "$_effective_expiry_batches",
+                            "as": "batch",
+                            "cond": {
+                                "$lt": ["$$batch.expiry_date", today_iso_value]
+                            },
+                        }
+                    },
+                }
+            },
+            {
+                "$addFields": {
+                    "_expiry_group": {
+                        "$cond": [
+                            {"$gt": [{"$size": "$_upcoming_expiry_batches"}, 0]},
+                            0,
+                            {
+                                "$cond": [
+                                    {"$gt": [{"$size": "$_expired_expiry_batches"}, 0]},
+                                    1,
+                                    2,
+                                ]
+                            },
+                        ]
+                    },
+                    "_nearest_upcoming_expiry": {
+                        "$min": {
+                            "$map": {
+                                "input": "$_upcoming_expiry_batches",
+                                "as": "batch",
+                                "in": "$$batch.expiry_date",
+                            }
+                        }
+                    },
+                    "_nearest_expired_expiry": {
+                        "$max": {
+                            "$map": {
+                                "input": "$_expired_expiry_batches",
+                                "as": "batch",
+                                "in": "$$batch.expiry_date",
+                            }
+                        }
+                    },
+                }
+            },
+            {
+                "$sort": {
+                    "_expiry_group": 1,
+                    "_nearest_upcoming_expiry": 1,
+                    "_nearest_expired_expiry": -1,
+                    "created_at": -1,
+                    "id": 1,
+                }
+            },
+            {"$limit": 5000},
+            {
+                "$project": {
+                    "_id": 0,
+                    "id": 1,
+                    "name": 1,
+                    "barcode": 1,
+                    "expiry_dates": 1,
+                    "custom_reminder_days": 1,
+                    "created_at": 1,
+                    "has_photo": {
+                        "$ne": [{"$ifNull": ["$photo_data", ""]}, ""]
+                    },
+                }
+            },
+        ]
+    ).to_list(5000)
     return [_product_view(doc, today) for doc in docs]
 
 
@@ -345,9 +471,20 @@ async def add_my_product(
 ):
     """The session owns the new product; clients cannot assign it to another employee."""
     employee = await _my_employee(principal)
+    if payload.barcode:
+        existing = await db.employee_products.find_one(
+            {"employee_id": employee["id"], "barcode": payload.barcode}
+        )
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=f"هذا الباركود مسجّل للمادة «{existing.get('name', '')}»",
+            )
+
     product = EmployeeProductRecord(
         employee_id=employee["id"],
         name=payload.name,
+        barcode=payload.barcode,
         expiry_dates=[
             ProductExpiryBatch(expiry_date=expiry_date)
             for expiry_date in payload.expiry_dates
@@ -356,7 +493,20 @@ async def add_my_product(
     )
     document = product.model_dump()
     document["photo_data"] = payload.photo_data
-    await db.employee_products.insert_one(document)
+    try:
+        await db.employee_products.insert_one(document)
+    except DuplicateKeyError:
+        if not payload.barcode:
+            raise
+        existing = await db.employee_products.find_one(
+            {"employee_id": employee["id"], "barcode": payload.barcode}
+        )
+        if not existing:
+            raise
+        raise HTTPException(
+            status_code=409,
+            detail=f"هذا الباركود مسجّل للمادة «{existing.get('name', '')}»",
+        ) from None
     return _product_view(document, date.fromisoformat(today_iso()))
 
 
@@ -393,6 +543,16 @@ async def update_my_product(
         raise HTTPException(status_code=400, detail="لا توجد تعديلات للحفظ")
     if updates.get("name", "not-set") is None:
         raise HTTPException(status_code=422, detail="اسم المادة مطلوب")
+    new_barcode = updates.get("barcode")
+    if new_barcode:
+        existing = await db.employee_products.find_one(
+            {"employee_id": principal.employee_id, "barcode": new_barcode}
+        )
+        if existing and existing.get("id") != product_id:
+            raise HTTPException(
+                status_code=409,
+                detail=f"هذا الباركود مسجّل للمادة «{existing.get('name', '')}»",
+            )
 
     add_expiry_date = updates.pop("add_expiry_date", None)
     if add_expiry_date:
@@ -409,10 +569,23 @@ async def update_my_product(
     if not updates:
         raise HTTPException(status_code=400, detail="لا توجد تعديلات للحفظ")
 
-    result = await db.employee_products.update_one(
-        {"id": product_id, "employee_id": principal.employee_id},
-        {"$set": updates},
-    )
+    try:
+        result = await db.employee_products.update_one(
+            {"id": product_id, "employee_id": principal.employee_id},
+            {"$set": updates},
+        )
+    except DuplicateKeyError:
+        if not new_barcode:
+            raise
+        existing = await db.employee_products.find_one(
+            {"employee_id": principal.employee_id, "barcode": new_barcode}
+        )
+        if not existing or existing.get("id") == product_id:
+            raise
+        raise HTTPException(
+            status_code=409,
+            detail=f"هذا الباركود مسجّل للمادة «{existing.get('name', '')}»",
+        ) from None
     if not result.matched_count:
         raise HTTPException(status_code=404, detail="المادة غير موجودة")
     document.update(updates)

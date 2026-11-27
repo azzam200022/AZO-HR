@@ -1,6 +1,7 @@
-import { useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Camera,
   Check,
   ChevronDown,
   ChevronUp,
@@ -8,13 +9,15 @@ import {
   Pencil,
   Plus,
   RotateCcw,
+  Search,
   Trash2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { apiDelete, apiGet, apiPatch, apiPost, getApiOrigin } from "@/lib/api";
+import { ApiError, apiDelete, apiGet, apiPatch, apiPost, getApiOrigin } from "@/lib/api";
 import { errorText, fmtDate, formatNumber } from "@/lib/format";
 import { preparePhotoData } from "@/lib/photo-upload";
+import BarcodeScannerDialog from "@/components/BarcodeScannerDialog";
 import type {
   DeleteResult,
   EmployeeProduct,
@@ -106,25 +109,48 @@ export default function MyProducts() {
   const queryClient = useQueryClient();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [name, setName] = useState("");
+  const [barcode, setBarcode] = useState("");
   const [expiryDates, setExpiryDates] = useState([""]);
   const [customReminderDays, setCustomReminderDays] = useState("");
   const [photoData, setPhotoData] = useState<string | null>(null);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [editBarcode, setEditBarcode] = useState("");
   const [editReminderDays, setEditReminderDays] = useState("");
   const [editPhotoData, setEditPhotoData] = useState<string | null | undefined>(undefined);
   const [newExpiryDate, setNewExpiryDate] = useState("");
   const [previewProduct, setPreviewProduct] = useState<EmployeeProduct | null>(null);
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [searchMode, setSearchMode] = useState<"search" | "barcode">("search");
+  const [visibleProductCount, setVisibleProductCount] = useState(24);
+  const [scannerTarget, setScannerTarget] = useState<"add" | "search" | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setVisibleProductCount(24);
+  }, [debouncedSearch]);
 
   const productsQuery = useQuery({
-    queryKey: ["me", "products"],
-    queryFn: () => apiGet<EmployeeProduct[]>("/me/products"),
+    queryKey: ["me", "products", searchMode, debouncedSearch],
+    queryFn: () => {
+      const parameter = searchMode === "barcode" ? "barcode" : "search";
+      const query = debouncedSearch
+        ? `?${parameter}=${encodeURIComponent(debouncedSearch)}`
+        : "";
+      return apiGet<EmployeeProduct[]>(`/me/products${query}`);
+    },
   });
 
   const addProductMutation = useMutation({
     mutationFn: (payload: {
       name: string;
+      barcode: string | null;
       expiry_dates: string[];
       custom_reminder_days: number | null;
       photo_data: string;
@@ -133,13 +159,27 @@ export default function MyProducts() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["me", "products"] });
       setName("");
+      setBarcode("");
       setExpiryDates([""]);
       setCustomReminderDays("");
       setPhotoData(null);
+      setSearch("");
+      setDebouncedSearch("");
+      setSearchMode("search");
+      setVisibleProductCount(24);
       setAddDialogOpen(false);
       toast.success("تمت إضافة المادة وتواريخ انتهائها");
     },
-    onError: (error) => toast.error(errorText(error)),
+    onError: (error, variables) => {
+      toast.error(errorText(error));
+      if (error instanceof ApiError && error.status === 409 && variables.barcode) {
+        setAddDialogOpen(false);
+        setSearch(variables.barcode);
+        setDebouncedSearch(variables.barcode);
+        setSearchMode("barcode");
+        setVisibleProductCount(24);
+      }
+    },
   });
 
   const updateProductMutation = useMutation({
@@ -152,7 +192,16 @@ export default function MyProducts() {
       setNewExpiryDate("");
       toast.success("تم حفظ تعديلات المادة");
     },
-    onError: (error) => toast.error(errorText(error)),
+    onError: (error, variables) => {
+      toast.error(errorText(error));
+      if (error instanceof ApiError && error.status === 409 && variables.payload.barcode) {
+        setEditingProductId(null);
+        setSearch(variables.payload.barcode);
+        setDebouncedSearch(variables.payload.barcode);
+        setSearchMode("barcode");
+        setVisibleProductCount(24);
+      }
+    },
   });
 
   const deleteProductMutation = useMutation({
@@ -200,10 +249,23 @@ export default function MyProducts() {
     onError: (error) => toast.error(errorText(error)),
   });
 
+  const handleBarcodeDetected = (value: string) => {
+    if (scannerTarget === "add") {
+      setBarcode(value);
+    } else {
+      setSearch(value);
+      setDebouncedSearch(value);
+      setSearchMode("barcode");
+      setVisibleProductCount(24);
+    }
+    setScannerTarget(null);
+  };
+
   const products = useMemo(
     () => [...(productsQuery.data ?? [])].sort(compareProductsByNearestExpiry),
     [productsQuery.data],
   );
+  const visibleProducts = products.slice(0, visibleProductCount);
   const editingProduct = products.find((product) => product.id === editingProductId);
   const editPhotoPreview =
     editPhotoData !== undefined
@@ -241,6 +303,7 @@ export default function MyProducts() {
     }
     addProductMutation.mutate({
       name: cleanName,
+      barcode: barcode.trim() || null,
       expiry_dates: expiryDates,
       custom_reminder_days: reminderDays,
       photo_data: photoData ?? "",
@@ -251,6 +314,7 @@ export default function MyProducts() {
     setEditingProductId(product.id);
     setExpandedProductId(product.id);
     setEditName(product.name);
+    setEditBarcode(product.barcode ?? "");
     setEditReminderDays(product.custom_reminder_days?.toString() ?? "");
     setEditPhotoData(undefined);
     setNewExpiryDate("");
@@ -275,6 +339,7 @@ export default function MyProducts() {
 
     const payload: EmployeeProductUpdate = {
       name: cleanName,
+      barcode: editBarcode.trim() || null,
       custom_reminder_days: reminderDays,
     };
     if (newExpiryDate) payload.add_expiry_date = newExpiryDate;
@@ -322,6 +387,36 @@ export default function MyProducts() {
           <span className="rounded-lg bg-rose-50 px-2 py-2 text-rose-800">أحمر · منتهي</span>
         </div>
 
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="relative min-w-0 flex-1">
+            <Search
+              className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+              aria-hidden="true"
+            />
+            <Input
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setSearchMode("search");
+                setVisibleProductCount(24);
+              }}
+              placeholder="ابحث باسم المادة أو الباركود"
+              aria-label="البحث عن مادة بالاسم أو الباركود"
+              className="pr-9"
+              data-testid="product-search-input"
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setScannerTarget("search")}
+            data-testid="scan-product-search-btn"
+          >
+            <Camera className="h-4 w-4" />
+            مسح للبحث
+          </Button>
+        </div>
+
         <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
           <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-2xl overflow-y-auto">
             <DialogHeader>
@@ -342,6 +437,34 @@ export default function MyProducts() {
                 required
                 data-testid="product-name-input"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="product-barcode">الباركود (اختياري)</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="product-barcode"
+                  value={barcode}
+                  onChange={(event) => setBarcode(event.target.value)}
+                  maxLength={128}
+                  dir="ltr"
+                  placeholder="امسح الرمز أو أدخله يدويًا"
+                  data-testid="product-barcode-input"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setScannerTarget("add")}
+                  aria-label="مسح باركود المادة بالكاميرا"
+                  data-testid="scan-product-barcode-btn"
+                >
+                  <Camera className="h-4 w-4" />
+                  مسح
+                </Button>
+              </div>
+              <p className="text-[11px] leading-5 text-slate-500">
+                لا يمكن تكرار الباركود ضمن مواد حسابك. عند التكرار ستظهر المادة المسجّلة.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -462,6 +585,14 @@ export default function MyProducts() {
           </DialogContent>
         </Dialog>
 
+        <BarcodeScannerDialog
+          open={scannerTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) setScannerTarget(null);
+          }}
+          onDetected={handleBarcodeDetected}
+        />
+
         <CardSection title="المواد المسجّلة" testid="my-products-list-card">
           {productsQuery.isLoading ? (
             <LoadingBlock className="h-40" />
@@ -469,83 +600,97 @@ export default function MyProducts() {
             <EmptyState title="تعذّر تحميل المواد" description="أعد المحاولة بعد تحديث الصفحة." />
           ) : products.length === 0 ? (
             <EmptyState
-              title="لا توجد مواد مسجّلة"
-              description="أضف مادة وتاريخ انتهاء دفعتها لتظهر هنا."
+              title={debouncedSearch ? "لا توجد مادة مطابقة" : "لا توجد مواد مسجّلة"}
+              description={
+                debouncedSearch
+                  ? "جرّب اسمًا أو باركودًا آخر."
+                  : "أضف مادة وتاريخ انتهاء دفعتها لتظهر هنا."
+              }
             />
           ) : (
-            <div className="space-y-3" data-testid="my-products-list">
-              {products.map((product) => {
-                const nearestExpiry = nearestExpiryBatch(product.expiry_dates);
-                const isExpanded = expandedProductId === product.id;
-                return (
-                <article
-                  key={product.id}
-                  className="rounded-xl border border-slate-100 bg-slate-50/60 p-3.5"
-                  data-testid={`my-product-${product.id}`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      {product.has_photo ? (
-                        <button
-                          type="button"
-                          onClick={() => setPreviewProduct(product)}
-                          className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-white ring-1 ring-slate-200 transition hover:ring-2 hover:ring-teal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
-                          aria-label={`تكبير صورة ${product.name}`}
-                          data-testid={`product-photo-${product.id}`}
-                        >
-                          <img
-                            src={productPhotoUrl(product.id)}
-                            alt=""
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                          />
-                        </button>
-                      ) : (
-                        <span
-                          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-white text-slate-400 ring-1 ring-slate-200"
-                          aria-hidden="true"
-                        >
-                          <ImagePlus className="h-5 w-5" />
-                        </span>
+            <>
+              <p className="mb-3 text-xs text-slate-500">
+                عرض {formatNumber(visibleProducts.length)} من {formatNumber(products.length)} نتيجة.
+                تظهر المواد على دفعات حتى تبقى القائمة سهلة التصفح.
+              </p>
+              <div className="space-y-3" data-testid="my-products-list">
+                {visibleProducts.map((product) => {
+                  const nearestExpiry = nearestExpiryBatch(product.expiry_dates);
+                  const isExpanded = expandedProductId === product.id;
+                  return (
+                  <article
+                    key={product.id}
+                    className="rounded-xl border border-slate-100 bg-slate-50/60 p-3.5"
+                    data-testid={`my-product-${product.id}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        {product.has_photo ? (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewProduct(product)}
+                            className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-white ring-1 ring-slate-200 transition hover:ring-2 hover:ring-teal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+                            aria-label={`تكبير صورة ${product.name}`}
+                            data-testid={`product-photo-${product.id}`}
+                          >
+                            <img
+                              src={productPhotoUrl(product.id)}
+                              alt=""
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                            />
+                          </button>
+                        ) : (
+                          <span
+                            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-white text-slate-400 ring-1 ring-slate-200"
+                            aria-hidden="true"
+                          >
+                            <ImagePlus className="h-5 w-5" />
+                          </span>
+                        )}
+                        <div className="min-w-0">
+                          <h2 className="text-sm font-bold text-slate-900">{product.name}</h2>
+                          {product.barcode && (
+                            <p className="mt-1 truncate text-[11px] text-slate-500" dir="ltr">
+                              {product.barcode}
+                            </p>
+                          )}
+                          <p className="mt-1 text-[11px] text-slate-500">
+                            {product.custom_reminder_days
+                              ? `تنبيه إضافي قبل الانتهاء بـ ${reminderDaysLabel(product.custom_reminder_days)}`
+                              : "التذكيرات الافتراضية فقط"}
+                          </p>
+                        </div>
+                      </div>
+                      {editingProductId !== product.id && (
+                        <div className="flex shrink-0 gap-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => beginEdit(product)}
+                            aria-label={`تعديل ${product.name}`}
+                            data-testid={`edit-product-${product.id}`}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            تعديل
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="icon-sm"
+                            onClick={() => deleteProduct(product)}
+                            disabled={deleteProductMutation.isPending}
+                            aria-label={`حذف ${product.name}`}
+                            data-testid={`delete-product-${product.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       )}
-                      <div className="min-w-0">
-                        <h2 className="text-sm font-bold text-slate-900">{product.name}</h2>
-                        <p className="mt-1 text-[11px] text-slate-500">
-                          {product.custom_reminder_days
-                            ? `تنبيه إضافي قبل الانتهاء بـ ${reminderDaysLabel(product.custom_reminder_days)}`
-                            : "التذكيرات الافتراضية فقط"}
-                        </p>
-                      </div>
                     </div>
-                    {editingProductId !== product.id && (
-                      <div className="flex shrink-0 gap-1">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => beginEdit(product)}
-                          aria-label={`تعديل ${product.name}`}
-                          data-testid={`edit-product-${product.id}`}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                          تعديل
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="icon-sm"
-                          onClick={() => deleteProduct(product)}
-                          disabled={deleteProductMutation.isPending}
-                          aria-label={`حذف ${product.name}`}
-                          data-testid={`delete-product-${product.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
 
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                       {nearestExpiry ? (
                         <>
@@ -588,7 +733,7 @@ export default function MyProducts() {
                     )}
                   </div>
 
-                  {editingProductId === product.id && (
+                    {editingProductId === product.id && (
                     <form
                       className="mt-3 space-y-3 rounded-lg border border-slate-200 bg-white p-3"
                       onSubmit={(event) => submitEdit(event, product.id)}
@@ -603,6 +748,18 @@ export default function MyProducts() {
                           maxLength={120}
                           required
                           data-testid={`edit-product-name-${product.id}`}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`edit-product-barcode-${product.id}`}>الباركود</Label>
+                        <Input
+                          id={`edit-product-barcode-${product.id}`}
+                          value={editBarcode}
+                          onChange={(event) => setEditBarcode(event.target.value)}
+                          maxLength={128}
+                          dir="ltr"
+                          placeholder="اختياري"
+                          data-testid={`edit-product-barcode-${product.id}`}
                         />
                       </div>
                       <div className="space-y-1.5">
@@ -688,7 +845,7 @@ export default function MyProducts() {
                     </form>
                   )}
 
-                  {isExpanded && (
+                    {isExpanded && (
                     <div
                       id={`product-expiries-${product.id}`}
                       className="mt-3 space-y-2"
@@ -770,10 +927,22 @@ export default function MyProducts() {
                     )}
                     </div>
                   )}
-                </article>
-                );
-              })}
-            </div>
+                  </article>
+                  );
+                })}
+              </div>
+              {products.length > visibleProductCount && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-4 w-full"
+                  onClick={() => setVisibleProductCount((count) => count + 24)}
+                  data-testid="load-more-products-btn"
+                >
+                  عرض المزيد ({formatNumber(products.length - visibleProductCount)})
+                </Button>
+              )}
+            </>
           )}
         </CardSection>
       </div>

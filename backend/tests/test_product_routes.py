@@ -1,5 +1,5 @@
 import base64
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -17,9 +17,18 @@ from models.hr import (
 PHOTO_DATA = "data:image/jpeg;base64,/9j/2Q=="
 
 
+class _AggregateCursor:
+    def __init__(self, documents=()):
+        self.documents = list(documents)
+
+    async def to_list(self, length):
+        return self.documents[:length]
+
+
 class _Collection:
     def __init__(self, documents=()):
         self.documents = list(documents)
+        self.pipeline = None
 
     async def find_one(self, query):
         return next(
@@ -40,6 +49,10 @@ class _Collection:
             ),
             None,
         )
+
+    def aggregate(self, pipeline):
+        self.pipeline = pipeline
+        return _AggregateCursor()
 
     async def update_one(self, query, update):
         document = await self.find_one(query)
@@ -88,6 +101,86 @@ def _product(employee_id="employee-1"):
     }
 
 
+def test_employee_product_barcode_is_trimmed_and_blank_values_are_optional():
+    product = EmployeeProductCreate(
+        name="حليب",
+        barcode="  0123456789012  ",
+        expiry_dates=["2026-12-15"],
+    )
+    blank_barcode = EmployeeProductCreate(
+        name="لبن",
+        barcode="   ",
+        expiry_dates=["2026-12-15"],
+    )
+
+    assert product.barcode == "0123456789012"
+    assert blank_barcode.barcode is None
+
+
+def test_employee_product_update_can_clear_a_barcode():
+    update = EmployeeProductUpdate(barcode=" ")
+
+    assert update.barcode is None
+    assert update.model_dump(exclude_unset=True) == {"barcode": None}
+
+
+def test_product_view_keeps_photo_status_when_large_photo_data_is_excluded(monkeypatch):
+    monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
+    monkeypatch.setenv("DB_NAME", "product_routes_test")
+
+    from routers.me import _product_view
+
+    view = _product_view(
+        {
+            "id": "product-1",
+            "name": "حليب",
+            "barcode": "0123456789012",
+            "expiry_dates": [],
+            "created_at": datetime(2026, 11, 1, tzinfo=timezone.utc),
+            "has_photo": True,
+        },
+        date(2026, 11, 16),
+    )
+
+    assert view.has_photo is True
+    assert view.barcode == "0123456789012"
+
+
+@pytest.mark.asyncio
+async def test_product_barcode_search_is_limited_to_the_signed_in_employee(monkeypatch):
+    monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
+    monkeypatch.setenv("DB_NAME", "product_routes_test")
+
+    from lib.auth import Principal
+    from routers import me
+
+    products = _Collection()
+    monkeypatch.setattr(
+        me,
+        "db",
+        SimpleNamespace(employee_products=products),
+    )
+
+    result = await me.my_products(
+        barcode="0123456789012",
+        principal=Principal(role="employee", employee_id="employee-1"),
+    )
+
+    assert result == []
+    assert products.pipeline[0]["$match"] == {
+        "employee_id": "employee-1",
+        "barcode": "0123456789012",
+    }
+    sort_step = next(
+        index for index, step in enumerate(products.pipeline) if "$sort" in step
+    )
+    limit_step = next(
+        index for index, step in enumerate(products.pipeline) if "$limit" in step
+    )
+    assert sort_step < limit_step
+    assert products.pipeline[sort_step]["$sort"]["_nearest_upcoming_expiry"] == 1
+
+
 @pytest.mark.asyncio
 async def test_employee_can_rename_product_add_expiry_date_and_set_reminder(monkeypatch):
     monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
@@ -111,6 +204,7 @@ async def test_employee_can_rename_product_add_expiry_date_and_set_reminder(monk
         "product-1",
         EmployeeProductUpdate(
             name="لبن",
+            barcode="0123456789012",
             add_expiry_date="2027-01-10",
             custom_reminder_days=5,
         ),
@@ -118,12 +212,81 @@ async def test_employee_can_rename_product_add_expiry_date_and_set_reminder(monk
     )
 
     assert result.name == "لبن"
+    assert result.barcode == "0123456789012"
     assert result.custom_reminder_days == 5
     assert [batch.expiry_date for batch in result.expiry_dates] == [
         "2026-12-15",
         "2027-01-10",
     ]
     assert products.documents[0]["employee_id"] == "employee-1"
+
+
+@pytest.mark.asyncio
+async def test_employee_cannot_add_a_duplicate_barcode_to_their_products(monkeypatch):
+    monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
+    monkeypatch.setenv("DB_NAME", "product_routes_test")
+
+    from lib.auth import Principal
+    from routers import me
+
+    existing = _product()
+    existing["barcode"] = "0123456789012"
+    products = _Collection([existing])
+    monkeypatch.setattr(
+        me,
+        "db",
+        SimpleNamespace(
+            employees=_Collection([{"id": "employee-1"}]),
+            employee_products=products,
+        ),
+    )
+
+    with pytest.raises(HTTPException) as error:
+        await me.add_my_product(
+            EmployeeProductCreate(
+                name="لبن",
+                barcode="0123456789012",
+                expiry_dates=["2026-12-20"],
+            ),
+            Principal(role="employee", employee_id="employee-1"),
+        )
+
+    assert error.value.status_code == 409
+    assert "حليب" in error.value.detail
+    assert len(products.documents) == 1
+
+
+@pytest.mark.asyncio
+async def test_employee_cannot_reuse_another_product_barcode_when_editing(monkeypatch):
+    monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
+    monkeypatch.setenv("DB_NAME", "product_routes_test")
+
+    from lib.auth import Principal
+    from routers import me
+
+    current = _product()
+    duplicate = _product()
+    duplicate.update(id="product-2", name="جبن", barcode="0123456789012")
+    products = _Collection([current, duplicate])
+    monkeypatch.setattr(
+        me,
+        "db",
+        SimpleNamespace(
+            employees=_Collection([{"id": "employee-1"}]),
+            employee_products=products,
+        ),
+    )
+
+    with pytest.raises(HTTPException) as error:
+        await me.update_my_product(
+            "product-1",
+            EmployeeProductUpdate(barcode="0123456789012"),
+            Principal(role="employee", employee_id="employee-1"),
+        )
+
+    assert error.value.status_code == 409
+    assert "جبن" in error.value.detail
+    assert "barcode" not in current
 
 
 @pytest.mark.asyncio
@@ -259,6 +422,7 @@ async def test_employee_can_add_product_photo_without_exposing_image_data(monkey
     result = await me.add_my_product(
         EmployeeProductCreate(
             name="حليب",
+            barcode="0123456789012",
             expiry_dates=["2026-12-15"],
             photo_data=PHOTO_DATA,
         ),
@@ -266,7 +430,9 @@ async def test_employee_can_add_product_photo_without_exposing_image_data(monkey
     )
 
     assert result.has_photo is True
+    assert result.barcode == "0123456789012"
     assert "photo_data" not in result.model_dump()
+    assert products.documents[0]["barcode"] == "0123456789012"
     assert products.documents[0]["photo_data"] == PHOTO_DATA
 
 
