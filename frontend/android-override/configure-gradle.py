@@ -7,6 +7,7 @@ from pathlib import Path
 manifest_file = Path("android/app/src/main/AndroidManifest.xml")
 manifest = manifest_file.read_text(encoding="utf-8")
 for permission in (
+    "android.permission.CAMERA",
     "android.permission.ACCESS_COARSE_LOCATION",
     "android.permission.ACCESS_FINE_LOCATION",
     "android.permission.POST_NOTIFICATIONS",
