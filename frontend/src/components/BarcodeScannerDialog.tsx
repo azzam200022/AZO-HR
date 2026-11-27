@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { BarcodeScanner, GoogleBarcodeScannerModuleInstallState } from "@capacitor-mlkit/barcode-scanning";
+import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { AlertCircle, Camera, LoaderCircle } from "lucide-react";
 import {
@@ -30,6 +32,63 @@ function cameraErrorMessage(error: unknown) {
   return "تعذّر تشغيل الكاميرا. تأكد من إذن الكاميرا واتصال آمن بالموقع.";
 }
 
+function nativeScannerErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  if (message.includes("unsupported")) {
+    return "هذا الجهاز لا يدعم ماسح الباركود الأصلي. حدّث خدمات Google Play أو أدخل الرمز يدويًا.";
+  }
+  return "تعذّر تجهيز ماسح الباركود. تحقق من اتصال الإنترنت وتحديث خدمات Google Play ثم أعد المحاولة.";
+}
+
+function waitForGoogleScannerModule(
+  onProgress: (progress?: number) => void,
+  registerCancel: (cancel: () => void) => void,
+) {
+  return new Promise<void>((resolve, reject) => {
+    let listener: PluginListenerHandle | undefined;
+    let timeoutId: number | undefined;
+    let settled = false;
+
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      void listener?.remove();
+      if (error) reject(error);
+      else resolve();
+    };
+
+    registerCancel(() => finish(new Error("cancelled")));
+    timeoutId = window.setTimeout(() => finish(new Error("timeout")), 120_000);
+
+    void BarcodeScanner.addListener("googleBarcodeScannerModuleInstallProgress", (event) => {
+      if (event.state === GoogleBarcodeScannerModuleInstallState.COMPLETED) {
+        finish();
+        return;
+      }
+      if (
+        event.state === GoogleBarcodeScannerModuleInstallState.FAILED ||
+        event.state === GoogleBarcodeScannerModuleInstallState.CANCELED
+      ) {
+        finish(new Error("module_install_failed"));
+        return;
+      }
+      onProgress(event.progress);
+    })
+      .then((handle) => {
+        listener = handle;
+        if (settled) {
+          void handle.remove();
+          return;
+        }
+        return BarcodeScanner.installGoogleBarcodeScannerModule().catch(() => {
+          finish(new Error("module_install_failed"));
+        });
+      })
+      .catch(() => finish(new Error("module_install_failed")));
+  });
+}
+
 export default function BarcodeScannerDialog({
   open,
   onOpenChange,
@@ -39,6 +98,7 @@ export default function BarcodeScannerDialog({
   const callbacksRef = useRef({ onOpenChange, onDetected });
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [startingText, setStartingText] = useState("جارٍ تشغيل الكاميرا…");
 
   callbacksRef.current = { onOpenChange, onDetected };
 
@@ -46,17 +106,72 @@ export default function BarcodeScannerDialog({
     if (!open) {
       setError(null);
       setStarting(false);
+      setStartingText("جارٍ تشغيل الكاميرا…");
       return;
+    }
+
+    let active = true;
+    setError(null);
+
+    if (Capacitor.getPlatform() === "android") {
+      let cancelModuleInstall = () => {};
+      setStarting(true);
+      setStartingText("جارٍ تجهيز ماسح الباركود…");
+
+      const runNativeScan = async () => {
+        try {
+          const { supported } = await BarcodeScanner.isSupported();
+          if (!active) return;
+          if (!supported) throw new Error("unsupported_device");
+
+          const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable();
+          if (!active) return;
+          if (!available) {
+            setStartingText("جارٍ تنزيل الماسح لأول مرة…");
+            await waitForGoogleScannerModule(
+              (progress) => {
+                if (!active) return;
+                setStartingText(
+                  typeof progress === "number"
+                    ? "جارٍ تنزيل الماسح (" + Math.round(progress) + "٪)…"
+                    : "جارٍ تنزيل الماسح لأول مرة…",
+                );
+              },
+              (cancel) => {
+                cancelModuleInstall = cancel;
+              },
+            );
+          }
+          if (!active) return;
+
+          setStartingText("وجّه الكاميرا إلى الباركود…");
+          const { barcodes } = await BarcodeScanner.scan();
+          if (!active) return;
+
+          const barcode = barcodes.find((item) => item.rawValue?.trim())?.rawValue?.trim();
+          if (barcode) callbacksRef.current.onDetected(barcode);
+          callbacksRef.current.onOpenChange(false);
+        } catch (cause: unknown) {
+          if (!active) return;
+          setStarting(false);
+          setError(nativeScannerErrorMessage(cause));
+        }
+      };
+
+      void runNativeScan();
+      return () => {
+        active = false;
+        cancelModuleInstall();
+      };
     }
 
     const video = videoRef.current;
     if (!video) return;
 
-    let active = true;
     let controls: { stop: () => void } | undefined;
     const reader = new BrowserMultiFormatReader();
-    setError(null);
     setStarting(true);
+    setStartingText("جارٍ تشغيل الكاميرا…");
 
     void reader
       .decodeFromConstraints(
@@ -114,7 +229,7 @@ export default function BarcodeScannerDialog({
             {starting && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-950/75 text-sm text-white">
                 <LoaderCircle className="h-6 w-6 animate-spin" />
-                جارٍ تشغيل الكاميرا…
+                {startingText}
               </div>
             )}
           </div>
